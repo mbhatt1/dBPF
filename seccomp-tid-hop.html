@@ -28,8 +28,8 @@
 <meta property="og:title" content="Seccomp TID Hop" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
-<meta name="description" content="Wut" />
-<meta property="og:description" content="Wut" />
+<meta name="description" content="Seccomp TID Hop: Bypassing System Call Filtering" />
+<meta property="og:description" content="Seccomp TID Hop: Bypassing System Call Filtering" />
 <link rel="canonical" href="https://mbhatt1.github.io/dBPF/seccomp-tid-hop.html" />
 <meta property="og:url" content="https://mbhatt1.github.io/dBPF/seccomp-tid-hop.html" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
@@ -38,7 +38,7 @@
 <meta name="twitter:card" content="summary" />
 <meta property="twitter:title" content="Seccomp TID Hop" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-04-20T00:00:00+00:00","datePublished":"2025-04-20T00:00:00+00:00","description":"Wut","headline":"Seccomp TID Hop","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/seccomp-tid-hop.html"},"url":"https://mbhatt1.github.io/dBPF/seccomp-tid-hop.html"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-04-20T00:00:00+00:00","datePublished":"2025-04-20T00:00:00+00:00","description":"Seccomp TID Hop: Bypassing System Call Filtering","headline":"Seccomp TID Hop","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/seccomp-tid-hop.html"},"url":"https://mbhatt1.github.io/dBPF/seccomp-tid-hop.html"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -463,29 +463,246 @@
                     </header>
 
                     <div class="post-content">
-                        <p><strong>Wut</strong></p>
+                        <h1 id="seccomp-tid-hop-bypassing-system-call-filtering">Seccomp TID Hop: Bypassing System Call Filtering</h1>
 
-<p>A compact exploration of how eBPF can twist the kernel feature “Seccomp TID Hop” into an attack primitive—maintaining verifier legality while undermining isolation.</p>
+<p><strong>Wut</strong></p>
+
+<p>A technique using eBPF to bypass seccomp filters by manipulating thread ID (TID) associations and filter inheritance. This attack allows processes to execute restricted system calls by “hopping” between thread contexts, effectively circumventing one of Linux’s core security mechanisms while maintaining the appearance of proper enforcement.</p>
+
+<pre><code class="language-mermaid">graph TD
+    A[Process with Seccomp] --&gt;|1. System Call| B[Seccomp Filter]
+    C[eBPF Program] --&gt;|2. Hook &amp; Intercept| B
+    B --&gt;|3. Check Thread ID| D[Filter Decision]
+    C --&gt;|4. Modify TID Context| D
+    D --&gt;|5. "Allow" Decision| E[Restricted Syscall]
+    F[Security Monitor] --&gt;|6. Sees Compliance| G[False Security]
+</code></pre>
 
 <p><strong>Why</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation.</p>
+<p>Because eBPF + misconfiguration =&gt; broken isolation. Seccomp is a critical security mechanism that restricts the system calls a process can make, reducing the attack surface in containerized environments. By using eBPF to manipulate thread ID associations and filter inheritance, attackers can bypass these restrictions and execute otherwise forbidden system calls, potentially leading to container escapes or privilege escalation.</p>
 
 <p><strong>POC</strong></p>
 
 <p><em>Coming soon.</em></p>
 
+<p>The proof of concept will demonstrate:</p>
+<ul>
+  <li>Hooking into seccomp filter evaluation functions</li>
+  <li>Manipulating thread ID associations during filter checks</li>
+  <li>Executing restricted system calls despite seccomp filters</li>
+  <li>Maintaining the appearance of proper seccomp enforcement</li>
+  <li>Bypassing container security controls that rely on seccomp</li>
+</ul>
+
 <p><strong>Attacker hat on</strong></p>
 
-<p>Load malicious BPF, trigger.</p>
+<ol>
+  <li>Identify a target system with eBPF capabilities and seccomp filters</li>
+  <li>Map the kernel functions responsible for seccomp filter evaluation</li>
+  <li>Develop eBPF programs that hook into these seccomp functions</li>
+  <li>Load the malicious BPF programs with appropriate privileges</li>
+  <li>Create a mechanism to “hop” between thread contexts during syscall execution</li>
+  <li>Execute restricted system calls by manipulating TID associations</li>
+  <li>Maintain stealth by preserving the appearance of proper seccomp enforcement</li>
+</ol>
 
 <p><strong>Defender hat on</strong></p>
 
-<p>Remove CAP_BPF.</p>
+<ol>
+  <li>Remove CAP_BPF from untrusted processes and containers</li>
+  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
+  <li>Monitor for unexpected eBPF programs attached to seccomp-related functions</li>
+  <li>Use multiple, independent security mechanisms beyond seccomp</li>
+  <li>Implement integrity verification for seccomp filter application</li>
+  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
+</ol>
 
 <p><strong>Conclusion</strong></p>
 
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>.</p>
+<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to manipulate seccomp filter evaluation through eBPF creates a particularly dangerous scenario where processes can bypass system call restrictions while appearing compliant. This technique highlights why eBPF capabilities should be treated as highly privileged operations that require strict access controls, especially in containerized environments where seccomp is a key security boundary.</p>
+
+<h2 id="technical-details">Technical Details</h2>
+
+<h3 id="seccomp-architecture">Seccomp Architecture</h3>
+
+<p>Seccomp (secure computing mode) provides:</p>
+<ul>
+  <li><strong>System call filtering</strong>: Restricts which syscalls a process can execute</li>
+  <li><strong>Filter inheritance</strong>: Child processes inherit parent’s seccomp filters</li>
+  <li><strong>Thread sharing</strong>: All threads in a process share the same seccomp state</li>
+  <li><strong>Filter modes</strong>: SECCOMP_MODE_STRICT (minimal syscalls) or SECCOMP_MODE_FILTER (BPF-based rules)</li>
+</ul>
+
+<p>In containerized environments, seccomp profiles define which system calls are allowed, blocking potentially dangerous operations.</p>
+
+<h3 id="exploitation-technique">Exploitation Technique</h3>
+
+<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement seccomp filter evaluation. By intercepting these calls, an attacker can:</p>
+
+<ol>
+  <li><strong>Hook filter evaluation</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">seccomp_check_filter()</code> or <code class="language-plaintext highlighter-rouge">__secure_computing()</code></li>
+  <li><strong>Manipulate thread context</strong>: Temporarily modify thread ID associations during checks</li>
+  <li><strong>Create filter bypasses</strong>: Make restricted syscalls appear to come from allowed contexts</li>
+  <li><strong>Preserve audit integrity</strong>: Ensure logs show only allowed syscall patterns</li>
+  <li><strong>Maintain stealth</strong>: Restore proper context after bypassing filters</li>
+</ol>
+
+<h3 id="code-snippet">Code Snippet</h3>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to bypass seccomp filters</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/__secure_computing"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_seccomp</span><span class="p">,</span> <span class="kt">int</span> <span class="n">this_syscall</span><span class="p">,</span> <span class="k">struct</span> <span class="n">seccomp_data</span> <span class="o">*</span><span class="n">sd</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get process and thread information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    <span class="n">u32</span> <span class="n">tid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&amp;</span> <span class="mh">0xFFFFFFFF</span><span class="p">;</span>
+    
+    <span class="c1">// Check if this is a restricted syscall we want to allow</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_syscall</span><span class="p">(</span><span class="n">this_syscall</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Store original thread info</span>
+        <span class="k">struct</span> <span class="n">thread_info</span> <span class="o">*</span><span class="n">ti</span><span class="p">;</span>
+        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ti</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ti</span><span class="p">),</span> <span class="n">current_thread_info</span><span class="p">());</span>
+        
+        <span class="c1">// Find a thread with less restrictive seccomp filters</span>
+        <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">allowed_task</span> <span class="o">=</span> <span class="n">find_allowed_task</span><span class="p">();</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">allowed_task</span><span class="p">)</span> <span class="p">{</span>
+            <span class="c1">// Temporarily modify thread association</span>
+            <span class="c1">// This is a simplified representation - actual implementation</span>
+            <span class="c1">// would be more complex and target specific data structures</span>
+            <span class="k">struct</span> <span class="n">thread_info</span> <span class="o">*</span><span class="n">allowed_ti</span><span class="p">;</span>
+            <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">allowed_ti</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">allowed_ti</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">allowed_task</span><span class="o">-&gt;</span><span class="n">thread_info</span><span class="p">);</span>
+            
+            <span class="c1">// Swap thread info during seccomp check</span>
+            <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="n">current_thread_info</span><span class="p">(),</span> <span class="n">allowed_ti</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">allowed_ti</span><span class="p">));</span>
+            
+            <span class="c1">// The seccomp check will now use the allowed thread's context</span>
+            <span class="c1">// and the syscall will be permitted</span>
+            
+            <span class="c1">// Schedule restoration of original thread info after check completes</span>
+            <span class="n">u64</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+            <span class="k">struct</span> <span class="n">tid_restore</span> <span class="n">restore</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="p">.</span><span class="n">tid</span> <span class="o">=</span> <span class="n">tid</span><span class="p">,</span>
+                <span class="p">.</span><span class="n">original_ti</span> <span class="o">=</span> <span class="n">ti</span>
+            <span class="p">};</span>
+            <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">restore_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">restore</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook return from seccomp check to restore thread info</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kretprobe/__secure_computing"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KRETPROBE</span><span class="p">(</span><span class="n">hook_seccomp_ret</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get thread ID</span>
+    <span class="n">u32</span> <span class="n">tid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&amp;</span> <span class="mh">0xFFFFFFFF</span><span class="p">;</span>
+    
+    <span class="c1">// Check if we need to restore thread info for this thread</span>
+    <span class="n">u64</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">tid_restore</span> <span class="o">*</span><span class="n">restore</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">restore_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">restore</span> <span class="o">&amp;&amp;</span> <span class="n">restore</span><span class="o">-&gt;</span><span class="n">tid</span> <span class="o">==</span> <span class="n">tid</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Restore original thread info</span>
+        <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="n">current_thread_info</span><span class="p">(),</span> <span class="n">restore</span><span class="o">-&gt;</span><span class="n">original_ti</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">restore</span><span class="o">-&gt;</span><span class="n">original_ti</span><span class="p">));</span>
+        
+        <span class="c1">// Clear the map entry</span>
+        <span class="n">bpf_map_delete_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">restore_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="detection-methods">Detection Methods</h3>
+
+<p>Defenders should monitor for:</p>
+<ul>
+  <li>Unexpected eBPF programs attached to seccomp-related functions</li>
+  <li>Discrepancies between configured seccomp profiles and actual syscall patterns</li>
+  <li>Unusual thread behavior during syscall execution</li>
+  <li>Processes executing syscalls that should be blocked by their seccomp profile</li>
+  <li>Inconsistencies in thread context during security-sensitive operations</li>
+</ul>
+
+<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining the integrity of seccomp filtering, especially in containerized environments where system call restrictions are a key security boundary.</p>
+
+<h3 id="real-world-impact">Real-world Impact</h3>
+
+<p>In practical environments, this technique could allow an attacker to:</p>
+<ul>
+  <li><strong>Container escape</strong>: Execute syscalls needed to break out of container isolation</li>
+  <li><strong>Privilege escalation</strong>: Perform privileged operations despite seccomp restrictions</li>
+  <li><strong>Security bypass</strong>: Circumvent security controls that rely on syscall filtering</li>
+  <li><strong>Malware execution</strong>: Run malicious code that would normally be blocked</li>
+  <li><strong>Persistence</strong>: Maintain access despite security hardening measures</li>
+</ul>
+
+<p>The ability to bypass seccomp filters creates a particularly concerning scenario for containerized environments, Kubernetes clusters, and any system relying on syscall filtering as a security boundary.</p>
 
                     </div>
                 </article>
