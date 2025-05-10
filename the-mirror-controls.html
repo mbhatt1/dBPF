@@ -487,7 +487,7 @@
 <p>The exploit leverages eBPF’s ability to attach to kernel functions that implement security checks. By intercepting these calls, an attacker can:</p>
 
 <ol>
-  <li><strong>Hook enforcement points</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">cap_capable()</code>, <code class="language-plaintext highlighter-rouge">security_file_permission()</code>, or <code class="language-plaintext highlighter-rouge">seccomp_check_filter()</code></li>
+  <li><strong>Hook enforcement points</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">cap_capable()</code>, <code class="language-plaintext highlighter-rouge">security_file_permission()</code></li>
   <li><strong>Modify decisions</strong>: Change the return values of security checks from “deny” to “allow”</li>
   <li><strong>Maintain appearances</strong>: Ensure audit logs show the expected “denied” messages</li>
   <li><strong>Create false trails</strong>: Generate deceptive audit records that mask the actual operations</li>
