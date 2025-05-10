@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The FUSE Audit Black‑Hole | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>The FUSE Audit Black-Hole | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,9 +23,9 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>The FUSE Audit Black‑Hole | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>The FUSE Audit Black-Hole | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="The FUSE Audit Black‑Hole" />
+<meta property="og:title" content="The FUSE Audit Black-Hole" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="The FUSE Audit Black-Hole: Evading Security Monitoring" />
@@ -36,9 +36,9 @@
 <meta property="og:type" content="article" />
 <meta property="article:published_time" content="2025-02-02T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="The FUSE Audit Black‑Hole" />
+<meta property="twitter:title" content="The FUSE Audit Black-Hole" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-02T00:00:00+00:00","datePublished":"2025-02-02T00:00:00+00:00","description":"The FUSE Audit Black-Hole: Evading Security Monitoring","headline":"The FUSE Audit Black‑Hole","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/the-fuse-audit-black-hole.html"},"url":"https://mbhatt1.github.io/dBPF/the-fuse-audit-black-hole.html"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-02T00:00:00+00:00","datePublished":"2025-02-02T00:00:00+00:00","description":"The FUSE Audit Black-Hole: Evading Security Monitoring","headline":"The FUSE Audit Black-Hole","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/the-fuse-audit-black-hole.html"},"url":"https://mbhatt1.github.io/dBPF/the-fuse-audit-black-hole.html"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -68,7 +68,7 @@
                     
                     
                     <a href="/dBPF/the-fuse-audit-black-hole.html" class="active">
-                        The FUSE Audit Black‑Hole
+                        The FUSE Audit Black-Hole
                     </a>
                     
                 
@@ -407,7 +407,7 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">The FUSE Audit Black‑Hole</h1>
+                        <h1 class="post-title">The FUSE Audit Black-Hole</h1>
                         
                         <time class="post-date" datetime="2025-02-02T00:00:00+00:00">
                             February 02, 2025
@@ -423,12 +423,12 @@
 <p>Redirecting kernel audit buffers into a dummy FUSE mount so SELinux and auditd never record the attacker’s tracks. This technique allows attackers to perform malicious actions without leaving evidence in security logs, creating a “black hole” for audit events.</p>
 
 <pre><code class="language-mermaid">graph TD
-    A[Kernel Audit Event] --&gt;|1. Generated| B[Audit Buffer]
-    B --&gt;|2. Intercept| C[eBPF Program]
-    C --&gt;|3. Redirect| D[Dummy FUSE Mount]
-    D --&gt;|4. Discard| F[/dev/null]
-    B --&gt;|5. Miss| E[SELinux/Auditd]
-    G[Attacker Actions] --&gt;|6. No Logs| H[Stealth Operations]
+    A["Kernel Audit Event"] --&gt;|"1. Generated"| B["Audit Buffer"]
+    B --&gt;|"2. Intercept"| C["eBPF Program"]
+    C --&gt;|"3. Redirect"| D["Dummy FUSE Mount"]
+    D --&gt;|"4. Discard"| F["/dev/null"]
+    B --&gt;|"5. Miss"| E["SELinux/Auditd"]
+    G["Attacker Actions"] --&gt;|"6. No Logs"| H["Stealth Operations"]
 </code></pre>
 
 <p><strong>Why</strong></p>
@@ -697,6 +697,13 @@
             mermaid.initialize({
                 startOnLoad: false,
                 theme: 'dark',
+                flowchart: {
+                    htmlLabels: true,  // Enable HTML in labels for better word wrapping
+                    curve: 'basis',    // Smoother curves
+                    useMaxWidth: true, // Constrain diagram width
+                    nodeSpacing: 50,   // More space between nodes
+                    rankSpacing: 70    // More space between ranks
+                },
                 themeVariables: {
                     darkMode: true,
                     background: '#000000',
@@ -713,6 +720,25 @@
                     fontFamily: 'JetBrains Mono'
                 }
             });
+
+            // Add custom CSS for Mermaid diagrams to handle word wrapping
+            var style = document.createElement('style');
+            style.textContent = `
+                .mermaid .node rect, .mermaid .node circle, .mermaid .node ellipse, .mermaid .node polygon, .mermaid .node path {
+                    rx: 5px;
+                    ry: 5px;
+                }
+                .mermaid .node .label {
+                    word-wrap: break-word;
+                    white-space: pre-wrap !important;
+                    max-width: 200px;
+                }
+                .mermaid .edgeLabel {
+                    background-color: #000000 !important;
+                    color: #00ff9d !important;
+                }
+            `;
+            document.head.appendChild(style);
 
             // Find all pre code blocks with mermaid class
             document.querySelectorAll('pre code.language-mermaid').forEach(function(element) {

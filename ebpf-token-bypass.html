@@ -68,7 +68,7 @@
                     
                     
                     <a href="/dBPF/the-fuse-audit-black-hole.html" >
-                        The FUSE Audit Black‑Hole
+                        The FUSE Audit Black-Hole
                     </a>
                     
                 
@@ -676,6 +676,13 @@
             mermaid.initialize({
                 startOnLoad: false,
                 theme: 'dark',
+                flowchart: {
+                    htmlLabels: true,  // Enable HTML in labels for better word wrapping
+                    curve: 'basis',    // Smoother curves
+                    useMaxWidth: true, // Constrain diagram width
+                    nodeSpacing: 50,   // More space between nodes
+                    rankSpacing: 70    // More space between ranks
+                },
                 themeVariables: {
                     darkMode: true,
                     background: '#000000',
@@ -692,6 +699,25 @@
                     fontFamily: 'JetBrains Mono'
                 }
             });
+
+            // Add custom CSS for Mermaid diagrams to handle word wrapping
+            var style = document.createElement('style');
+            style.textContent = `
+                .mermaid .node rect, .mermaid .node circle, .mermaid .node ellipse, .mermaid .node polygon, .mermaid .node path {
+                    rx: 5px;
+                    ry: 5px;
+                }
+                .mermaid .node .label {
+                    word-wrap: break-word;
+                    white-space: pre-wrap !important;
+                    max-width: 200px;
+                }
+                .mermaid .edgeLabel {
+                    background-color: #000000 !important;
+                    color: #00ff9d !important;
+                }
+            `;
+            document.head.appendChild(style);
 
             // Find all pre code blocks with mermaid class
             document.querySelectorAll('pre code.language-mermaid').forEach(function(element) {
