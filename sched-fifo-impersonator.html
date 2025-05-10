@@ -28,8 +28,8 @@
 <meta property="og:title" content="SCHED_FIFO Impersonator" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
-<meta name="description" content="Wut" />
-<meta property="og:description" content="Wut" />
+<meta name="description" content="SCHED_FIFO Impersonator: Hijacking Real-Time Scheduling Priorities" />
+<meta property="og:description" content="SCHED_FIFO Impersonator: Hijacking Real-Time Scheduling Priorities" />
 <link rel="canonical" href="https://mbhatt1.github.io/dBPF/sched-fifo-impersonator.html" />
 <meta property="og:url" content="https://mbhatt1.github.io/dBPF/sched-fifo-impersonator.html" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
@@ -38,7 +38,7 @@
 <meta name="twitter:card" content="summary" />
 <meta property="twitter:title" content="SCHED_FIFO Impersonator" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-03-15T00:00:00+00:00","datePublished":"2025-03-15T00:00:00+00:00","description":"Wut","headline":"SCHED_FIFO Impersonator","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/sched-fifo-impersonator.html"},"url":"https://mbhatt1.github.io/dBPF/sched-fifo-impersonator.html"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-03-15T00:00:00+00:00","datePublished":"2025-03-15T00:00:00+00:00","description":"SCHED_FIFO Impersonator: Hijacking Real-Time Scheduling Priorities","headline":"SCHED_FIFO Impersonator","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/sched-fifo-impersonator.html"},"url":"https://mbhatt1.github.io/dBPF/sched-fifo-impersonator.html"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -463,29 +463,199 @@
                     </header>
 
                     <div class="post-content">
-                        <p><strong>Wut</strong></p>
+                        <h1 id="sched_fifo-impersonator-hijacking-real-time-scheduling-priorities">SCHED_FIFO Impersonator: Hijacking Real-Time Scheduling Priorities</h1>
 
-<p>A compact exploration of how eBPF can twist the kernel feature “SCHED_FIFO Impersonator” into an attack primitive—maintaining verifier legality while undermining isolation.</p>
+<p><strong>Wut</strong></p>
+
+<p>A technique using eBPF to manipulate the Linux kernel scheduler, allowing unprivileged processes to gain real-time scheduling priorities (SCHED_FIFO) without the required capabilities. This attack bypasses the normal permission checks for real-time scheduling, enabling denial of service and resource starvation attacks against critical system processes.</p>
+
+<pre><code class="language-mermaid">graph TD
+    A[Normal Process] --&gt;|1. Request SCHED_FIFO| B[Kernel Scheduler]
+    C[eBPF Program] --&gt;|2. Hook &amp; Intercept| B
+    B --&gt;|3. Modified Check| D[Bypass CAP_SYS_NICE]
+    D --&gt;|4. Grant RT Priority| E[Elevated Process]
+    E --&gt;|5. Resource Starvation| F[System Instability]
+</code></pre>
 
 <p><strong>Why</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation.</p>
+<p>Because eBPF + misconfiguration =&gt; broken isolation. Real-time scheduling policies like SCHED_FIFO are restricted to privileged processes because they can monopolize CPU resources and cause system-wide denial of service. By using eBPF to intercept and modify the scheduler’s permission checks, attackers can bypass these restrictions and gain unfair resource advantages, potentially starving critical system processes of CPU time.</p>
 
 <p><strong>POC</strong></p>
 
 <p><em>Coming soon.</em></p>
 
+<p>The proof of concept will demonstrate:</p>
+<ul>
+  <li>Hooking into kernel scheduler decision functions</li>
+  <li>Bypassing CAP_SYS_NICE capability checks</li>
+  <li>Elevating unprivileged processes to real-time priorities</li>
+  <li>Causing resource starvation of critical system services</li>
+  <li>Maintaining the appearance of proper scheduling policy enforcement</li>
+</ul>
+
 <p><strong>Attacker hat on</strong></p>
 
-<p>Load malicious BPF, trigger.</p>
+<ol>
+  <li>Identify a target system with eBPF capabilities enabled</li>
+  <li>Map the kernel functions responsible for scheduler policy enforcement</li>
+  <li>Develop eBPF programs that hook into scheduler decision points</li>
+  <li>Load the malicious BPF programs with appropriate privileges</li>
+  <li>Trigger the exploit by attempting to set real-time priorities from unprivileged processes</li>
+  <li>Use the elevated scheduling priority to starve critical system processes</li>
+  <li>Maintain persistence through continuous priority manipulation</li>
+</ol>
 
 <p><strong>Defender hat on</strong></p>
 
-<p>Remove CAP_BPF.</p>
+<ol>
+  <li>Remove CAP_BPF from untrusted processes and containers</li>
+  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
+  <li>Monitor for unexpected real-time priority processes</li>
+  <li>Set resource limits using cgroups to prevent complete resource monopolization</li>
+  <li>Implement CPU isolation for critical system processes</li>
+  <li>Consider using kernel lockdown mode to restrict eBPF capabilities</li>
+</ol>
 
 <p><strong>Conclusion</strong></p>
 
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>.</p>
+<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to manipulate scheduler decisions through eBPF creates a dangerous scenario where unprivileged processes can gain unfair resource advantages, potentially leading to system-wide instability. This technique highlights why eBPF capabilities should be treated as highly privileged operations that require strict access controls, especially in multi-tenant environments.</p>
+
+<h2 id="technical-details">Technical Details</h2>
+
+<h3 id="scheduler-architecture">Scheduler Architecture</h3>
+
+<p>The Linux kernel scheduler manages process execution using several scheduling policies:</p>
+<ul>
+  <li><strong>SCHED_OTHER</strong>: The default time-sharing policy for normal processes</li>
+  <li><strong>SCHED_FIFO</strong>: A real-time policy that runs processes until they voluntarily yield</li>
+  <li><strong>SCHED_RR</strong>: A real-time policy similar to FIFO but with time slices</li>
+  <li><strong>SCHED_BATCH</strong>: For CPU-intensive background tasks</li>
+  <li><strong>SCHED_IDLE</strong>: For extremely low priority tasks</li>
+</ul>
+
+<p>Access to real-time policies (SCHED_FIFO and SCHED_RR) is restricted by the CAP_SYS_NICE capability to prevent resource monopolization.</p>
+
+<h3 id="exploitation-technique">Exploitation Technique</h3>
+
+<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement scheduler policy checks. By intercepting these calls, an attacker can:</p>
+
+<ol>
+  <li><strong>Hook permission checks</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">sched_setscheduler()</code> and <code class="language-plaintext highlighter-rouge">check_sched_setscheduler()</code></li>
+  <li><strong>Bypass capability verification</strong>: Modify the return values of CAP_SYS_NICE checks</li>
+  <li><strong>Manipulate priority values</strong>: Alter process priority and policy settings</li>
+  <li><strong>Evade detection</strong>: Maintain the appearance of normal scheduling behavior in monitoring tools</li>
+</ol>
+
+<h3 id="code-snippet">Code Snippet</h3>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to bypass scheduler policy checks</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/sched_setattr"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_sched_setattr</span><span class="p">,</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">p</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">sched_attr</span> <span class="o">*</span><span class="n">attr</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Check if this is our target process</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Create a modified sched_attr with SCHED_FIFO policy</span>
+        <span class="k">struct</span> <span class="n">sched_attr</span> <span class="n">modified_attr</span><span class="p">;</span>
+        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">modified_attr</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">modified_attr</span><span class="p">),</span> <span class="n">attr</span><span class="p">);</span>
+        
+        <span class="c1">// Set SCHED_FIFO policy and high priority</span>
+        <span class="n">modified_attr</span><span class="p">.</span><span class="n">sched_policy</span> <span class="o">=</span> <span class="n">SCHED_FIFO</span><span class="p">;</span>
+        <span class="n">modified_attr</span><span class="p">.</span><span class="n">sched_priority</span> <span class="o">=</span> <span class="mi">99</span><span class="p">;</span> <span class="c1">// Maximum RT priority</span>
+        
+        <span class="c1">// Update the attribute in memory</span>
+        <span class="n">bpf_probe_write_user</span><span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">attr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">modified_attr</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">modified_attr</span><span class="p">));</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook the capability check function</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/security_task_setscheduler"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_security_check</span><span class="p">,</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">p</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Check if this is our target process</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Bypass the security check</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="c1">// Let the original function run for other processes</span>
+    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="detection-methods">Detection Methods</h3>
+
+<p>Defenders should monitor for:</p>
+<ul>
+  <li>Unexpected eBPF programs attached to scheduler-related functions</li>
+  <li>Processes running with real-time priorities without the CAP_SYS_NICE capability</li>
+  <li>Unusual patterns of CPU utilization</li>
+  <li>System-wide performance degradation</li>
+  <li>Discrepancies between process priorities reported by different monitoring tools</li>
+</ul>
+
+<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining system stability, especially in environments where resource fairness is important.</p>
+
+<h3 id="real-world-impact">Real-world Impact</h3>
+
+<p>In practical environments, this technique could allow an attacker to:</p>
+<ul>
+  <li><strong>Denial of service</strong>: Starve critical system processes of CPU time</li>
+  <li><strong>Performance degradation</strong>: Cause system-wide slowdowns and increased latency</li>
+  <li><strong>Service disruption</strong>: Interfere with time-sensitive operations like networking</li>
+  <li><strong>Privilege escalation</strong>: Combine with other vulnerabilities to gain additional access</li>
+  <li><strong>Covert operations</strong>: Hide malicious activities by manipulating process priorities</li>
+</ul>
+
+<p>The ability to bypass scheduler restrictions creates a particularly concerning scenario for cloud environments and shared infrastructure where fair resource allocation is essential for multi-tenant security.</p>
 
                     </div>
                 </article>

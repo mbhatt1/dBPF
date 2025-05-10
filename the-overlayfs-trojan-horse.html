@@ -645,6 +645,19 @@
 
 <p>This technique demonstrates why proper eBPF restrictions are critical for maintaining container isolation, especially in multi-tenant environments where container breakout could lead to accessing other tenants’ data.</p>
 
+<h3 id="real-world-impact">Real-world Impact</h3>
+
+<p>In practical environments, this technique could allow an attacker to:</p>
+<ul>
+  <li><strong>Container escape</strong>: Gain root access on the host by exploiting the container boundary</li>
+  <li><strong>Multi-tenant compromise</strong>: Access data from other containers sharing the same host</li>
+  <li><strong>Persistent backdoors</strong>: Install difficult-to-detect backdoors that survive container restarts</li>
+  <li><strong>Privilege escalation chains</strong>: Combine with other vulnerabilities to move laterally through a cluster</li>
+  <li><strong>Supply chain attacks</strong>: Compromise build environments to inject malicious code into production images</li>
+</ul>
+
+<p>The ability to silently modify files during copy-up operations creates a particularly concerning scenario for cloud environments and managed Kubernetes services where multiple customers share the same infrastructure.</p>
+
                     </div>
                 </article>
 

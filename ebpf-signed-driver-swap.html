@@ -28,8 +28,8 @@
 <meta property="og:title" content="eBPF Signed‑Driver Swap" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
-<meta name="description" content="Wut" />
-<meta property="og:description" content="Wut" />
+<meta name="description" content="eBPF Signed-Driver Swap: Bypassing Kernel Module Signature Verification" />
+<meta property="og:description" content="eBPF Signed-Driver Swap: Bypassing Kernel Module Signature Verification" />
 <link rel="canonical" href="https://mbhatt1.github.io/dBPF/ebpf-signed-driver-swap.html" />
 <meta property="og:url" content="https://mbhatt1.github.io/dBPF/ebpf-signed-driver-swap.html" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
@@ -38,7 +38,7 @@
 <meta name="twitter:card" content="summary" />
 <meta property="twitter:title" content="eBPF Signed‑Driver Swap" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-03-01T00:00:00+00:00","datePublished":"2025-03-01T00:00:00+00:00","description":"Wut","headline":"eBPF Signed‑Driver Swap","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/ebpf-signed-driver-swap.html"},"url":"https://mbhatt1.github.io/dBPF/ebpf-signed-driver-swap.html"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-03-01T00:00:00+00:00","datePublished":"2025-03-01T00:00:00+00:00","description":"eBPF Signed-Driver Swap: Bypassing Kernel Module Signature Verification","headline":"eBPF Signed‑Driver Swap","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/ebpf-signed-driver-swap.html"},"url":"https://mbhatt1.github.io/dBPF/ebpf-signed-driver-swap.html"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -463,29 +463,243 @@
                     </header>
 
                     <div class="post-content">
-                        <p><strong>Wut</strong></p>
+                        <h1 id="ebpf-signed-driver-swap-bypassing-kernel-module-signature-verification">eBPF Signed-Driver Swap: Bypassing Kernel Module Signature Verification</h1>
 
-<p>A compact exploration of how eBPF can twist the kernel feature “eBPF Signed‑Driver Swap” into an attack primitive—maintaining verifier legality while undermining isolation.</p>
+<p><strong>Wut</strong></p>
+
+<p>A technique using eBPF to intercept and manipulate kernel module signature verification, allowing attackers to load unsigned or malicious drivers while maintaining the appearance of proper verification. This attack targets the kernel’s module loading process to bypass security mechanisms designed to ensure only trusted code runs in kernel space.</p>
+
+<pre><code class="language-mermaid">graph TD
+    A[Signed Driver] --&gt;|1. Load Request| B[Kernel Module Loader]
+    C[eBPF Program] --&gt;|2. Hook &amp; Intercept| B
+    B --&gt;|3. Signature Check| D[Verification Function]
+    C --&gt;|4. Swap Content| E[Malicious Driver]
+    D --&gt;|5. Verification "Passes"| F[Driver Loaded]
+    G[Security Monitor] --&gt;|6. Sees Valid Signature| H[False Security]
+</code></pre>
 
 <p><strong>Why</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation.</p>
+<p>Because eBPF + misconfiguration =&gt; broken isolation. Kernel module signing is a critical security control that prevents unauthorized code from running with kernel privileges. By using eBPF to intercept and manipulate the signature verification process, attackers can bypass this protection and load malicious kernel modules that would otherwise be rejected, potentially leading to complete system compromise.</p>
 
 <p><strong>POC</strong></p>
 
 <p><em>Coming soon.</em></p>
 
+<p>The proof of concept will demonstrate:</p>
+<ul>
+  <li>Hooking into kernel module loading and verification functions</li>
+  <li>Intercepting signature verification requests</li>
+  <li>Swapping unsigned/malicious module content with signed content during verification</li>
+  <li>Loading unauthorized kernel modules despite signature enforcement</li>
+  <li>Maintaining the appearance of proper signature verification in logs</li>
+</ul>
+
 <p><strong>Attacker hat on</strong></p>
 
-<p>Load malicious BPF, trigger.</p>
+<ol>
+  <li>Identify a target system with eBPF capabilities and module signing enforcement</li>
+  <li>Map the kernel functions responsible for module signature verification</li>
+  <li>Develop eBPF programs that hook into these verification functions</li>
+  <li>Load the malicious BPF programs with appropriate privileges</li>
+  <li>Prepare an unsigned or malicious kernel module</li>
+  <li>Trigger the module loading process with signature verification</li>
+  <li>Use the eBPF hooks to swap content during verification</li>
+  <li>Execute privileged operations through the unauthorized module</li>
+</ol>
 
 <p><strong>Defender hat on</strong></p>
 
-<p>Remove CAP_BPF.</p>
+<ol>
+  <li>Remove CAP_BPF from untrusted processes and containers</li>
+  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
+  <li>Use Secure Boot with proper key management</li>
+  <li>Monitor for unexpected eBPF programs attached to module loading functions</li>
+  <li>Implement additional integrity verification for loaded modules</li>
+  <li>Consider using kernel lockdown mode to restrict module loading</li>
+</ol>
 
 <p><strong>Conclusion</strong></p>
 
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>.</p>
+<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to manipulate kernel module signature verification through eBPF creates a particularly dangerous scenario where malicious code can gain kernel-level access despite security controls. This technique highlights why eBPF capabilities should be treated as highly privileged operations that require strict access controls, especially in environments where kernel integrity is critical.</p>
+
+<h2 id="technical-details">Technical Details</h2>
+
+<h3 id="kernel-module-signing-architecture">Kernel Module Signing Architecture</h3>
+
+<p>Linux kernel module signing provides:</p>
+<ul>
+  <li><strong>Integrity verification</strong>: Ensures modules haven’t been tampered with</li>
+  <li><strong>Authentication</strong>: Verifies modules come from a trusted source</li>
+  <li><strong>Chain of trust</strong>: Extends from secure boot to kernel to modules</li>
+  <li><strong>Enforcement</strong>: Prevents loading of unsigned or improperly signed modules</li>
+</ul>
+
+<p>The verification process involves checking cryptographic signatures against trusted keys before allowing modules to be loaded into the kernel.</p>
+
+<h3 id="exploitation-technique">Exploitation Technique</h3>
+
+<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement module signature verification. By intercepting these calls, an attacker can:</p>
+
+<ol>
+  <li><strong>Hook verification functions</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">module_sig_check()</code> or <code class="language-plaintext highlighter-rouge">verify_pkcs7_signature()</code></li>
+  <li><strong>Identify verification requests</strong>: Determine when a module is being verified</li>
+  <li><strong>Swap content during verification</strong>: Present valid signed content during checks</li>
+  <li><strong>Restore malicious content</strong>: Replace with actual malicious code after verification</li>
+  <li><strong>Maintain appearance of security</strong>: Ensure logs show successful verification</li>
+</ol>
+
+<h3 id="code-snippet">Code Snippet</h3>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to bypass module signature verification</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/module_sig_check"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_sig_check</span><span class="p">,</span> <span class="k">struct</span> <span class="n">module</span> <span class="o">*</span><span class="n">mod</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get module information</span>
+    <span class="kt">char</span> <span class="n">name</span><span class="p">[</span><span class="n">MODULE_NAME_LEN</span><span class="p">];</span>
+    <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="n">mod</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">);</span>
+    
+    <span class="c1">// Check if this is our target module</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_module</span><span class="p">(</span><span class="n">name</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Store a reference to this module for later use</span>
+        <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_modules</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">mod</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// For our target module, swap in the legitimate signature</span>
+        <span class="c1">// This would involve modifying the module's signature section</span>
+        <span class="n">swap_module_signature</span><span class="p">(</span><span class="n">mod</span><span class="p">);</span>
+        
+        <span class="c1">// The verification will now pass for our malicious module</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook the module initialization to restore malicious code</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/do_init_module"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_init_module</span><span class="p">,</span> <span class="k">struct</span> <span class="n">module</span> <span class="o">*</span><span class="n">mod</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get module information</span>
+    <span class="kt">char</span> <span class="n">name</span><span class="p">[</span><span class="n">MODULE_NAME_LEN</span><span class="p">];</span>
+    <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="n">mod</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">);</span>
+    
+    <span class="c1">// Check if this is our target module</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_module</span><span class="p">(</span><span class="n">name</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Verification has passed, now restore the malicious code</span>
+        <span class="c1">// This would involve modifying the module's code section</span>
+        <span class="n">restore_malicious_code</span><span class="p">(</span><span class="n">mod</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Helper function to swap module signatures</span>
+<span class="k">static</span> <span class="kr">inline</span> <span class="kt">void</span> <span class="nf">swap_module_signature</span><span class="p">(</span><span class="k">struct</span> <span class="n">module</span> <span class="o">*</span><span class="n">mod</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// This is a simplified representation</span>
+    <span class="c1">// Real implementation would be more complex and target specific</span>
+    <span class="c1">// data structures in the module signature section</span>
+    
+    <span class="c1">// Get pointer to the module's signature</span>
+    <span class="k">struct</span> <span class="n">module_signature</span> <span class="o">*</span><span class="n">sig</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sig</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">sig</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">mod</span><span class="o">-&gt;</span><span class="n">sig</span><span class="p">);</span>
+    
+    <span class="c1">// Replace with a valid signature from our map</span>
+    <span class="k">struct</span> <span class="n">module_signature</span> <span class="n">valid_sig</span><span class="p">;</span>
+    <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">valid_signatures</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">valid_sig</span><span class="p">);</span>
+    
+    <span class="c1">// Write the valid signature</span>
+    <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="n">sig</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">valid_sig</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">valid_sig</span><span class="p">));</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="detection-methods">Detection Methods</h3>
+
+<p>Defenders should monitor for:</p>
+<ul>
+  <li>Unexpected eBPF programs attached to module loading or verification functions</li>
+  <li>Discrepancies between module content before and after loading</li>
+  <li>Unusual patterns of module loading activity</li>
+  <li>Modules that pass verification but show anomalous behavior</li>
+  <li>Inconsistencies in module signatures when verified through different methods</li>
+</ul>
+
+<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining kernel integrity, especially in environments where module signing is a key security control.</p>
+
+<h3 id="real-world-impact">Real-world Impact</h3>
+
+<p>In practical environments, this technique could allow an attacker to:</p>
+<ul>
+  <li><strong>Kernel-level rootkits</strong>: Install persistent backdoors in the kernel</li>
+  <li><strong>Security bypass</strong>: Disable security features enforced by the kernel</li>
+  <li><strong>Data theft</strong>: Access sensitive data directly from kernel memory</li>
+  <li><strong>Privilege escalation</strong>: Gain complete control over the system</li>
+  <li><strong>Persistence</strong>: Maintain access that survives user-space security measures</li>
+</ul>
+
+<p>The ability to bypass kernel module signature verification creates a particularly concerning scenario for enterprise environments, cloud platforms, and any system relying on kernel integrity for its security model.</p>
 
                     </div>
                 </article>

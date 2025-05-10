@@ -591,6 +591,19 @@
 
 <p>This technique demonstrates why proper eBPF restrictions are critical for maintaining system security, especially in environments where hardware isolation is a key security requirement.</p>
 
+<h3 id="real-world-impact">Real-world Impact</h3>
+
+<p>In practical environments, this technique could allow an attacker to:</p>
+<ul>
+  <li><strong>Persistent hardware-level access</strong>: Establish backdoors that survive OS reinstallation</li>
+  <li><strong>Firmware modification</strong>: Alter system firmware to maintain long-term control</li>
+  <li><strong>Cross-OS attacks</strong>: Execute attacks that work regardless of the operating system</li>
+  <li><strong>Data exfiltration</strong>: Create covert channels through hardware interfaces</li>
+  <li><strong>Security bypass</strong>: Circumvent OS-level security controls by operating at the hardware level</li>
+</ul>
+
+<p>The ability to interact directly with hardware management interfaces creates a particularly concerning scenario for cloud providers, data centers, and enterprise environments where physical hardware is shared among multiple tenants or contains sensitive data.</p>
+
                     </div>
                 </article>
 

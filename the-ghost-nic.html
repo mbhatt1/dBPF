@@ -681,6 +681,19 @@
 
 <p>This technique demonstrates the importance of treating eBPF as a privileged capability and implementing defense-in-depth strategies that don’t rely solely on CNI-level controls for network isolation.</p>
 
+<h3 id="real-world-impact">Real-world Impact</h3>
+
+<p>In practical environments, this technique could allow an attacker to:</p>
+<ul>
+  <li><strong>Bypass network policies</strong>: Circumvent Kubernetes NetworkPolicy or other CNI-enforced restrictions</li>
+  <li><strong>Exfiltrate sensitive data</strong>: Extract confidential information from air-gapped containers</li>
+  <li><strong>Command and control</strong>: Maintain persistent access to compromised containers despite network controls</li>
+  <li><strong>Lateral movement</strong>: Access other containers or services that trust the isolated network</li>
+  <li><strong>Evade detection</strong>: Communicate without appearing in standard network monitoring tools</li>
+</ul>
+
+<p>The ability to create a “ghost” network interface is particularly concerning for environments like financial services, healthcare, and government systems where network segmentation is a critical security control. Organizations that rely on network isolation as a primary security boundary for multi-tenant containers or sensitive workloads are especially vulnerable to this technique.</p>
+
                     </div>
                 </article>
 

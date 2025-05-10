@@ -28,8 +28,8 @@
 <meta property="og:title" content="NetNS VLAN Ghost" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
-<meta name="description" content="Wut" />
-<meta property="og:description" content="Wut" />
+<meta name="description" content="NetNS VLAN Ghost: Invisible Cross-Namespace Network Tunneling" />
+<meta property="og:description" content="NetNS VLAN Ghost: Invisible Cross-Namespace Network Tunneling" />
 <link rel="canonical" href="https://mbhatt1.github.io/dBPF/netns-vlan-ghost.html" />
 <meta property="og:url" content="https://mbhatt1.github.io/dBPF/netns-vlan-ghost.html" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
@@ -38,7 +38,7 @@
 <meta name="twitter:card" content="summary" />
 <meta property="twitter:title" content="NetNS VLAN Ghost" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-04-15T00:00:00+00:00","datePublished":"2025-04-15T00:00:00+00:00","description":"Wut","headline":"NetNS VLAN Ghost","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/netns-vlan-ghost.html"},"url":"https://mbhatt1.github.io/dBPF/netns-vlan-ghost.html"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-04-15T00:00:00+00:00","datePublished":"2025-04-15T00:00:00+00:00","description":"NetNS VLAN Ghost: Invisible Cross-Namespace Network Tunneling","headline":"NetNS VLAN Ghost","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/netns-vlan-ghost.html"},"url":"https://mbhatt1.github.io/dBPF/netns-vlan-ghost.html"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -463,29 +463,194 @@
                     </header>
 
                     <div class="post-content">
-                        <p><strong>Wut</strong></p>
+                        <h1 id="netns-vlan-ghost-invisible-cross-namespace-network-tunneling">NetNS VLAN Ghost: Invisible Cross-Namespace Network Tunneling</h1>
 
-<p>A compact exploration of how eBPF can twist the kernel feature “NetNS VLAN Ghost” into an attack primitive—maintaining verifier legality while undermining isolation.</p>
+<p><strong>Wut</strong></p>
+
+<p>A technique using eBPF to create hidden communication channels between isolated network namespaces by manipulating VLAN tag handling. This attack bypasses network namespace isolation by intercepting and modifying network packets at the driver level, allowing containers and processes to communicate across security boundaries without detection by standard monitoring tools.</p>
+
+<pre><code class="language-mermaid">graph TD
+    A[Container A] --&gt;|1. Send Packet| B[Network Stack]
+    B --&gt;|2. Process Packet| C[Network Driver]
+    D[eBPF Program] --&gt;|3. Hook &amp; Intercept| C
+    C --&gt;|4. Modify VLAN Tags| E[Hidden Channel]
+    E --&gt;|5. Cross Namespace| F[Container B]
+    G[Network Monitor] --&gt;|6. Sees Nothing| H[False Security]
+</code></pre>
 
 <p><strong>Why</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation.</p>
+<p>Because eBPF + misconfiguration =&gt; broken isolation. Network namespaces are a fundamental isolation mechanism in container environments, preventing unauthorized communication between containers. By using eBPF to manipulate VLAN tags and packet handling at the driver level, attackers can create covert channels that bypass these isolation mechanisms while remaining invisible to standard monitoring tools.</p>
 
 <p><strong>POC</strong></p>
 
 <p><em>Coming soon.</em></p>
 
+<p>The proof of concept will demonstrate:</p>
+<ul>
+  <li>Hooking into network driver packet processing functions</li>
+  <li>Creating covert channels between isolated network namespaces</li>
+  <li>Bypassing container network policies and firewalls</li>
+  <li>Maintaining stealth by manipulating VLAN tags</li>
+  <li>Establishing bidirectional communication across security boundaries</li>
+</ul>
+
 <p><strong>Attacker hat on</strong></p>
 
-<p>Load malicious BPF, trigger.</p>
+<ol>
+  <li>Identify a target system with eBPF capabilities and network namespaces</li>
+  <li>Map the kernel functions responsible for network packet processing</li>
+  <li>Develop eBPF programs that hook into VLAN tag handling</li>
+  <li>Load the malicious BPF programs with appropriate privileges</li>
+  <li>Establish covert communication channels between isolated containers</li>
+  <li>Exfiltrate data or pivot between containers using the hidden channel</li>
+  <li>Maintain persistence through the eBPF programs</li>
+</ol>
 
 <p><strong>Defender hat on</strong></p>
 
-<p>Remove CAP_BPF.</p>
+<ol>
+  <li>Remove CAP_BPF from untrusted processes and containers</li>
+  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
+  <li>Monitor for unexpected eBPF programs attached to network functions</li>
+  <li>Use network monitoring at multiple levels, including physical interfaces</li>
+  <li>Implement egress filtering and anomaly detection</li>
+  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
+</ol>
 
 <p><strong>Conclusion</strong></p>
 
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>.</p>
+<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to manipulate network packet processing through eBPF creates a dangerous scenario where container isolation can be completely bypassed while appearing intact. This technique highlights why eBPF capabilities should be treated as highly privileged operations that require strict access controls, especially in multi-tenant environments.</p>
+
+<h2 id="technical-details">Technical Details</h2>
+
+<h3 id="network-namespace-architecture">Network Namespace Architecture</h3>
+
+<p>Linux network namespaces provide isolation for network resources:</p>
+<ul>
+  <li><strong>Network interfaces</strong>: Each namespace has its own set of interfaces</li>
+  <li><strong>Routing tables</strong>: Separate routing configuration per namespace</li>
+  <li><strong>Firewall rules</strong>: Independent firewall rules for each namespace</li>
+  <li><strong>Socket information</strong>: Isolated network statistics and information</li>
+</ul>
+
+<p>VLAN (Virtual LAN) tagging is used to segment network traffic on shared physical interfaces, with the kernel handling the addition and removal of VLAN tags.</p>
+
+<h3 id="exploitation-technique">Exploitation Technique</h3>
+
+<p>The exploit leverages eBPF’s ability to attach to kernel functions that process network packets. By intercepting these calls, an attacker can:</p>
+
+<ol>
+  <li><strong>Hook packet processing</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">__netif_receive_skb_core()</code> and <code class="language-plaintext highlighter-rouge">dev_queue_xmit()</code></li>
+  <li><strong>Identify target packets</strong>: Filter for packets from specific namespaces or containers</li>
+  <li><strong>Manipulate VLAN tags</strong>: Add, modify, or strip VLAN tags to create covert channels</li>
+  <li><strong>Bypass namespace boundaries</strong>: Redirect packets across namespace boundaries</li>
+  <li><strong>Evade detection</strong>: Ensure monitoring tools see only expected traffic patterns</li>
+</ol>
+
+<h3 id="code-snippet">Code Snippet</h3>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to create cross-namespace channels</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/__netif_receive_skb_core"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_receive_skb</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get network namespace information</span>
+    <span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">net</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">nd_net</span><span class="p">);</span>
+    
+    <span class="c1">// Check if this is from our target namespace</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_namespace</span><span class="p">(</span><span class="n">net</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Extract packet information</span>
+        <span class="k">struct</span> <span class="n">ethhdr</span> <span class="n">eth</span><span class="p">;</span>
+        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">eth</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">eth</span><span class="p">),</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">);</span>
+        
+        <span class="c1">// Check if this is our covert channel packet</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">is_covert_packet</span><span class="p">(</span><span class="o">&amp;</span><span class="n">eth</span><span class="p">))</span> <span class="p">{</span>
+            <span class="c1">// Modify the packet's network namespace</span>
+            <span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">dest_net</span> <span class="o">=</span> <span class="n">get_destination_namespace</span><span class="p">();</span>
+            <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="o">&amp;</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">nd_net</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">dest_net</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">dest_net</span><span class="p">));</span>
+            
+            <span class="c1">// Modify or strip VLAN tags as needed</span>
+            <span class="n">modify_vlan_tags</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook outgoing packets to add covert channel markers</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/dev_queue_xmit"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_transmit</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Similar logic for outgoing packets</span>
+    <span class="c1">// Add VLAN tags or other markers for the receiving end</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="detection-methods">Detection Methods</h3>
+
+<p>Defenders should monitor for:</p>
+<ul>
+  <li>Unexpected eBPF programs attached to network-related functions</li>
+  <li>Discrepancies in network traffic between different monitoring points</li>
+  <li>Unusual VLAN tag patterns or modifications</li>
+  <li>Unexpected cross-namespace communication</li>
+  <li>Traffic that appears on physical interfaces but not in namespace monitoring</li>
+</ul>
+
+<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining network isolation, especially in environments where network segmentation is a key security control.</p>
+
+<h3 id="real-world-impact">Real-world Impact</h3>
+
+<p>In practical environments, this technique could allow an attacker to:</p>
+<ul>
+  <li><strong>Container escape</strong>: Establish communication between isolated containers</li>
+  <li><strong>Data exfiltration</strong>: Create covert channels to extract sensitive information</li>
+  <li><strong>Lateral movement</strong>: Pivot between compromised and target containers</li>
+  <li><strong>Command and control</strong>: Maintain hidden communication with compromised systems</li>
+  <li><strong>Policy bypass</strong>: Circumvent network policies and security controls</li>
+</ul>
+
+<p>The ability to create invisible cross-namespace communication channels is particularly concerning for cloud environments, Kubernetes clusters, and other multi-tenant systems where network isolation is a fundamental security boundary.</p>
 
                     </div>
                 </article>

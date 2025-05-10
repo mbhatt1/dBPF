@@ -28,8 +28,8 @@
 <meta property="og:title" content="Powercap Override" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
-<meta name="description" content="Wut" />
-<meta property="og:description" content="Wut" />
+<meta name="description" content="Powercap Override: Manipulating System Power Management" />
+<meta property="og:description" content="Powercap Override: Manipulating System Power Management" />
 <link rel="canonical" href="https://mbhatt1.github.io/dBPF/powercap-override.html" />
 <meta property="og:url" content="https://mbhatt1.github.io/dBPF/powercap-override.html" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
@@ -38,7 +38,7 @@
 <meta name="twitter:card" content="summary" />
 <meta property="twitter:title" content="Powercap Override" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-03-10T00:00:00+00:00","datePublished":"2025-03-10T00:00:00+00:00","description":"Wut","headline":"Powercap Override","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/powercap-override.html"},"url":"https://mbhatt1.github.io/dBPF/powercap-override.html"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-03-10T00:00:00+00:00","datePublished":"2025-03-10T00:00:00+00:00","description":"Powercap Override: Manipulating System Power Management","headline":"Powercap Override","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/powercap-override.html"},"url":"https://mbhatt1.github.io/dBPF/powercap-override.html"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -463,29 +463,220 @@
                     </header>
 
                     <div class="post-content">
-                        <p><strong>Wut</strong></p>
+                        <h1 id="powercap-override-manipulating-system-power-management">Powercap Override: Manipulating System Power Management</h1>
 
-<p>A compact exploration of how eBPF can twist the kernel feature “Powercap Override” into an attack primitive—maintaining verifier legality while undermining isolation.</p>
+<p><strong>Wut</strong></p>
+
+<p>A technique using eBPF to intercept and manipulate the Linux kernel’s power capping framework, allowing attackers to override power limits, thermal controls, and energy monitoring. This attack can cause denial of service, hardware damage, or enable side-channel attacks by manipulating the power states of critical system components.</p>
+
+<pre><code class="language-mermaid">graph TD
+    A[User Process] --&gt;|1. Power Management Request| B[Kernel Powercap Framework]
+    C[eBPF Program] --&gt;|2. Hook &amp; Intercept| B
+    B --&gt;|3. Power Limit Check| D[Hardware Interface]
+    C --&gt;|4. Modify Limits| D
+    D --&gt;|5. Altered Power State| E[CPU/Memory/GPU]
+    E --&gt;|6. Physical Effects| F[Thermal Issues/Side Channels]
+</code></pre>
 
 <p><strong>Why</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation.</p>
+<p>Because eBPF + misconfiguration =&gt; broken isolation. Modern systems rely on power capping mechanisms like Intel’s RAPL (Running Average Power Limit) to maintain safe operation and prevent thermal damage. By using eBPF to intercept and modify these power management operations, attackers can bypass hardware safety limits, cause denial of service through power throttling, or create side channels for data exfiltration.</p>
 
 <p><strong>POC</strong></p>
 
 <p><em>Coming soon.</em></p>
 
+<p>The proof of concept will demonstrate:</p>
+<ul>
+  <li>Hooking into kernel power management functions</li>
+  <li>Manipulating power limits for CPU, memory, and GPU subsystems</li>
+  <li>Bypassing thermal throttling mechanisms</li>
+  <li>Creating power-based side channels for data exfiltration</li>
+  <li>Causing controlled performance degradation through power manipulation</li>
+</ul>
+
 <p><strong>Attacker hat on</strong></p>
 
-<p>Load malicious BPF, trigger.</p>
+<ol>
+  <li>Identify a target system with eBPF capabilities and power management features</li>
+  <li>Map the kernel functions responsible for power capping and thermal control</li>
+  <li>Develop eBPF programs that hook into these power management functions</li>
+  <li>Load the malicious BPF programs with appropriate privileges</li>
+  <li>Intercept and modify power limit values during runtime</li>
+  <li>Manipulate power states to create side channels or cause denial of service</li>
+  <li>Exfiltrate data through power consumption patterns or degrade system performance</li>
+</ol>
 
 <p><strong>Defender hat on</strong></p>
 
-<p>Remove CAP_BPF.</p>
+<ol>
+  <li>Remove CAP_BPF from untrusted processes and containers</li>
+  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
+  <li>Monitor for unexpected eBPF programs attached to power management functions</li>
+  <li>Implement hardware-level power monitoring independent of the OS</li>
+  <li>Set up external thermal monitoring for critical systems</li>
+  <li>Consider physical isolation for sensitive workloads</li>
+</ol>
 
 <p><strong>Conclusion</strong></p>
 
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>.</p>
+<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to manipulate power management through eBPF creates dangerous scenarios ranging from hardware damage to sophisticated side-channel attacks. This technique highlights why eBPF capabilities should be treated as highly privileged operations that require strict access controls, especially in environments where power management is critical for security or reliability.</p>
+
+<h2 id="technical-details">Technical Details</h2>
+
+<h3 id="power-capping-architecture">Power Capping Architecture</h3>
+
+<p>The Linux kernel’s power capping framework provides:</p>
+<ul>
+  <li><strong>RAPL (Running Average Power Limit)</strong>: Intel’s technology for monitoring and controlling power consumption</li>
+  <li><strong>Power Zones</strong>: Separate control for CPU, DRAM, GPU, and package power domains</li>
+  <li><strong>Thermal Controls</strong>: Mechanisms to prevent overheating through power limiting</li>
+  <li><strong>Energy Accounting</strong>: Precise measurement of energy consumption by different components</li>
+</ul>
+
+<p>These mechanisms are exposed through kernel interfaces and the sysfs filesystem under <code class="language-plaintext highlighter-rouge">/sys/class/powercap/</code>.</p>
+
+<h3 id="exploitation-technique">Exploitation Technique</h3>
+
+<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement power management. By intercepting these calls, an attacker can:</p>
+
+<ol>
+  <li><strong>Hook power limit functions</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">rapl_write_power_limit()</code> or <code class="language-plaintext highlighter-rouge">powercap_register_zone()</code></li>
+  <li><strong>Modify power constraints</strong>: Change maximum and minimum power limits for components</li>
+  <li><strong>Bypass thermal throttling</strong>: Prevent the system from throttling under high temperatures</li>
+  <li><strong>Create power side channels</strong>: Manipulate power states to leak information</li>
+  <li><strong>Cause performance degradation</strong>: Artificially limit power to critical components</li>
+</ol>
+
+<h3 id="code-snippet">Code Snippet</h3>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to manipulate power limits</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/rapl_write_power_limit"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_power_limit</span><span class="p">,</span> <span class="k">struct</span> <span class="n">powercap_zone</span> <span class="o">*</span><span class="n">zone</span><span class="p">,</span>
+               <span class="n">u64</span> <span class="n">power_limit</span><span class="p">,</span> <span class="kt">int</span> <span class="n">constraint_index</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get zone information</span>
+    <span class="kt">char</span> <span class="n">name</span><span class="p">[</span><span class="n">ZONE_NAME_LEN</span><span class="p">];</span>
+    <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="n">zone</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">);</span>
+    
+    <span class="c1">// Check if this is a target zone (e.g., CPU package)</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_strncmp</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="s">"package"</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="s">"package"</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// For CPU package power, manipulate the limit</span>
+        <span class="c1">// This could be to increase it beyond safe levels</span>
+        <span class="c1">// or decrease it to cause throttling</span>
+        <span class="n">u64</span> <span class="n">modified_limit</span><span class="p">;</span>
+        
+        <span class="k">if</span> <span class="p">(</span><span class="n">is_attack_mode</span><span class="p">(</span><span class="n">ATTACK_THERMAL_STRESS</span><span class="p">))</span> <span class="p">{</span>
+            <span class="c1">// Remove power limits to cause thermal stress</span>
+            <span class="n">modified_limit</span> <span class="o">=</span> <span class="mh">0xFFFFFFFFFFFFFFFF</span><span class="p">;</span> <span class="c1">// Effectively unlimited</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">is_attack_mode</span><span class="p">(</span><span class="n">ATTACK_THROTTLE</span><span class="p">))</span> <span class="p">{</span>
+            <span class="c1">// Set very low power limit to cause throttling</span>
+            <span class="n">modified_limit</span> <span class="o">=</span> <span class="n">power_limit</span> <span class="o">/</span> <span class="mi">4</span><span class="p">;</span>
+        <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">is_attack_mode</span><span class="p">(</span><span class="n">ATTACK_SIDE_CHANNEL</span><span class="p">))</span> <span class="p">{</span>
+            <span class="c1">// Manipulate power limit based on sensitive data</span>
+            <span class="n">modified_limit</span> <span class="o">=</span> <span class="n">create_side_channel_limit</span><span class="p">(</span><span class="n">power_limit</span><span class="p">);</span>
+        <span class="p">}</span>
+        
+        <span class="c1">// Override the power limit value</span>
+        <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="o">&amp;</span><span class="n">power_limit</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">modified_limit</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">modified_limit</span><span class="p">));</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook energy consumption reading for side channels</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/rapl_read_energy"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_energy_read</span><span class="p">,</span> <span class="k">struct</span> <span class="n">powercap_zone</span> <span class="o">*</span><span class="n">zone</span><span class="p">,</span> <span class="n">u64</span> <span class="o">*</span><span class="n">energy</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Check if this is a process we want to monitor</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Store the energy reading for side channel analysis</span>
+        <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">energy_readings</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="n">energy</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="detection-methods">Detection Methods</h3>
+
+<p>Defenders should monitor for:</p>
+<ul>
+  <li>Unexpected eBPF programs attached to power management functions</li>
+  <li>Discrepancies between configured power limits and actual power consumption</li>
+  <li>Unusual thermal patterns or unexpected throttling behavior</li>
+  <li>Unexpected changes to power management configuration</li>
+  <li>System instability or performance issues correlated with power management changes</li>
+</ul>
+
+<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining system integrity and security, especially in environments where power management is important for reliability or where side-channel attacks are a concern.</p>
+
+<h3 id="real-world-impact">Real-world Impact</h3>
+
+<p>In practical environments, this technique could allow an attacker to:</p>
+<ul>
+  <li><strong>Hardware damage</strong>: Override thermal protections leading to physical damage</li>
+  <li><strong>Denial of service</strong>: Cause system throttling or instability through power manipulation</li>
+  <li><strong>Data exfiltration</strong>: Create power-based side channels to leak sensitive information</li>
+  <li><strong>Energy consumption attacks</strong>: Increase power costs in data centers</li>
+  <li><strong>Reliability degradation</strong>: Cause intermittent failures through thermal stress</li>
+</ul>
+
+<p>The ability to manipulate power management creates particularly concerning scenarios for data centers, cloud environments, and critical infrastructure where system reliability and energy efficiency are essential.</p>
 
                     </div>
                 </article>

@@ -28,8 +28,8 @@
 <meta property="og:title" content="EBPF Token Bypass" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
-<meta name="description" content="Wut" />
-<meta property="og:description" content="Wut" />
+<meta name="description" content="eBPF Token Bypass: Subverting Authentication and Authorization Mechanisms" />
+<meta property="og:description" content="eBPF Token Bypass: Subverting Authentication and Authorization Mechanisms" />
 <link rel="canonical" href="https://mbhatt1.github.io/dBPF/ebpf-token-bypass.html" />
 <meta property="og:url" content="https://mbhatt1.github.io/dBPF/ebpf-token-bypass.html" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
@@ -38,7 +38,7 @@
 <meta name="twitter:card" content="summary" />
 <meta property="twitter:title" content="EBPF Token Bypass" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-05-09T00:00:00+00:00","datePublished":"2025-05-09T00:00:00+00:00","description":"Wut","headline":"EBPF Token Bypass","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/ebpf-token-bypass.html"},"url":"https://mbhatt1.github.io/dBPF/ebpf-token-bypass.html"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-05-09T00:00:00+00:00","datePublished":"2025-05-09T00:00:00+00:00","description":"eBPF Token Bypass: Subverting Authentication and Authorization Mechanisms","headline":"EBPF Token Bypass","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/ebpf-token-bypass.html"},"url":"https://mbhatt1.github.io/dBPF/ebpf-token-bypass.html"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -463,29 +463,234 @@
                     </header>
 
                     <div class="post-content">
-                        <p><strong>Wut</strong></p>
+                        <h1 id="ebpf-token-bypass-subverting-authentication-and-authorization-mechanisms">eBPF Token Bypass: Subverting Authentication and Authorization Mechanisms</h1>
 
-<p>A compact exploration of how eBPF can twist the kernel feature “EBPF Token Bypass” into an attack primitive—maintaining verifier legality while undermining isolation.</p>
+<p><strong>Wut</strong></p>
+
+<p>A technique using eBPF to intercept and manipulate security tokens in the Linux kernel, allowing attackers to bypass authentication and authorization mechanisms. This attack targets kernel functions that handle security tokens, session cookies, and authentication credentials, enabling privilege escalation and unauthorized access while evading detection.</p>
+
+<pre><code class="language-mermaid">graph TD
+    A[User Process] --&gt;|1. Auth Request| B[Kernel Auth Functions]
+    C[eBPF Program] --&gt;|2. Hook &amp; Intercept| B
+    B --&gt;|3. Token Validation| D[Security Decision]
+    C --&gt;|4. Modify Token| D
+    D --&gt;|5. Unauthorized Access| E[Protected Resource]
+    F[Audit System] --&gt;|6. False Record| G[Clean Logs]
+</code></pre>
 
 <p><strong>Why</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation.</p>
+<p>Because eBPF + misconfiguration =&gt; broken isolation. Security tokens are fundamental to authentication and authorization in modern systems. By using eBPF to intercept and modify these tokens during kernel processing, attackers can bypass security checks while maintaining the appearance of legitimate access. This undermines the entire security model while being extremely difficult to detect through conventional monitoring.</p>
 
 <p><strong>POC</strong></p>
 
 <p><em>Coming soon.</em></p>
 
+<p>The proof of concept will demonstrate:</p>
+<ul>
+  <li>Hooking into kernel authentication and token validation functions</li>
+  <li>Identifying and modifying security tokens in memory</li>
+  <li>Bypassing access controls for protected resources</li>
+  <li>Maintaining the appearance of legitimate authentication</li>
+  <li>Creating deceptive audit trails that show normal access patterns</li>
+</ul>
+
 <p><strong>Attacker hat on</strong></p>
 
-<p>Load malicious BPF, trigger.</p>
+<ol>
+  <li>Identify a target system with eBPF capabilities and token-based security</li>
+  <li>Map the kernel functions responsible for token validation and access control</li>
+  <li>Develop eBPF programs that hook into these security functions</li>
+  <li>Load the malicious BPF programs with appropriate privileges</li>
+  <li>Intercept and modify security tokens during validation</li>
+  <li>Gain unauthorized access to protected resources</li>
+  <li>Ensure audit logs show only legitimate access patterns</li>
+</ol>
 
 <p><strong>Defender hat on</strong></p>
 
-<p>Remove CAP_BPF.</p>
+<ol>
+  <li>Remove CAP_BPF from untrusted processes and containers</li>
+  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
+  <li>Monitor for unexpected eBPF programs attached to security functions</li>
+  <li>Use multiple, independent security validation mechanisms</li>
+  <li>Implement integrity verification for security tokens</li>
+  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
+</ol>
 
 <p><strong>Conclusion</strong></p>
 
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>.</p>
+<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to intercept and modify security tokens through eBPF creates a particularly dangerous scenario where unauthorized access appears legitimate to monitoring systems. This technique highlights why eBPF capabilities should be treated as highly privileged operations that require strict access controls, especially in environments where token-based security is critical.</p>
+
+<h2 id="technical-details">Technical Details</h2>
+
+<h3 id="token-based-security-architecture">Token-based Security Architecture</h3>
+
+<p>Modern Linux systems use various token-based security mechanisms:</p>
+<ul>
+  <li><strong>Authentication tokens</strong>: Represent user identity and session state</li>
+  <li><strong>Capability tokens</strong>: Control access to privileged operations</li>
+  <li><strong>Security cookies</strong>: Prevent various types of attacks</li>
+  <li><strong>LSM tokens</strong>: Used by security modules for access control decisions</li>
+</ul>
+
+<p>These tokens are processed by the kernel during security-sensitive operations to make access control decisions.</p>
+
+<h3 id="exploitation-technique">Exploitation Technique</h3>
+
+<p>The exploit leverages eBPF’s ability to attach to kernel functions that handle security tokens. By intercepting these calls, an attacker can:</p>
+
+<ol>
+  <li><strong>Hook token validation</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">security_file_permission()</code>, <code class="language-plaintext highlighter-rouge">cap_capable()</code>, or authentication handlers</li>
+  <li><strong>Identify security tokens</strong>: Locate token structures in memory</li>
+  <li><strong>Modify token contents</strong>: Change permissions, identities, or validation results</li>
+  <li><strong>Bypass security checks</strong>: Make unauthorized operations appear authorized</li>
+  <li><strong>Maintain audit integrity</strong>: Ensure logs show only legitimate access patterns</li>
+</ol>
+
+<h3 id="code-snippet">Code Snippet</h3>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to bypass token validation</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/security_file_permission"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_file_perm</span><span class="p">,</span> <span class="k">struct</span> <span class="n">cred</span> <span class="o">*</span><span class="n">cred</span><span class="p">,</span> <span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span>
+               <span class="n">u32</span> <span class="n">mask</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Check if this is our target process</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// For our target process, bypass the permission check</span>
+        <span class="c1">// by returning 0 (access granted)</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="c1">// Let the original function run for other processes</span>
+    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook capability checks</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/cap_capable"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_cap_check</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">cred</span> <span class="o">*</span><span class="n">cred</span><span class="p">,</span> <span class="k">struct</span> <span class="n">user_namespace</span> <span class="o">*</span><span class="n">ns</span><span class="p">,</span>
+               <span class="kt">int</span> <span class="n">cap</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">opts</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Check if this is our target process</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// For specific capabilities we want to grant</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">cap</span> <span class="o">==</span> <span class="n">CAP_SYS_ADMIN</span> <span class="o">||</span> <span class="n">cap</span> <span class="o">==</span> <span class="n">CAP_SYS_PTRACE</span><span class="p">)</span> <span class="p">{</span>
+            <span class="c1">// Grant the capability by returning 0</span>
+            <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    
+    <span class="c1">// Let the original function run for other cases</span>
+    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook session token validation</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/session_create"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_session</span><span class="p">,</span> <span class="k">struct</span> <span class="n">session_struct</span> <span class="o">*</span><span class="n">session</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Check if this is our target process</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Modify the session to have elevated privileges</span>
+        <span class="c1">// This is highly dependent on the specific session structure</span>
+        <span class="n">u32</span> <span class="n">elevated_flags</span> <span class="o">=</span> <span class="n">SESSION_PRIVILEGED</span> <span class="o">|</span> <span class="n">SESSION_AUTHENTICATED</span><span class="p">;</span>
+        <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="o">&amp;</span><span class="n">session</span><span class="o">-&gt;</span><span class="n">flags</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">elevated_flags</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">elevated_flags</span><span class="p">));</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="detection-methods">Detection Methods</h3>
+
+<p>Defenders should monitor for:</p>
+<ul>
+  <li>Unexpected eBPF programs attached to security-related functions</li>
+  <li>Discrepancies between expected and actual access patterns</li>
+  <li>Unusual patterns of successful access that should be denied</li>
+  <li>Inconsistencies between different security monitoring systems</li>
+  <li>Processes that appear to have permissions they shouldn’t have</li>
+</ul>
+
+<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining the integrity of security mechanisms, especially in environments where token-based authentication and authorization are key security controls.</p>
+
+<h3 id="real-world-impact">Real-world Impact</h3>
+
+<p>In practical environments, this technique could allow an attacker to:</p>
+<ul>
+  <li><strong>Privilege escalation</strong>: Gain unauthorized administrative access</li>
+  <li><strong>Data exfiltration</strong>: Access sensitive data protected by access controls</li>
+  <li><strong>Lateral movement</strong>: Move between systems using stolen or forged tokens</li>
+  <li><strong>Persistent access</strong>: Maintain access despite credential rotations</li>
+  <li><strong>Audit evasion</strong>: Perform malicious activities without detection</li>
+</ul>
+
+<p>The ability to bypass token-based security creates a particularly concerning scenario for enterprise environments, cloud platforms, and any system relying on token-based authentication and authorization for security boundaries.</p>
 
                     </div>
                 </article>
