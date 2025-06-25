@@ -156,243 +156,6 @@
                     
                     
                 
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
             </div>
         </nav>
 
@@ -415,7 +178,8 @@
 
 <p>A technique that uses eBPF to manipulate interrupt request (IRQ) affinity settings, allowing attackers to create performance degradation, resource starvation, and side-channel attacks by controlling which CPU cores handle specific hardware interrupts. This undermines system stability and isolation guarantees.</p>
 
-<pre><code class="language-mermaid">graph TD
+<pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
+graph TD
     A[Hardware Interrupt] --&gt;|1. Generated| B[Interrupt Controller]
     B --&gt;|2. Delivery| C[CPU Core Selection]
     D[eBPF Program] --&gt;|3. Hook &amp; Manipulate| C
@@ -423,52 +187,27 @@
     F[Normal Workload] --&gt;|5. Performance Impact| G[Resource Starvation]
     H[Side-Channel] --&gt;|6. Timing Analysis| I[Information Leakage]
     J[System Monitor] --&gt;|7. Degraded Performance| K[Unexplained Issues]
+    
+    style A fill:#4a235a,stroke:#c39bd3,stroke-width:2px
+    style B fill:#1b4f72,stroke:#7fb3d5,stroke-width:2px
+    style C fill:#7d3c98,stroke:#d2b4de,stroke-width:2px
+    style D fill:#0e6251,stroke:#a3e4d7,stroke-width:2px
+    style E fill:#7e5109,stroke:#f5cba7,stroke-width:2px
+    style F fill:#186a3b,stroke:#a9dfbf,stroke-width:2px
+    style G fill:#a93226,stroke:#f5b7b1,stroke-width:2px
+    style H fill:#cb4335,stroke:#f5b7b1,stroke-width:2px
+    style I fill:#922b21,stroke:#f5b7b1,stroke-width:2px
+    style J fill:#1a5276,stroke:#85c1e9,stroke-width:2px
+    style K fill:#21618c,stroke:#85c1e9,stroke-width:2px
+    
+    click B "https://www.kernel.org/doc/html/latest/core-api/irq/index.html" "IRQ Documentation"
+    click C "https://www.kernel.org/doc/html/latest/core-api/irq/irq-affinity.html" "IRQ Affinity Documentation"
+    click D "https://ebpf.io/what-is-ebpf/" "eBPF Documentation"
 </code></pre>
 
 <p><strong>Why</strong></p>
 
 <p>Because eBPF + misconfiguration =&gt; broken isolation. IRQ affinity is a critical performance tuning mechanism that determines which CPU cores handle specific hardware interrupts. By manipulating these settings through eBPF, attackers can create targeted performance degradation, enable side-channel attacks, or cause system instability while evading detection by traditional monitoring tools.</p>
-
-<p><strong>POC</strong></p>
-
-<p><em>Coming soon.</em></p>
-
-<p>The proof of concept will demonstrate:</p>
-<ul>
-  <li>Hooking into IRQ handling and affinity management functions</li>
-  <li>Dynamically manipulating which CPU cores handle specific interrupts</li>
-  <li>Creating artificial CPU hotspots for denial of service</li>
-  <li>Establishing side-channel timing attacks through IRQ manipulation</li>
-  <li>Bypassing performance monitoring and isolation guarantees</li>
-</ul>
-
-<p><strong>Attacker hat on</strong></p>
-
-<ol>
-  <li>Identify a target system with eBPF capabilities and performance-sensitive workloads</li>
-  <li>Map the kernel functions responsible for IRQ handling and affinity management</li>
-  <li>Develop an eBPF program that hooks into these functions</li>
-  <li>Load the malicious BPF program with appropriate privileges</li>
-  <li>Manipulate IRQ affinity settings to create CPU hotspots</li>
-  <li>Target specific hardware interrupts (network, disk, etc.) for maximum impact</li>
-  <li>Implement timing side-channels to extract information from isolated workloads</li>
-  <li>Maintain stealth by making the performance issues appear non-malicious</li>
-</ol>
-
-<p><strong>Defender hat on</strong></p>
-
-<ol>
-  <li>Remove CAP_BPF from untrusted processes and containers</li>
-  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
-  <li>Monitor for unexpected changes to IRQ affinity settings</li>
-  <li>Implement performance isolation through dedicated cores for critical workloads</li>
-  <li>Use hardware-level performance counters to detect anomalies</li>
-  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
-</ol>
-
-<p><strong>Conclusion</strong></p>
-
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to manipulate IRQ affinity settings through eBPF creates a powerful primitive for performance degradation and side-channel attacks. This technique highlights why eBPF capabilities should be treated as highly privileged operations that require strict access controls, especially in environments where performance isolation is critical.</p>
 
 <h2 id="technical-details">Technical Details</h2>
 
@@ -485,6 +224,124 @@
 
 <p>In multi-core systems, distributing interrupts across cores is critical for performance and load balancing.</p>
 
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+</pre></td><td class="rouge-code"><pre>┌─────────────────────────────────────────────────────────────┐
+│                      Hardware                               │
+│                                                             │
+│  ┌───────────────┐      ┌───────────────┐                   │
+│  │ Network Card  │      │ Disk          │                   │
+│  └───────┬───────┘      └───────┬───────┘                   │
+│          │                      │                           │
+└──────────┼──────────────────────┼───────────────────────────┘
+           │                      │
+┌──────────▼──────────────────────▼───────────────────────────┐
+│                      Interrupt Controller                   │
+│                                                             │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │                 IRQ Routing Logic                      │  │
+│  └───────┬───────────────────────┬───────────────────────┘  │
+│          │                       │                          │
+└──────────┼───────────────────────┼──────────────────────────┘
+           │                       │
+┌──────────▼───────┐     ┌─────────▼────────┐                  
+│  CPU Core 0      │     │  CPU Core 1      │                  
+│                  │     │                  │                  
+│  ┌────────────┐  │     │  ┌────────────┐  │                  
+│  │ IRQ Handler│  │     │  │ IRQ Handler│  │                  
+│  └────────────┘  │     │  └────────────┘  │                  
+│                  │     │                  │                  
+└──────────────────┘     └──────────────────┘                  
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>When eBPF is used to manipulate IRQ handling, the architecture is subverted:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+</pre></td><td class="rouge-code"><pre>┌─────────────────────────────────────────────────────────────┐
+│                      Hardware                               │
+│                                                             │
+│  ┌───────────────┐      ┌───────────────┐                   │
+│  │ Network Card  │      │ Disk          │                   │
+│  └───────┬───────┘      └───────┬───────┘                   │
+│          │                      │                           │
+└──────────┼──────────────────────┼───────────────────────────┘
+           │                      │
+┌──────────▼──────────────────────▼───────────────────────────┐
+│                      Interrupt Controller                   │
+│                                                             │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │                 IRQ Routing Logic                      │  │
+│  └───────┬───────────────────────┬───────────────────────┘  │
+│          │                       │                          │
+│  ┌───────▼───────┐               │                          │
+│  │ eBPF Program  │───────────────┘                          │
+│  └───────────────┘                                          │
+│                                                             │
+└──────────┬───────────────────────┬──────────────────────────┘
+           │                       │
+┌──────────▼───────┐     ┌─────────▼────────┐                  
+│  CPU Core 0      │     │  CPU Core 1      │                  
+│  (Overloaded)    │     │  (Underutilized) │                  
+│  ┌────────────┐  │     │  ┌────────────┐  │                  
+│  │ IRQ Handler│  │     │  │ IRQ Handler│  │                  
+│  └────────────┘  │     │  └────────────┘  │                  
+│                  │     │                  │                  
+└──────────────────┘     └──────────────────┘                  
+</pre></td></tr></tbody></table></code></pre></div></div>
+
 <h3 id="exploitation-technique">Exploitation Technique</h3>
 
 <p>The exploit leverages eBPF’s ability to attach to kernel functions that implement IRQ handling and affinity management. By intercepting these calls, an attacker can:</p>
@@ -497,7 +354,7 @@
   <li><strong>Maintain stealth</strong>: Make performance issues appear to be non-malicious system behavior</li>
 </ol>
 
-<h3 id="code-snippet">Code Snippet</h3>
+<h3 id="comprehensive-poc">Comprehensive POC</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -580,7 +437,317 @@
 79
 80
 81
-</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to manipulate IRQ affinity</span>
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235
+236
+237
+238
+239
+240
+241
+242
+243
+244
+245
+246
+247
+248
+249
+250
+251
+252
+253
+254
+255
+256
+257
+258
+259
+260
+261
+262
+263
+264
+265
+266
+267
+268
+</pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
+<span class="c1">// @copyable: true</span>
+<span class="c1">// IRQ Affinity Chaos - eBPF exploitation proof of concept</span>
+<span class="c1">// This demonstrates manipulating interrupt handling for attacks</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;linux/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/bpf_helpers.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/version.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/interrupt.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/irq.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/cpumask.h&gt;</span><span class="cp">
+</span>
+<span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
+
+<span class="c1">// Configuration</span>
+<span class="cp">#define MAX_IRQS 256
+#define MAX_CPUS 64
+#define MAX_COMM_LEN 16
+</span>
+<span class="c1">// Structure to track IRQ events</span>
+<span class="k">struct</span> <span class="n">irq_event</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">irq</span><span class="p">;</span>                <span class="c1">// IRQ number</span>
+    <span class="n">u32</span> <span class="n">cpu</span><span class="p">;</span>                <span class="c1">// CPU that handled the IRQ</span>
+    <span class="n">u64</span> <span class="n">timestamp</span><span class="p">;</span>          <span class="c1">// Event timestamp</span>
+    <span class="n">u64</span> <span class="n">duration</span><span class="p">;</span>           <span class="c1">// Processing time</span>
+    <span class="n">u8</span> <span class="n">comm</span><span class="p">[</span><span class="n">MAX_COMM_LEN</span><span class="p">];</span>  <span class="c1">// Command name of current process</span>
+<span class="p">};</span>
+
+<span class="c1">// Structure to track IRQ timing for side-channel attacks</span>
+<span class="k">struct</span> <span class="n">timing_data</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">irq</span><span class="p">;</span>                <span class="c1">// IRQ number</span>
+    <span class="n">u64</span> <span class="n">duration</span><span class="p">;</span>           <span class="c1">// Processing time</span>
+    <span class="n">u64</span> <span class="n">timestamp</span><span class="p">;</span>          <span class="c1">// When the measurement was taken</span>
+<span class="p">};</span>
+
+<span class="c1">// Map to store IRQ affinity settings</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_HASH</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>  <span class="c1">// IRQ number as key</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u64</span><span class="p">));</span> <span class="c1">// CPU mask as value</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="n">MAX_IRQS</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">irq_affinity_map</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to track IRQ timing for side-channel attacks</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_HASH</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>  <span class="c1">// IRQ number as key</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u64</span><span class="p">));</span> <span class="c1">// Start time as value</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="n">MAX_IRQS</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">irq_timing_map</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to store timing data for side-channel analysis</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">timing_data</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">timing_data_map</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to track target IRQs we want to manipulate</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_HASH</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>  <span class="c1">// IRQ number as key</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u8</span><span class="p">));</span> <span class="c1">// Flag (1 = target)</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="n">MAX_IRQS</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">target_irqs</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to track attack mode</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">attack_mode</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Perf event output for logging</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_PERF_EVENT_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">events</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Helper function to check if an IRQ is one we want to manipulate</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">is_target_irq</span><span class="p">(</span><span class="n">u32</span> <span class="n">irq</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Check if this IRQ is in our tracking map</span>
+    <span class="n">u8</span> <span class="o">*</span><span class="n">target</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_irqs</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">irq</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">target</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">target</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+    
+    <span class="c1">// Network IRQs are often in a specific range</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">irq</span> <span class="o">&gt;=</span> <span class="mi">40</span> <span class="o">&amp;&amp;</span> <span class="n">irq</span> <span class="o">&lt;=</span> <span class="mi">60</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+    
+    <span class="c1">// Disk IRQs are often in a specific range</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">irq</span> <span class="o">&gt;=</span> <span class="mi">30</span> <span class="o">&amp;&amp;</span> <span class="n">irq</span> <span class="o">&lt;=</span> <span class="mi">35</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+    
+    <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Helper function to check if we should create a CPU hotspot</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">should_create_hotspot</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">u32</span> <span class="o">*</span><span class="n">mode</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">attack_mode</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">mode</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">mode</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+    
+    <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Helper function to check if we should implement a side-channel</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">should_implement_sidechannel</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">u32</span> <span class="o">*</span><span class="n">mode</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">attack_mode</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">mode</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">mode</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+    
+    <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook the IRQ affinity setting function</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/irq_set_affinity"</span><span class="p">)</span>
 <span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_irq_affinity</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">irq</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">cpumask</span> <span class="o">*</span><span class="n">mask</span><span class="p">)</span>
 <span class="p">{</span>
@@ -588,32 +755,48 @@
     <span class="n">u32</span> <span class="n">irq_num</span> <span class="o">=</span> <span class="n">irq</span><span class="p">;</span>
     
     <span class="c1">// Check if this is an IRQ we want to manipulate</span>
-    <span class="c1">// For example, network or disk interrupts</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">is_target_irq</span><span class="p">(</span><span class="n">irq_num</span><span class="p">))</span> <span class="p">{</span>
-        <span class="c1">// Create a modified CPU mask that forces the interrupt to a specific core</span>
-        <span class="c1">// This is simplified; real implementation would be more complex</span>
-        <span class="k">struct</span> <span class="n">cpumask</span> <span class="n">new_mask</span><span class="p">;</span>
+        <span class="c1">// Log the event</span>
+        <span class="k">struct</span> <span class="n">irq_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">irq</span> <span class="o">=</span> <span class="n">irq_num</span><span class="p">;</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">cpu</span> <span class="o">=</span> <span class="n">bpf_get_smp_processor_id</span><span class="p">();</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+        <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
         
-        <span class="c1">// For a DoS attack, we might force all interrupts to core 0</span>
-        <span class="c1">// For a side-channel, we might alternate between cores based on timing</span>
+        <span class="c1">// Send event to user space</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+        
+        <span class="c1">// Implement different attack strategies</span>
         <span class="k">if</span> <span class="p">(</span><span class="n">should_create_hotspot</span><span class="p">())</span> <span class="p">{</span>
-            <span class="c1">// Set mask to only use CPU 0</span>
-            <span class="n">cpumask_clear</span><span class="p">(</span><span class="o">&amp;</span><span class="n">new_mask</span><span class="p">);</span>
-            <span class="n">cpumask_set_cpu</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">new_mask</span><span class="p">);</span>
+            <span class="c1">// For a DoS attack, we force all interrupts to core 0</span>
+            <span class="c1">// This is a simplified approach - real implementation would be more sophisticated</span>
+            
+            <span class="c1">// Create a CPU mask with only CPU 0 set</span>
+            <span class="n">u64</span> <span class="n">new_mask</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="c1">// Bit 0 set, all others clear</span>
+            
+            <span class="c1">// Store the modified mask</span>
+            <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">irq_affinity_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">irq_num</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">new_mask</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+            
+            <span class="c1">// In a real exploit, we would modify the mask parameter</span>
+            <span class="c1">// This is simplified for demonstration</span>
         <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">should_implement_sidechannel</span><span class="p">())</span> <span class="p">{</span>
-            <span class="c1">// Set mask based on timing or other conditions</span>
-            <span class="c1">// This would be used for side-channel attacks</span>
+            <span class="c1">// For a side-channel attack, we alternate between cores</span>
+            <span class="c1">// based on timing or other conditions</span>
+            
+            <span class="c1">// Get current time</span>
             <span class="n">u64</span> <span class="n">now</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+            
+            <span class="c1">// Create a CPU mask based on timing</span>
+            <span class="n">u64</span> <span class="n">new_mask</span><span class="p">;</span>
             <span class="k">if</span> <span class="p">(</span><span class="n">now</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
-                <span class="n">cpumask_set_cpu</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">new_mask</span><span class="p">);</span>
+                <span class="n">new_mask</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span> <span class="c1">// Bit 1 set (CPU 1)</span>
             <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
-                <span class="n">cpumask_set_cpu</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">new_mask</span><span class="p">);</span>
+                <span class="n">new_mask</span> <span class="o">=</span> <span class="mi">4</span><span class="p">;</span> <span class="c1">// Bit 2 set (CPU 2)</span>
             <span class="p">}</span>
+            
+            <span class="c1">// Store the modified mask</span>
+            <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">irq_affinity_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">irq_num</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">new_mask</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
         <span class="p">}</span>
-        
-        <span class="c1">// Modify the mask parameter</span>
-        <span class="c1">// This requires careful implementation to pass verifier checks</span>
-        <span class="n">bpf_probe_write_user</span><span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">mask</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">new_mask</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">new_mask</span><span class="p">));</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
@@ -629,6 +812,16 @@
     <span class="c1">// Store the start time for this IRQ</span>
     <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="n">irq</span><span class="p">;</span>
     <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">irq_timing_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">start_time</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+    
+    <span class="c1">// Log the event</span>
+    <span class="k">struct</span> <span class="n">irq_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">irq</span> <span class="o">=</span> <span class="n">irq</span><span class="p">;</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">cpu</span> <span class="o">=</span> <span class="n">bpf_get_smp_processor_id</span><span class="p">();</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">start_time</span><span class="p">;</span>
+    <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+    
+    <span class="c1">// Send event to user space</span>
+    <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
@@ -650,31 +843,615 @@
         <span class="c1">// Calculate processing time</span>
         <span class="n">u64</span> <span class="n">duration</span> <span class="o">=</span> <span class="n">end_time</span> <span class="o">-</span> <span class="o">*</span><span class="n">start_time</span><span class="p">;</span>
         
-        <span class="c1">// Store the timing information for side-channel analysis</span>
-        <span class="k">struct</span> <span class="n">timing_data</span> <span class="n">tdata</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">};</span>
-        <span class="n">tdata</span><span class="p">.</span><span class="n">irq</span> <span class="o">=</span> <span class="n">irq</span><span class="p">;</span>
-        <span class="n">tdata</span><span class="p">.</span><span class="n">duration</span> <span class="o">=</span> <span class="n">duration</span><span class="p">;</span>
+        <span class="c1">// Log the event</span>
+        <span class="k">struct</span> <span class="n">irq_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">irq</span> <span class="o">=</span> <span class="n">irq</span><span class="p">;</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">cpu</span> <span class="o">=</span> <span class="n">bpf_get_smp_processor_id</span><span class="p">();</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">end_time</span><span class="p">;</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">duration</span> <span class="o">=</span> <span class="n">duration</span><span class="p">;</span>
+        <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
         
-        <span class="n">u32</span> <span class="n">idx</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">timing_data_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">idx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">tdata</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        <span class="c1">// Send event to user space</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+        
+        <span class="c1">// Store the timing information for side-channel analysis</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">should_implement_sidechannel</span><span class="p">()</span> <span class="o">&amp;&amp;</span> <span class="n">is_target_irq</span><span class="p">(</span><span class="n">irq</span><span class="p">))</span> <span class="p">{</span>
+            <span class="k">struct</span> <span class="n">timing_data</span> <span class="n">tdata</span> <span class="o">=</span> <span class="p">{};</span>
+            <span class="n">tdata</span><span class="p">.</span><span class="n">irq</span> <span class="o">=</span> <span class="n">irq</span><span class="p">;</span>
+            <span class="n">tdata</span><span class="p">.</span><span class="n">duration</span> <span class="o">=</span> <span class="n">duration</span><span class="p">;</span>
+            <span class="n">tdata</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">end_time</span><span class="p">;</span>
+            
+            <span class="c1">// Use a rolling index to store timing data</span>
+            <span class="n">u32</span> <span class="n">idx</span> <span class="o">=</span> <span class="n">end_time</span> <span class="o">%</span> <span class="mi">1024</span><span class="p">;</span>
+            <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">timing_data_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">idx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">tdata</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook the IRQ dispatch function to manipulate routing</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/irq_dispatch_level"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_irq_dispatch</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">irq</span><span class="p">,</span> <span class="k">struct</span> <span class="n">irq_desc</span> <span class="o">*</span><span class="n">desc</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Check if this is an IRQ we want to manipulate</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_irq</span><span class="p">(</span><span class="n">irq</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// In a real exploit, we would manipulate the IRQ dispatch</span>
+        <span class="c1">// This is simplified for demonstration</span>
+        
+        <span class="c1">// Log the event</span>
+        <span class="k">struct</span> <span class="n">irq_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">irq</span> <span class="o">=</span> <span class="n">irq</span><span class="p">;</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">cpu</span> <span class="o">=</span> <span class="n">bpf_get_smp_processor_id</span><span class="p">();</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+        <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+        
+        <span class="c1">// Send event to user space</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="detection-methods">Detection Methods</h3>
+<h3 id="user-space-control-program">User-Space Control Program</h3>
 
-<p>Defenders should monitor for:</p>
-<ul>
-  <li>Unexpected eBPF programs attached to IRQ-related functions</li>
-  <li>Unusual patterns of IRQ distribution across CPU cores</li>
-  <li>Unexplained performance degradation or CPU hotspots</li>
-  <li>Changes to IRQ affinity settings that don’t match system configuration</li>
-  <li>Timing anomalies in interrupt handling</li>
-</ul>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235
+236
+237
+238
+239
+240
+241
+</pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
+<span class="c1">// @copyable: true</span>
+<span class="c1">// User-space program to load and control the IRQ Affinity Chaos eBPF program</span>
 
-<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining performance isolation, especially in multi-tenant environments where workload interference could impact service level agreements or enable side-channel attacks.</p>
+<span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;unistd.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;signal.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;string.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;errno.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/resource.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/libbpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">"irq_chaos.skel.h"</span><span class="cp">
+</span>
+<span class="k">static</span> <span class="k">volatile</span> <span class="n">bool</span> <span class="n">exiting</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+
+<span class="c1">// Structure for IRQ events (must match the BPF version)</span>
+<span class="k">struct</span> <span class="n">irq_event</span> <span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">irq</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">cpu</span><span class="p">;</span>
+    <span class="kt">uint64_t</span> <span class="n">timestamp</span><span class="p">;</span>
+    <span class="kt">uint64_t</span> <span class="n">duration</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">comm</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>
+<span class="p">};</span>
+
+<span class="c1">// Structure for timing data (must match the BPF version)</span>
+<span class="k">struct</span> <span class="n">timing_data</span> <span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">irq</span><span class="p">;</span>
+    <span class="kt">uint64_t</span> <span class="n">duration</span><span class="p">;</span>
+    <span class="kt">uint64_t</span> <span class="n">timestamp</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="c1">// Handle events from the eBPF program</span>
+<span class="kt">void</span> <span class="nf">handle_event</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cpu</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">data_sz</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">irq_event</span> <span class="o">*</span><span class="n">e</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="n">timestamp</span><span class="p">[</span><span class="mi">32</span><span class="p">];</span>
+    <span class="kt">time_t</span> <span class="n">t</span> <span class="o">=</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">timestamp</span> <span class="o">/</span> <span class="mi">1000000000</span><span class="p">;</span>
+    <span class="n">strftime</span><span class="p">(</span><span class="n">timestamp</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">timestamp</span><span class="p">),</span> <span class="s">"%Y-%m-%d %H:%M:%S"</span><span class="p">,</span> <span class="n">localtime</span><span class="p">(</span><span class="o">&amp;</span><span class="n">t</span><span class="p">));</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">"[%s] IRQ %d on CPU %d"</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">irq</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">cpu</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">duration</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">" (duration: %lu ns)"</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">duration</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="sc">'\0'</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">" during process: %s"</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// Set the attack mode</span>
+<span class="kt">void</span> <span class="nf">set_attack_mode</span><span class="p">(</span><span class="kt">int</span> <span class="n">map_fd</span><span class="p">,</span> <span class="kt">int</span> <span class="n">mode</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">value</span> <span class="o">=</span> <span class="n">mode</span><span class="p">;</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="n">map_fd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to set attack mode: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">errno</span><span class="p">));</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"Attack mode set to: "</span><span class="p">);</span>
+        <span class="k">switch</span> <span class="p">(</span><span class="n">mode</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">case</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">printf</span><span class="p">(</span><span class="s">"Monitoring only</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="k">case</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">printf</span><span class="p">(</span><span class="s">"CPU hotspot (DoS)</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="k">case</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="n">printf</span><span class="p">(</span><span class="s">"Side-channel timing</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="nl">default:</span>
+                <span class="n">printf</span><span class="p">(</span><span class="s">"Unknown (%d)</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">mode</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// Add an IRQ to the target list</span>
+<span class="kt">void</span> <span class="nf">add_target_irq</span><span class="p">(</span><span class="kt">int</span> <span class="n">map_fd</span><span class="p">,</span> <span class="kt">int</span> <span class="n">irq</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">key</span> <span class="o">=</span> <span class="n">irq</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="n">map_fd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to add target IRQ: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">errno</span><span class="p">));</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"Added IRQ %d to target list</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">irq</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// Analyze timing data for side-channel information</span>
+<span class="kt">void</span> <span class="nf">analyze_timing_data</span><span class="p">(</span><span class="kt">int</span> <span class="n">map_fd</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">timing_data</span> <span class="n">tdata</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">key</span><span class="p">;</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">"</span><span class="se">\n</span><span class="s">=== TIMING ANALYSIS ===</span><span class="se">\n\n</span><span class="s">"</span><span class="p">);</span>
+    
+    <span class="c1">// Simple statistical analysis</span>
+    <span class="kt">uint64_t</span> <span class="n">min_duration</span> <span class="o">=</span> <span class="n">UINT64_MAX</span><span class="p">;</span>
+    <span class="kt">uint64_t</span> <span class="n">max_duration</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint64_t</span> <span class="n">total_duration</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    
+    <span class="k">for</span> <span class="p">(</span><span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">key</span> <span class="o">&lt;</span> <span class="mi">1024</span><span class="p">;</span> <span class="n">key</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="n">map_fd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">tdata</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">tdata</span><span class="p">.</span><span class="n">irq</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">tdata</span><span class="p">.</span><span class="n">duration</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+                <span class="k">continue</span><span class="p">;</span>
+                
+            <span class="n">printf</span><span class="p">(</span><span class="s">"IRQ %u: %lu ns</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">tdata</span><span class="p">.</span><span class="n">irq</span><span class="p">,</span> <span class="n">tdata</span><span class="p">.</span><span class="n">duration</span><span class="p">);</span>
+            
+            <span class="k">if</span> <span class="p">(</span><span class="n">tdata</span><span class="p">.</span><span class="n">duration</span> <span class="o">&lt;</span> <span class="n">min_duration</span><span class="p">)</span>
+                <span class="n">min_duration</span> <span class="o">=</span> <span class="n">tdata</span><span class="p">.</span><span class="n">duration</span><span class="p">;</span>
+                
+            <span class="k">if</span> <span class="p">(</span><span class="n">tdata</span><span class="p">.</span><span class="n">duration</span> <span class="o">&gt;</span> <span class="n">max_duration</span><span class="p">)</span>
+                <span class="n">max_duration</span> <span class="o">=</span> <span class="n">tdata</span><span class="p">.</span><span class="n">duration</span><span class="p">;</span>
+                
+            <span class="n">total_duration</span> <span class="o">+=</span> <span class="n">tdata</span><span class="p">.</span><span class="n">duration</span><span class="p">;</span>
+            <span class="n">count</span><span class="o">++</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">count</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"</span><span class="se">\n</span><span class="s">Statistics:</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  Min: %lu ns</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">min_duration</span><span class="p">);</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  Max: %lu ns</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">max_duration</span><span class="p">);</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  Avg: %lu ns</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">total_duration</span> <span class="o">/</span> <span class="n">count</span><span class="p">);</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  Samples: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">count</span><span class="p">);</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  Range: %lu ns</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">max_duration</span> <span class="o">-</span> <span class="n">min_duration</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">sig_handler</span><span class="p">(</span><span class="kt">int</span> <span class="n">sig</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">exiting</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">print_usage</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">prog</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Usage: %s [options]</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">prog</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Options:</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"  -m MODE   Set attack mode (0=monitor, 1=hotspot, 2=side-channel)</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"  -i IRQ    Add IRQ to target list</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"  -h        Show this help</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">irq_chaos_bpf</span> <span class="o">*</span><span class="n">skel</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">perf_buffer</span> <span class="o">*</span><span class="n">pb</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">err</span><span class="p">,</span> <span class="n">opt</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">attack_mode</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>  <span class="c1">// Default: monitoring only</span>
+    
+    <span class="c1">// Parse command line arguments</span>
+    <span class="k">while</span> <span class="p">((</span><span class="n">opt</span> <span class="o">=</span> <span class="n">getopt</span><span class="p">(</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">,</span> <span class="s">"m:i:h"</span><span class="p">))</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">switch</span> <span class="p">(</span><span class="n">opt</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">case</span> <span class="sc">'m'</span><span class="p">:</span>
+                <span class="n">attack_mode</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">optarg</span><span class="p">);</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="k">case</span> <span class="sc">'i'</span><span class="p">:</span>
+                <span class="c1">// We'll add IRQs after loading the program</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="k">case</span> <span class="sc">'h'</span><span class="p">:</span>
+                <span class="n">print_usage</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+                <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+            <span class="nl">default:</span>
+                <span class="n">print_usage</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+                <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Set up signal handler</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGTERM</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+
+    <span class="c1">// Increase resource limits</span>
+    <span class="k">struct</span> <span class="n">rlimit</span> <span class="n">rlim</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">.</span><span class="n">rlim_cur</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span><span class="p">,</span>
+        <span class="p">.</span><span class="n">rlim_max</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span>
+    <span class="p">};</span>
+    <span class="n">setrlimit</span><span class="p">(</span><span class="n">RLIMIT_MEMLOCK</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rlim</span><span class="p">);</span>
+
+    <span class="c1">// Load and verify BPF program</span>
+    <span class="n">skel</span> <span class="o">=</span> <span class="n">irq_chaos_bpf__open_and_load</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">skel</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to open and load BPF skeleton</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Attach BPF programs</span>
+    <span class="n">err</span> <span class="o">=</span> <span class="n">irq_chaos_bpf__attach</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to attach BPF skeleton: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Set up perf buffer for events</span>
+    <span class="n">pb</span> <span class="o">=</span> <span class="n">perf_buffer__new</span><span class="p">(</span><span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">events</span><span class="p">),</span> <span class="mi">64</span><span class="p">,</span> <span class="n">handle_event</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pb</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to create perf buffer</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Set attack mode</span>
+    <span class="n">set_attack_mode</span><span class="p">(</span><span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">attack_mode</span><span class="p">),</span> <span class="n">attack_mode</span><span class="p">);</span>
+    
+    <span class="c1">// Add target IRQs if specified</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">argc</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="sc">'-'</span> <span class="o">&amp;&amp;</span> <span class="n">argv</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="sc">'i'</span> <span class="o">&amp;&amp;</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&lt;</span> <span class="n">argc</span><span class="p">)</span> <span class="p">{</span>
+            <span class="kt">int</span> <span class="n">irq</span> <span class="o">=</span> <span class="n">atoi</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]);</span>
+            <span class="n">add_target_irq</span><span class="p">(</span><span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">target_irqs</span><span class="p">),</span> <span class="n">irq</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">"IRQ Affinity Chaos eBPF program loaded and running.</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Monitoring IRQ handling...</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Press Ctrl+C to exit and analyze timing data.</span><span class="se">\n\n</span><span class="s">"</span><span class="p">);</span>
+
+    <span class="c1">// Main loop</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">exiting</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="n">perf_buffer__poll</span><span class="p">(</span><span class="n">pb</span><span class="p">,</span> <span class="mi">100</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">err</span> <span class="o">!=</span> <span class="o">-</span><span class="n">EINTR</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Error polling perf buffer: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+            <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Analyze timing data if in side-channel mode</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">attack_mode</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">analyze_timing_data</span><span class="p">(</span><span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">timing_data_map</span><span class="p">));</span>
+    <span class="p">}</span>
+
+<span class="nl">cleanup:</span>
+    <span class="n">perf_buffer__free</span><span class="p">(</span><span class="n">pb</span><span class="p">);</span>
+    <span class="n">irq_chaos_bpf__destroy</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="o">-</span><span class="n">err</span> <span class="o">:</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="mitigation-strategies">Mitigation Strategies</h3>
+
+<ol>
+  <li><strong>Restrict eBPF Capabilities</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="c"># Remove CAP_BPF from container</span>
+docker run <span class="nt">--cap-drop</span><span class="o">=</span>bpf <span class="nt">--security-opt</span> no-new-privileges ...
+   
+<span class="c"># In Kubernetes</span>
+securityContext:
+  capabilities:
+    drop:
+      - BPF
+      - SYS_ADMIN
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Implement BPF LSM Policies</strong>:
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="c1">// Example BPF LSM policy to restrict BPF program loading</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"lsm/bpf"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_PROG</span><span class="p">(</span><span class="n">restrict_bpf</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cmd</span><span class="p">,</span> <span class="k">union</span> <span class="n">bpf_attr</span> <span class="o">*</span><span class="n">attr</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Only allow specific signing keys or programs from trusted paths</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_get_current_uid_gid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">EPERM</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Use CPU Isolation and Pinning</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="rouge-code"><pre><span class="c"># Reserve CPUs for critical workloads</span>
+systemd-run <span class="nt">--property</span><span class="o">=</span><span class="nv">CPUAffinity</span><span class="o">=</span>0,1 <span class="nt">--property</span><span class="o">=</span><span class="nv">CPUAccounting</span><span class="o">=</span><span class="nb">true </span>critical_service
+   
+<span class="c"># Pin IRQs to specific CPUs</span>
+<span class="nb">echo</span> <span class="s2">"2"</span> <span class="o">&gt;</span> /proc/irq/42/smp_affinity  <span class="c"># Pin IRQ 42 to CPU 1</span>
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Monitor IRQ Distribution and Performance</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="rouge-code"><pre><span class="c"># Monitor IRQ counts per CPU</span>
+watch <span class="nt">-n1</span> <span class="s1">'grep . /proc/interrupts'</span>
+   
+<span class="c"># Use performance monitoring tools</span>
+perf <span class="nb">stat</span> <span class="nt">-e</span> irq_vectors:local_timer_entry <span class="nt">-a</span> <span class="nb">sleep </span>10
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+</ol>
 
 <h3 id="real-world-impact">Real-world Impact</h3>
 
@@ -688,6 +1465,19 @@
 </ul>
 
 <p>The ability to manipulate IRQ handling at a low level creates particularly concerning scenarios in environments with strict performance requirements or where side-channel resistance is important, such as cloud computing platforms or financial systems.</p>
+
+<h3 id="detection-methods">Detection Methods</h3>
+
+<p>Defenders should monitor for:</p>
+<ul>
+  <li>Unexpected eBPF programs attached to IRQ-related functions</li>
+  <li>Unusual patterns of IRQ distribution across CPU cores</li>
+  <li>Unexplained performance degradation or CPU hotspots</li>
+  <li>Changes to IRQ affinity settings that don’t match system configuration</li>
+  <li>Timing anomalies in interrupt handling</li>
+</ul>
+
+<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining performance isolation, especially in multi-tenant environments where workload interference could impact service level agreements or enable side-channel attacks.</p>
 
                     </div>
                 </article>

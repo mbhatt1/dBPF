@@ -155,243 +155,6 @@
                     
                     
                 
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
             </div>
         </nav>
 
@@ -404,7 +167,7 @@
                     </header>
 
                     <div class="post-content">
-                        <h2 id="wip-ebpf-is-all-you-need">[WIP] eBPF is All You Need</h2>
+                        <h2 id="ebpf-is-all-you-need">eBPF is All You Need</h2>
 
 <blockquote>
   <p>“When they gave us eBPF, they handed us the keys to the kingdom. Now we’re redecorating.”</p>
@@ -412,52 +175,71 @@
 
 <p>Welcome to the dark side of kernel programming. This field manual documents techniques that transform eBPF—a “safe” kernel programming interface—into a powerful arsenal for breaking isolation, bypassing security controls, and maintaining persistent access to systems that were never meant to be compromised.</p>
 
-<p>Stage: I’m ideating on what’s possible right now, these may not work.</p>
+<p>Each technique in this collection demonstrates how a single misconfiguration can turn eBPF from a monitoring tool into a perfect attack primitive.</p>
 
-<p>Each technique in this collection demonstrates how a single misconfiguration can turn eBPF from a monitoring tool into a perfect attack primitive (very losely refered to as exploits - even if they are TTPs).</p>
-
-<p><strong>Choose your exploit:</strong></p>
+<h2 id="table-of-contents">Table of Contents</h2>
 
 <ul>
   <li>
-    <p><a href="/dBPF/the-mirror-controls.html">The Mirror Controls</a></p>
+    <p><a href="/dBPF/the-mirror-controls.html">The Mirror Controls</a> - January 31, 2025</p>
   </li>
   <li>
-    <p><a href="/dBPF/the-overlayfs-trojan-horse.html">The OverlayFS Trojan Horse</a></p>
+    <p><a href="/dBPF/the-overlayfs-trojan-horse.html">The OverlayFS Trojan Horse</a> - February 01, 2025</p>
   </li>
   <li>
-    <p><a href="/dBPF/the-fuse-audit-black-hole.html">The FUSE Audit Black-Hole</a></p>
+    <p><a href="/dBPF/the-fuse-audit-black-hole.html">The FUSE Audit Black-Hole</a> - February 02, 2025</p>
   </li>
   <li>
-    <p><a href="/dBPF/the-phantom-syscall.html">The Phantom Syscall</a></p>
+    <p><a href="/dBPF/the-phantom-syscall.html">The Phantom Syscall</a> - February 03, 2025</p>
   </li>
   <li>
-    <p><a href="/dBPF/the-ghost-nic.html">The Ghost NIC</a></p>
+    <p><a href="/dBPF/the-ghost-nic.html">The Ghost NIC</a> - February 04, 2025</p>
   </li>
   <li>
-    <p><a href="/dBPF/slipping-the-cgroup-leash.html">Slipping the Cgroup Leash</a></p>
+    <p><a href="/dBPF/slipping-the-cgroup-leash.html">Slipping the Cgroup Leash</a> - February 05, 2025</p>
   </li>
   <li>
-    <p><a href="/dBPF/silencing-selinux.html">Silencing SELinux</a></p>
+    <p><a href="/dBPF/silencing-selinux.html">Silencing SELinux</a> - February 06, 2025</p>
   </li>
   <li>
-    <p><a href="/dBPF/device-cgroup-houdini.html">Device‑cgroup Houdini</a></p>
+    <p><a href="/dBPF/device-cgroup-houdini.html">Device‑cgroup Houdini</a> - February 07, 2025</p>
   </li>
   <li>
-    <p><a href="/dBPF/keyring-heist.html">Keyring Heist</a></p>
+    <p><a href="/dBPF/keyring-heist.html">Keyring Heist</a> - February 08, 2025</p>
   </li>
   <li>
-    <p><a href="/dBPF/pid-namespace-doppelg-nger.html">PID Namespace Doppelgänger</a></p>
+    <p><a href="/dBPF/pid-namespace-doppelg-nger.html">PID Namespace Doppelgänger</a> - February 09, 2025</p>
   </li>
   <li>
-    <p><a href="/dBPF/inode-cloak.html">Inode Cloak</a></p>
+    <p><a href="/dBPF/inode-cloak.html">Inode Cloak</a> - February 10, 2025</p>
   </li>
   <li>
-    <p><a href="/dBPF/irq-affinity-chaos.html">IRQ Affinity Chaos</a></p>
+    <p><a href="/dBPF/irq-affinity-chaos.html">IRQ Affinity Chaos</a> - February 11, 2025</p>
+  </li>
+  <li>
+    <p><a href="/dBPF/ebpf-signed-driver-swap.html">eBPF Signed‑Driver Swap</a> - March 01, 2025</p>
+  </li>
+  <li>
+    <p><a href="/dBPF/powercap-override.html">Powercap Override</a> - March 10, 2025</p>
+  </li>
+  <li>
+    <p><a href="/dBPF/sched-fifo-impersonator.html">SCHED_FIFO Impersonator</a> - March 15, 2025</p>
+  </li>
+  <li>
+    <p><a href="/dBPF/netns-vlan-ghost.html">NetNS VLAN Ghost</a> - April 15, 2025</p>
+  </li>
+  <li>
+    <p><a href="/dBPF/seccomp-tid-hop.html">Seccomp TID Hop</a> - April 20, 2025</p>
+  </li>
+  <li>
+    <p><a href="/dBPF/acpi-wsmi-ping.html">ACPI WSMI Ping</a> - May 07, 2025</p>
+  </li>
+  <li>
+    <p><a href="/dBPF/ebpf-token-bypass.html">EBPF Token Bypass</a> - May 09, 2025</p>
   </li>
 </ul>
 
-<p><em>Remember: With great power comes great responsibility. These techniques are documented for defensive awareness. And yes they are minimal on purpose.</em></p>
+<p><em>Remember: With great power comes great responsibility. These techniques are documented for defensive awareness.</em></p>
 
                     </div>
                 </article>

