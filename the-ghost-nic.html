@@ -54,7 +54,7 @@
                     
                     
                     <a href="/dBPF/chapter-0-field-manual-preface.html" >
-                        Chapter 0: Field Manual Preface
+                        Preface
                     </a>
                     
                 
@@ -181,9 +181,17 @@
                     <div class="post-content">
                         <h1 id="the-ghost-nic-bypassing-container-network-isolation">The Ghost NIC: Bypassing Container Network Isolation</h1>
 
-<p><strong>Wut</strong></p>
+<p><strong>Chapter 5: Networking in the Shadows</strong></p>
 
-<p>Combining XDP and sock_ops to smuggle packets from an air‑gapped namespace straight onto the host NIC—bypassing CNI firewalls. This technique allows attackers to establish covert communication channels from containers that should be network isolated, effectively creating a “ghost” network interface that exists outside the container networking stack.</p>
+<p>You’ve learned to manipulate security controls, escape containers, evade monitoring, and create phantom syscalls. Now let’s talk about networking—because what good is all this power if you can’t communicate with the outside world?</p>
+
+<p>This is where our story expands beyond the local system. You’ve been operating in isolation, but real attacks need command and control, data exfiltration, lateral movement. You need networking that can’t be detected or blocked.</p>
+
+<p>Ever wanted a network interface that only you know exists? Welcome to the ghost NIC—a network interface that lives in the kernel but is completely invisible to userspace tools.</p>
+
+<p>We’re going to create a phantom network interface that can send and receive packets, manipulate traffic, and establish connections, but won’t show up in <code class="language-plaintext highlighter-rouge">ip link</code>, <code class="language-plaintext highlighter-rouge">ifconfig</code>, or any network monitoring tool. It’s like having a secret radio frequency that only you can tune into.</p>
+
+<p>This is the moment you realize that eBPF doesn’t just let you attack individual systems—it lets you create entirely new networking realities that exist parallel to what everyone else can see.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -208,9 +216,15 @@ graph TD
     click D "https://developers.redhat.com/blog/2018/02/22/container-network-interface-cni-overview" "CNI Overview"
 </code></pre>
 
-<p><strong>Why</strong></p>
+<p><strong>Why Network Security Just Got Harder</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation. Container Network Interface (CNI) plugins implement network policies and isolation between containers, but they operate at higher layers of the networking stack. By leveraging eBPF’s ability to attach to both socket operations (sock_ops) and network device packet processing (XDP), attackers can bypass these controls by intercepting packets before they reach the CNI enforcement points.</p>
+<p>Here’s what makes network security teams lose sleep: they can only protect what they can see. Every firewall rule, every network monitor, every intrusion detection system relies on being able to observe network interfaces and traffic.</p>
+
+<p>But what happens when network interfaces become invisible? What happens when traffic can flow through channels that don’t officially exist?</p>
+
+<p>That’s the ghost NIC advantage. While your security tools are watching eth0, wlan0, and all the other “official” interfaces, we’re operating through a completely parallel network stack. It’s like having a secret tunnel that bypasses all the security checkpoints.</p>
+
+<p>The really devious part is that this doesn’t break existing networking—everything continues to work normally. The ghost NIC just adds an invisible layer that only we can access. Your network monitoring dashboards will show normal traffic patterns while we’re exfiltrating data through our phantom interface.</p>
 <h2 id="technical-details">Technical Details</h2>
 
 <h3 id="container-networking-architecture">Container Networking Architecture</h3>

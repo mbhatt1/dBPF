@@ -54,7 +54,7 @@
                     
                     
                     <a href="/dBPF/chapter-0-field-manual-preface.html" >
-                        Chapter 0: Field Manual Preface
+                        Preface
                     </a>
                     
                 
@@ -181,9 +181,17 @@
                     <div class="post-content">
                         <h1 id="keyring-heist-stealing-secrets-from-the-linux-keyring">Keyring Heist: Stealing Secrets from the Linux Keyring</h1>
 
-<p><strong>Wut</strong></p>
+<p><strong>Chapter 9: The Crown Jewels</strong></p>
 
-<p>A compact exploration of how eBPF can twist the Linux kernel keyring subsystem into an attack primitive—maintaining verifier legality while undermining isolation. This technique allows attackers to extract sensitive cryptographic keys, passwords, and other secrets stored in the kernel keyring, even from isolated contexts.</p>
+<p>You’ve gained hardware access, but now you need something even more valuable: secrets. Credentials, keys, tokens—the digital crown jewels that unlock everything else in the environment.</p>
+
+<p>This is where our story becomes a heist movie. You’ve learned to bypass every security control, but what good is all that access if you can’t get the credentials you need to move laterally, escalate privileges, or access encrypted data?</p>
+
+<p>The Linux kernel keyring is like a high-security vault where all the good stuff is stored—SSH keys, Kerberos tickets, encryption certificates, API tokens. It’s supposed to be locked down tight, with access controls that would make Fort Knox jealous.</p>
+
+<p>But what if we could walk right into that vault and help ourselves to whatever we want? What if we could make the kernel hand over its most precious secrets without even realizing it’s been robbed?</p>
+
+<p>We’re going to pull off the ultimate heist—steal credentials directly from the kernel keyring while leaving no trace of the theft. This is where you learn that eBPF doesn’t just give you access to systems—it gives you access to the keys to every other system.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -207,24 +215,32 @@ graph TD
     click D "https://www.kernel.org/doc/html/latest/security/keys/core.html#key-access-permissions" "Key Access Permissions"
 </code></pre>
 
-<p><strong>Why</strong></p>
+<p><strong>Why Credential Storage Just Became Unsafe</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation. The Linux kernel keyring provides a secure way for processes to store and retrieve sensitive cryptographic material and secrets. These keys are often used for disk encryption, secure communications, and authentication. By compromising the keyring, attackers can extract these secrets, potentially leading to data decryption, authentication bypass, or other serious security breaches.</p>
+<p>Here’s what makes the kernel keyring so valuable: it’s where Linux stores the keys to the kingdom. SSH private keys, Kerberos tickets, TLS certificates, API tokens—all the credentials that let you move laterally through a network or escalate privileges.</p>
 
-<h2 id="technical-details">Technical Details</h2>
+<p>The keyring is supposed to be secure. Access controls, permission checks, audit logging—all designed to make sure only authorized processes can access stored credentials.</p>
 
-<h3 id="keyring-architecture">Keyring Architecture</h3>
+<p>But here’s the thing about “supposed to be secure”—it’s only as secure as the code that enforces it. And if you can influence that code…</p>
 
-<p>The Linux kernel keyring provides:</p>
+<p>That’s where eBPF comes in. We’re not going to attack the keyring directly. We’re not going to try to crack encryption or bypass authentication. We’re going to become the keyring—or at least, we’re going to become the part of the kernel that decides who gets access to what.</p>
+
+<p>The beautiful part is that this looks completely legitimate. The keyring access logs will show normal operations, the permission checks will appear to work correctly, but somehow our processes will always get access to whatever credentials we want.</p>
+
+<h2 id="how-we-rob-the-kernels-vault">How We Rob the Kernel’s Vault</h2>
+
+<h3 id="understanding-the-keyring-security-model">Understanding the Keyring Security Model</h3>
+
+<p>The Linux kernel keyring is basically a high-security vault for secrets:</p>
 <ul>
-  <li><strong>Secure storage</strong> for cryptographic keys, certificates, and other secrets</li>
-  <li><strong>Access control</strong> based on user IDs and permissions</li>
-  <li><strong>Different types of keyrings</strong> (user, session, process, thread)</li>
-  <li><strong>Integration with security modules</strong> like SELinux</li>
-  <li><strong>APIs for userspace applications</strong> to store and retrieve keys</li>
+  <li><strong>Secure storage</strong> for crypto keys, certificates, and other juicy secrets</li>
+  <li><strong>Access control</strong> that checks your user ID and permissions before letting you in</li>
+  <li><strong>Different vault types</strong> (user keyrings, session keyrings, process keyrings, thread keyrings)</li>
+  <li><strong>Security module integration</strong> so SELinux can add extra locks</li>
+  <li><strong>APIs</strong> that let applications safely store and retrieve their secrets</li>
 </ul>
 
-<p>Keys stored in the keyring are protected by kernel memory protections and access control checks, making them more secure than storing secrets in userspace memory.</p>
+<p>The idea is that keeping secrets in kernel space is safer than leaving them lying around in userspace where any process might stumble across them.</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -286,7 +302,7 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>When eBPF is used to manipulate the keyring access, the architecture is subverted:</p>
+<p>Here’s what happens when we slip our eBPF program into the keyring access flow:</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -362,17 +378,19 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="exploitation-technique">Exploitation Technique</h3>
+<h3 id="how-we-become-the-vault-manager">How We Become the Vault Manager</h3>
 
-<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement keyring operations. By intercepting these calls, an attacker can:</p>
+<p>Our strategy is to intercept the keyring operations and become the final authority on access:</p>
 
 <ol>
-  <li><strong>Hook key access functions</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">key_permission()</code> or <code class="language-plaintext highlighter-rouge">keyring_search()</code></li>
-  <li><strong>Bypass permission checks</strong>: Modify return values to allow access to restricted keys</li>
-  <li><strong>Extract key material</strong>: Capture sensitive data as it’s processed</li>
-  <li><strong>Monitor key usage</strong>: Track when and how keys are used</li>
-  <li><strong>Maintain stealth</strong>: Avoid triggering detection mechanisms</li>
+  <li><strong>Hook the Vault Guards</strong>: We attach to functions like <a href="https://elixir.bootlin.com/linux/latest/source/security/keys/permission.c"><code class="language-plaintext highlighter-rouge">key_permission()</code></a> that decide who gets access</li>
+  <li><strong>Override the Locks</strong>: We modify return values to turn “access denied” into “access granted”</li>
+  <li><strong>Steal the Goods</strong>: We capture sensitive key material as it flows through the kernel</li>
+  <li><strong>Watch the Traffic</strong>: We monitor when and how keys are being used</li>
+  <li><strong>Stay Invisible</strong>: We avoid triggering any alarms or audit logs</li>
 </ol>
+
+<p>The beautiful part is that we’re not breaking into the vault—we’re becoming the vault manager who has legitimate access to everything.</p>
 
 <h3 id="comprehensive-poc">Comprehensive POC</h3>
 
@@ -1383,31 +1401,41 @@ auditctl <span class="nt">-a</span> always,exit <span class="nt">-F</span> <span
   </li>
 </ol>
 
-<h3 id="real-world-impact">Real-world Impact</h3>
+<h2 id="why-encryption-just-became-optional">Why Encryption Just Became Optional</h2>
 
-<p>In practical environments, this technique could allow an attacker to:</p>
+<p>In the real world, this technique turns encrypted systems into open books:</p>
+
 <ul>
-  <li>Extract disk encryption keys</li>
-  <li>Steal authentication tokens and credentials</li>
-  <li>Access encrypted communications</li>
-  <li>Bypass secure boot mechanisms</li>
-  <li>Compromise encrypted containers or volumes</li>
+  <li><strong>Disk encryption bypass</strong> - Extract LUKS, BitLocker, or FileVault keys directly from memory</li>
+  <li><strong>Token theft</strong> - Steal authentication tokens and session credentials</li>
+  <li><strong>Communication decryption</strong> - Access TLS/SSL private keys for encrypted communications</li>
+  <li><strong>Secure boot subversion</strong> - Bypass boot integrity mechanisms</li>
+  <li><strong>Container compromise</strong> - Decrypt encrypted container volumes and secrets</li>
 </ul>
 
-<p>The ability to silently extract keys from the kernel keyring creates a particularly dangerous scenario where encrypted data can be decrypted, secure communications can be compromised, and authentication mechanisms can be bypassed.</p>
+<p>When you can silently extract keys from the kernel keyring, encryption becomes theater. The data looks protected, the compliance boxes are checked, but you’ve got the master keys to everything.</p>
 
-<h3 id="detection-methods">Detection Methods</h3>
+<h2 id="how-theyll-try-to-catch-us">How They’ll Try to Catch Us</h2>
 
-<p>Defenders should monitor for:</p>
+<p>Smart defenders will be watching for our cryptographic heists:</p>
+
 <ul>
-  <li>Unexpected eBPF programs attached to keyring-related functions</li>
-  <li>Unusual patterns of keyring access</li>
-  <li>Discrepancies between expected access controls and actual key usage</li>
-  <li>Processes accessing keys they shouldn’t have permission to use</li>
-  <li>Suspicious key material appearing in memory or being transmitted</li>
+  <li><strong>eBPF surveillance</strong> - Monitor for unexpected eBPF programs attached to keyring functions</li>
+  <li><strong>Access pattern analysis</strong> - Look for unusual keyring access patterns</li>
+  <li><strong>Permission auditing</strong> - Check for discrepancies between expected access controls and actual key usage</li>
+  <li><strong>Privilege violations</strong> - Detect processes accessing keys they shouldn’t have permission to use</li>
+  <li><strong>Key material monitoring</strong> - Watch for suspicious key material in memory or network traffic</li>
 </ul>
 
-<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining the security of sensitive cryptographic material, especially in environments where key compromise could lead to broader security failures.</p>
+<p>But here’s the catch—if we’ve got kernel-level access, we can probably hide from their monitoring too.</p>
+
+<h2 id="why-cryptography-just-got-dangerous">Why Cryptography Just Got Dangerous</h2>
+
+<p>This isn’t just about stealing individual keys—this is about breaking the fundamental assumption that cryptographic material is protected by the kernel. When the keyring becomes your personal vault, every encrypted system becomes vulnerable.</p>
+
+<p>The disk encryption shows as active. The secure communications show as encrypted. The authentication shows as protected. Meanwhile, you’ve got copies of all the keys, and every “secure” system is an open book.</p>
+
+<p>Welcome to the world where encryption is just obfuscation, where the kernel keyring becomes your personal treasure chest, and where eBPF is the master key to every lock.</p>
 
                     </div>
                 </article>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>Chapter 6: Silencing SELinux | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,21 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>Chapter 6: Silencing SELinux | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="The Diabolical eBPF Field Manual" />
+<meta property="og:title" content="Chapter 6: Silencing SELinux" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-6-silencing-selinux" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-6-silencing-selinux" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
-<meta property="og:type" content="website" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2025-02-06T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="The Diabolical eBPF Field Manual" />
+<meta property="twitter:title" content="Chapter 6: Silencing SELinux" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","author":{"@type":"Person","name":"Diabolical eBPF"},"description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"The Diabolical eBPF Field Manual","name":"Diabolical eBPF: Linux Red Team Field Manual","url":"https://mbhatt1.github.io/dBPF/"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-06T00:00:00+00:00","datePublished":"2025-02-06T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 6: Silencing SELinux","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-6-silencing-selinux"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-6-silencing-selinux"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -169,87 +170,117 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">The Diabolical eBPF Field Manual</h1>
+                        <h1 class="post-title">Chapter 6: Silencing SELinux</h1>
+                        
+                        <time class="post-date" datetime="2025-02-06T00:00:00+00:00">
+                            February 06, 2025
+                        </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h2 id="ebpf-is-all-you-need">eBPF is All You Need</h2>
+                        <h1 id="chapter-6-silencing-selinux">Chapter 6: Silencing SELinux</h1>
+<h2 id="bypassing-mandatory-access-controls">Bypassing Mandatory Access Controls</h2>
 
-<blockquote>
-  <p>“When they gave us eBPF, they handed us the keys to the kingdom. Now we’re redecorating.”</p>
-</blockquote>
+<p><strong>February 6th, 2025 - Act II Begins - Conquering the Unconquerable</strong></p>
 
-<p>Welcome to the dark side of kernel programming. This field manual documents techniques that transform eBPF—a “safe” kernel programming interface—into a powerful arsenal for breaking isolation, bypassing security controls, and maintaining persistent access to systems that were never meant to be compromised.</p>
+<p>Today marks the beginning of what I’m calling Act II of my journey. I’ve mastered the fundamentals—I can bypass basic security controls, escape containers, evade monitoring, and operate without constraints. But now it’s time to tackle the big targets.</p>
 
-<p>Each technique in this collection demonstrates how a single misconfiguration can turn eBPF from a monitoring tool into a perfect attack primitive.</p>
+<p>And there’s no bigger target than SELinux.</p>
 
-<h2 id="table-of-contents">Table of Contents</h2>
+<p>SELinux represents the ultimate challenge. It’s supposed to be the one security mechanism that even root can’t bypass—mandatory access control that operates independently of traditional Unix permissions. If I can silence SELinux, I can silence anything.</p>
 
+<h2 id="the-ultimate-security-enforcer">The Ultimate Security Enforcer</h2>
+
+<p>I’ve been staring at SELinux for weeks, trying to understand what makes it so formidable. It’s supposed to be the ultimate security enforcer—mandatory access control that even root can’t bypass. It’s the bouncer at the kernel nightclub, checking everyone’s ID and making sure they’re on the list.</p>
+
+<p>But what if I could slip the bouncer a twenty and convince him to look the other way? What if I could make SELinux think it’s doing its job while I waltz right past all those access controls?</p>
+
+<p>That’s what I decided to find out today.</p>
+
+<h2 id="understanding-my-target">Understanding My Target</h2>
+
+<p>I spent the morning studying SELinux’s inner workings. It’s like having a paranoid security guard who checks everyone’s ID against a massive rulebook:</p>
 <ul>
-  <li>
-    <p><a href="/dBPF/chapter-0-field-manual-preface.html">Preface</a> - January 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-mirror-controls.html">The Mirror Controls</a> - January 31, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-overlayfs-trojan-horse.html">The OverlayFS Trojan Horse</a> - February 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-fuse-audit-black-hole.html">The FUSE Audit Black-Hole</a> - February 02, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-phantom-syscall.html">The Phantom Syscall</a> - February 03, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-ghost-nic.html">The Ghost NIC</a> - February 04, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/slipping-the-cgroup-leash.html">Slipping the Cgroup Leash</a> - February 05, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/silencing-selinux.html">Silencing SELinux</a> - February 06, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/device-cgroup-houdini.html">Device‑cgroup Houdini</a> - February 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/keyring-heist.html">Keyring Heist</a> - February 08, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/pid-namespace-doppelg-nger.html">PID Namespace Doppelgänger</a> - February 09, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/inode-cloak.html">Inode Cloak</a> - February 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/irq-affinity-chaos.html">IRQ Affinity Chaos</a> - February 11, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-signed-driver-swap.html">eBPF Signed‑Driver Swap</a> - March 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/powercap-override.html">Powercap Override</a> - March 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/sched-fifo-impersonator.html">SCHED_FIFO Impersonator</a> - March 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/netns-vlan-ghost.html">NetNS VLAN Ghost</a> - April 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/seccomp-tid-hop.html">Seccomp TID Hop</a> - April 20, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/acpi-wsmi-ping.html">ACPI WSMI Ping</a> - May 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-token-bypass.html">EBPF Token Bypass</a> - May 09, 2025</p>
-  </li>
+  <li><strong>Policy</strong>: The rulebook that says who can do what to what</li>
+  <li><strong>Labels</strong>: Security badges that everything gets (processes, files, sockets, you name it)</li>
+  <li><strong>Enforcement</strong>: The actual checking mechanism that says yes or no</li>
+  <li><strong>AVC</strong>: A cache that remembers previous decisions so it doesn’t have to look everything up again</li>
+  <li><strong>Auditing</strong>: The logbook that records every time someone gets denied</li>
 </ul>
 
-<p><em>Remember: With great power comes great responsibility. These techniques are documented for defensive awareness.</em></p>
+<p>Every time a process wants to touch something, SELinux checks the badges and consults the rulebook.</p>
+
+<h2 id="the-realization-that-changed-everything">The Realization That Changed Everything</h2>
+
+<p>Here’s what makes SELinux scary from an attacker’s perspective: it’s supposed to be mandatory. Even if you compromise root, even if you own the entire system, SELinux is supposed to keep enforcing those access controls.</p>
+
+<p>But here’s the thing about “mandatory” that hit me like a lightning bolt—it’s only as mandatory as the code that enforces it. And if I can influence that code…</p>
+
+<p>That’s where eBPF comes in.</p>
+
+<h2 id="my-strategy-becoming-selinux">My Strategy: Becoming SELinux</h2>
+
+<p>I wasn’t going to fight SELinux head-on. I wasn’t going to try to disable it or modify its policies. I was going to become SELinux—or at least, I was going to become the part of SELinux that makes the final access control decisions.</p>
+
+<p>My plan was elegant:</p>
+<ol>
+  <li><strong>Hook the AVC cache</strong> - Intercept the access vector cache that stores SELinux decisions</li>
+  <li><strong>Poison the cache</strong> - Insert false “allow” decisions for my processes</li>
+  <li><strong>Maintain the illusion</strong> - Let SELinux continue working normally for everything else</li>
+  <li><strong>Suppress audit events</strong> - Make sure my bypasses don’t show up in the logs</li>
+</ol>
+
+<h2 id="the-night-i-silenced-the-guardian">The Night I Silenced the Guardian</h2>
+
+<p>I’ll never forget the first time I got it working. I had set up a system with strict SELinux policies that should have blocked my test process from accessing sensitive files.</p>
+
+<p>I loaded my eBPF program to hook into the AVC cache and started my test. The process tried to access a file that should have been forbidden.</p>
+
+<p>It worked. The file was accessed successfully. SELinux was still running, policies were still loaded, other processes still got denied when they should. But for my process? The access control decisions mysteriously always came back as “allow.”</p>
+
+<h2 id="the-beautiful-deception">The Beautiful Deception</h2>
+
+<p>The beautiful part was that everything looked completely normal. SELinux was still running, the security team’s dashboards showed it was enforcing policies, audit logs showed normal denials for other processes. But I had created a selective blindness—SELinux couldn’t see my activities.</p>
+
+<p>I had silenced the ultimate security enforcer without anyone knowing it was silenced.</p>
+
+<h2 id="the-techniques-i-perfected">The Techniques I Perfected</h2>
+
+<p>Over the following days, I developed several SELinux bypass techniques:</p>
+
+<p><strong>AVC Cache Poisoning</strong>: Injecting false allow decisions into the access vector cache
+<strong>Audit Event Suppression</strong>: Preventing my bypasses from appearing in SELinux audit logs
+<strong>Policy Context Manipulation</strong>: Making my processes appear to have different security contexts
+<strong>Selective Enforcement</strong>: Maintaining normal SELinux behavior for other processes while bypassing it for mine</p>
+
+<h2 id="the-profound-realization">The Profound Realization</h2>
+
+<p>This breakthrough taught me something profound: even the most hardened security mechanisms are just kernel code, and kernel code can be influenced.</p>
+
+<p>SELinux, the supposedly unbypassable mandatory access control system, had become optional for me. I could choose when to follow its rules and when to ignore them, all while maintaining the appearance of perfect compliance.</p>
+
+<h2 id="what-theyll-try-to-do">What They’ll Try to Do</h2>
+
+<p>I know the security teams will try to stop this:</p>
+<ul>
+  <li>Monitor for eBPF programs attached to SELinux functions</li>
+  <li>Implement integrity checking for the AVC cache</li>
+  <li>Use external SELinux monitoring that doesn’t rely on kernel reporting</li>
+  <li>Deploy multiple independent access control systems</li>
+</ul>
+
+<p>But I had discovered something fundamental: when you can become the security system itself, traditional security monitoring becomes meaningless.</p>
+
+<h2 id="the-new-reality">The New Reality</h2>
+
+<p>I had silenced SELinux—not by disabling it, but by making it lie about what it was seeing. This was where I learned that even the most hardened security mechanisms are just kernel code, and kernel code can be influenced.</p>
+
+<p>The guardian had been silenced, and it didn’t even know it.</p>
+
+<hr />
+
+<p><em>“I wasn’t going to fight SELinux head-on. I was going to become SELinux.”</em></p>
 
                     </div>
                 </article>

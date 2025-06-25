@@ -54,7 +54,7 @@
                     
                     
                     <a href="/dBPF/chapter-0-field-manual-preface.html" >
-                        Chapter 0: Field Manual Preface
+                        Preface
                     </a>
                     
                 
@@ -181,9 +181,17 @@
                     <div class="post-content">
                         <h1 id="inode-cloak-hiding-files-from-detection-systems">Inode Cloak: Hiding Files from Detection Systems</h1>
 
-<p><strong>Wut</strong></p>
+<p><strong>Chapter 11: Making Evidence Disappear</strong></p>
 
-<p>A technique that uses eBPF to manipulate inode operations, allowing attackers to hide files, directories, and their contents from detection systems while maintaining full access for themselves. This “cloaking” capability undermines file integrity monitoring, antivirus scanning, and forensic analysis tools.</p>
+<p>You’ve learned to exist in multiple realities simultaneously. Now let’s apply that same concept to files. What if your malware, your tools, your evidence could exist but be completely invisible to detection systems?</p>
+
+<p>This is where our story becomes about perfect crimes. You’ve gained access, stolen credentials, and established persistence. But all of that is worthless if forensic investigators can find your tools and trace your activities.</p>
+
+<p>Ever wanted files that exist but don’t exist? Welcome to the inode cloak—where files can be completely invisible to <code class="language-plaintext highlighter-rouge">ls</code>, <code class="language-plaintext highlighter-rouge">find</code>, and every other filesystem tool, but still perfectly accessible if you know they’re there.</p>
+
+<p>We’re going to make files disappear from the filesystem without actually deleting them. They’ll still be there, still functional, still readable and writable—but as far as userspace is concerned, they simply don’t exist.</p>
+
+<p>This is where you learn that eBPF doesn’t just let you hide your activities—it lets you hide the very tools you use to perform those activities. Perfect stealth for the perfect crime.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -209,23 +217,29 @@ graph TD
     click D "https://ebpf.io/what-is-ebpf/" "eBPF Documentation"
 </code></pre>
 
-<p><strong>Why</strong></p>
+<p><strong>Why File Hiding Just Got Scary</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation. File visibility is fundamental to security monitoring, malware detection, and forensic analysis. By manipulating inode operations through eBPF, attackers can create a parallel reality where their malicious files are invisible to security tools while remaining fully functional and accessible to the attacker, effectively bypassing most detection mechanisms.</p>
-<h2 id="technical-details">Technical Details</h2>
+<p>Here’s what makes filesystem security work: if a file exists, you can see it. Security scanners can find it, monitoring tools can track it, administrators can discover it. The fundamental assumption is that files can’t hide.</p>
 
-<h3 id="filesystem-and-inode-architecture">Filesystem and Inode Architecture</h3>
+<p>But what happens when that assumption breaks? What happens when files can exist in a quantum state—there for those who know about them, invisible to everyone else?</p>
 
-<p>The Linux filesystem layer consists of:</p>
+<p>That’s where inode cloaking gets dangerous. Your antivirus scans will miss the malware. Your file integrity monitors won’t detect the backdoors. Your forensic tools will come up empty. Meanwhile, the files are right there, fully functional, just invisible.</p>
+
+<p>The beautiful part is that this doesn’t break the filesystem—it just adds a selective invisibility layer. Normal file operations work perfectly, performance is unaffected, but certain files simply don’t show up in directory listings or filesystem traversals. It’s like having a cloaking device for your files.</p>
+<h2 id="how-we-make-files-disappear">How We Make Files Disappear</h2>
+
+<h3 id="understanding-the-filesystems-filing-system">Understanding the Filesystem’s Filing System</h3>
+
+<p>The Linux filesystem is like a massive filing cabinet with multiple layers:</p>
 <ul>
-  <li><strong>VFS (Virtual Filesystem Switch)</strong>: An abstraction layer that provides a common interface to different filesystems</li>
-  <li><strong>Inodes</strong>: Data structures that store metadata about files and directories</li>
-  <li><strong>Dentry Cache</strong>: A cache of directory entries for faster lookups</li>
-  <li><strong>File Operations</strong>: Functions that implement file-related operations (read, write, etc.)</li>
-  <li><strong>Inode Operations</strong>: Functions that implement inode-related operations (lookup, create, etc.)</li>
+  <li><strong>VFS (Virtual Filesystem Switch)</strong>: The universal translator that lets different filesystems speak the same language</li>
+  <li><strong>Inodes</strong>: The index cards that store all the metadata about files and directories</li>
+  <li><strong>Dentry Cache</strong>: A speed-reading system that remembers where things are</li>
+  <li><strong>File Operations</strong>: The actual functions that read, write, and manipulate files</li>
+  <li><strong>Inode Operations</strong>: The functions that create, delete, and look up files</li>
 </ul>
 
-<p>These components work together to provide file access and management capabilities.</p>
+<p>All these layers work together to make sure you can find your files when you need them. But what if we could make certain files invisible to some of these layers?</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -295,7 +309,7 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>When eBPF is used to manipulate filesystem operations, the architecture is subverted:</p>
+<p>Here’s what happens when we slip our eBPF program into the filesystem layer:</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -375,19 +389,21 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="exploitation-technique">Exploitation Technique</h3>
+<h3 id="how-we-become-the-invisible-file-manager">How We Become the Invisible File Manager</h3>
 
-<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement filesystem operations. By intercepting these calls, an attacker can:</p>
+<p>Our strategy is to intercept filesystem operations and selectively hide files:</p>
 
 <ol>
-  <li><strong>Hook directory listing</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">iterate_dir()</code> or <code class="language-plaintext highlighter-rouge">readdir()</code></li>
-  <li><strong>Filter file lookups</strong>: Modify the results of <code class="language-plaintext highlighter-rouge">lookup_fast()</code> or similar functions</li>
-  <li><strong>Manipulate stat operations</strong>: Change the output of <code class="language-plaintext highlighter-rouge">vfs_stat()</code> to hide file metadata</li>
-  <li><strong>Control file access</strong>: Allow or deny access based on process credentials</li>
-  <li><strong>Maintain stealth</strong>: Ensure monitoring tools see a sanitized view of the filesystem
-    <h3 id="comprehensive-poc">Comprehensive POC</h3>
-  </li>
+  <li><strong>Hook the Directory Readers</strong>: We attach to functions like <a href="https://elixir.bootlin.com/linux/latest/source/fs/readdir.c"><code class="language-plaintext highlighter-rouge">iterate_dir()</code></a> that list directory contents</li>
+  <li><strong>Filter the Lookups</strong>: We modify the results of <a href="https://elixir.bootlin.com/linux/latest/source/fs/namei.c"><code class="language-plaintext highlighter-rouge">lookup_fast()</code></a> so certain files just don’t exist</li>
+  <li><strong>Mess with File Stats</strong>: We change the output of <a href="https://elixir.bootlin.com/linux/latest/source/fs/stat.c"><code class="language-plaintext highlighter-rouge">vfs_stat()</code></a> to hide file metadata</li>
+  <li><strong>Control Who Sees What</strong>: We decide which processes get to see which files based on their credentials</li>
+  <li><strong>Stay Invisible</strong>: We make sure monitoring tools only see the sanitized view we want them to see</li>
 </ol>
+
+<p>The key is that we’re not deleting files—we’re just making them invisible to specific processes while keeping them fully functional for others.</p>
+
+<h3 id="building-our-invisibility-cloak">Building Our Invisibility Cloak</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -1228,7 +1244,7 @@ graph TD
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
-<h3 id="user-space-control-program">User-Space Control Program</h3>
+<h3 id="the-control-program-that-manages-our-invisibility">The Control Program That Manages Our Invisibility</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -1520,10 +1536,10 @@ graph TD
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="mitigation-strategies">Mitigation Strategies</h3>
+<h3 id="how-theyll-try-to-stop-us">How They’ll Try to Stop Us</h3>
 
 <ol>
-  <li><strong>Restrict eBPF Capabilities</strong>:
+  <li><strong>Strip eBPF Capabilities</strong>:
     <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
 3
@@ -1614,15 +1630,15 @@ auditctl <span class="nt">-w</span> /etc/passwd <span class="nt">-p</span> rwxa 
 
 <p>The ability to selectively hide files from detection systems while maintaining full functionality creates a particularly dangerous scenario where malicious activity can persist undetected for extended periods.</p>
 
-<h3 id="detection-methods">Detection Methods</h3>
+<h3 id="how-theyll-try-to-catch-us">How They’ll Try to Catch Us</h3>
 
-<p>Defenders should monitor for:</p>
+<p>Smart defenders will be looking for the telltale signs of our file hiding:</p>
 <ul>
-  <li>Unexpected eBPF programs attached to filesystem-related functions</li>
-  <li>Discrepancies between different methods of listing files</li>
-  <li>Files visible to some processes but not others</li>
-  <li>Unusual patterns of filesystem hook installations</li>
-  <li>Inconsistencies between filesystem state and monitoring tool reports</li>
+  <li><strong>eBPF surveillance</strong>: Watching for eBPF programs hooking filesystem functions</li>
+  <li><strong>Cross-reference checks</strong>: Comparing different ways of listing files to spot discrepancies</li>
+  <li><strong>Process-specific visibility</strong>: Noticing when files are visible to some processes but not others</li>
+  <li><strong>Hook pattern analysis</strong>: Looking for unusual patterns of filesystem hook installations</li>
+  <li><strong>Reality checks</strong>: Comparing what monitoring tools see vs. what’s actually on disk</li>
 </ul>
 
 <p>This technique demonstrates why proper eBPF restrictions are critical for maintaining the integrity of security monitoring systems, especially in environments where file integrity monitoring is a key security control.</p>

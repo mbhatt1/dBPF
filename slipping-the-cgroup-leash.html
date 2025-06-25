@@ -54,7 +54,7 @@
                     
                     
                     <a href="/dBPF/chapter-0-field-manual-preface.html" >
-                        Chapter 0: Field Manual Preface
+                        Preface
                     </a>
                     
                 
@@ -181,9 +181,17 @@
                     <div class="post-content">
                         <h1 id="slipping-the-cgroup-leash-bypassing-resource-constraints">Slipping the Cgroup Leash: Bypassing Resource Constraints</h1>
 
-<p><strong>Wut</strong></p>
+<p><strong>Chapter 6: Breaking Free from All Constraints</strong></p>
 
-<p>Manipulating scheduler accounting via eBPF to overrun CPU quotas while charts still show compliance. This technique allows attackers to consume more resources than allocated, potentially causing denial of service to other workloads while evading detection by monitoring systems.</p>
+<p>We’re reaching the end of Act I of our story. You’ve learned to subvert security controls, escape containers, evade monitoring, create phantom syscalls, and establish covert networking. But there’s one more constraint holding you back: resource limits.</p>
+
+<p>This is where we complete the foundation of our eBPF mastery. It’s not enough to bypass security—you need to bypass the very resource constraints that are supposed to keep your activities contained and limited.</p>
+
+<p>You know that feeling when you’re in a container and you hit those annoying resource limits? CPU throttled, memory capped, disk I/O restricted? Well, what if I told you those limits are just suggestions that we can politely ignore?</p>
+
+<p>We’re going to slip the cgroup leash—make the kernel think we’re being good little containers while we’re actually consuming whatever resources we want. It’s like having a speedometer that always shows the speed limit while you’re actually doing 120 mph.</p>
+
+<p>This completes our basic toolkit. You now have the fundamental skills to operate completely outside the bounds of what security systems think is possible. But this is just the beginning—Act II is where things get really interesting.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -208,23 +216,31 @@ graph TD
     click D "https://ebpf.io/what-is-ebpf/" "eBPF Documentation"
 </code></pre>
 
-<p><strong>Why</strong></p>
+<p><strong>Why Container Resource Limits Are Broken</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation. Control Groups (cgroups) are a fundamental Linux kernel feature used to limit and account for resource usage, especially in containerized environments. By manipulating the accounting mechanisms through eBPF, attackers can consume more resources than allocated while monitoring systems show compliance with limits.</p>
+<p>Here’s the dirty secret about container security: it’s all built on trust. Trust that the kernel will enforce CPU limits. Trust that memory caps will be respected. Trust that I/O throttling will actually throttle.</p>
 
-<h2 id="technical-details">Technical Details</h2>
+<p>But what happens when you can whisper in the kernel’s ear and convince it to look the other way? What happens when you can make the resource accounting lie?</p>
 
-<h3 id="cgroup-architecture">Cgroup Architecture</h3>
+<p>That’s where cgroup manipulation gets scary. Your monitoring tools will show perfect compliance—CPU usage within limits, memory consumption under control, disk I/O behaving nicely. Meanwhile, you’re actually consuming whatever resources you want.</p>
 
-<p>Control Groups (cgroups) provide a mechanism to:</p>
+<p>The beautiful part is that this doesn’t just bypass limits—it makes the bypass invisible. The container orchestrator thinks everything is fine, the monitoring dashboards stay green, and the resource accounting reports exactly what everyone expects to see. It’s the perfect crime.</p>
+
+<h2 id="how-we-break-the-resource-cage">How We Break the Resource Cage</h2>
+
+<h3 id="understanding-the-cgroup-warden">Understanding the Cgroup Warden</h3>
+
+<p>Cgroups are basically the kernel’s resource police. They’re supposed to:</p>
 <ul>
-  <li><strong>Limit resource usage</strong> (CPU, memory, I/O, etc.)</li>
-  <li><strong>Prioritize resource allocation</strong></li>
-  <li><strong>Account for resource usage</strong></li>
-  <li><strong>Control process lifecycle</strong></li>
+  <li><strong>Set hard limits</strong> on what you can use (CPU, memory, I/O, etc.)</li>
+  <li><strong>Decide who gets priority</strong> when resources are scarce</li>
+  <li><strong>Keep detailed records</strong> of what everyone’s using</li>
+  <li><strong>Control the lifecycle</strong> of processes</li>
 </ul>
 
-<p>In container environments, cgroups are the primary mechanism for enforcing resource limits and ensuring fair resource allocation between containers.</p>
+<p>Container runtimes rely on cgroups to keep containers from hogging all the resources. It’s like having a bouncer at the club who counts how many drinks you’ve had.</p>
+
+<p>But what if we could make the bouncer’s counting machine lie?</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -280,7 +296,7 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>When eBPF is used to manipulate the cgroup accounting, the architecture is subverted:</p>
+<p>Here’s what happens when we slip our eBPF program into the mix:</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -352,18 +368,20 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="exploitation-technique">Exploitation Technique</h3>
+<h3 id="how-we-cook-the-books">How We Cook the Books</h3>
 
-<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement cgroup accounting. By intercepting these calls, an attacker can:</p>
+<p>Here’s our game plan for fooling the resource accounting:</p>
 
 <ol>
-  <li><strong>Hook accounting functions</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">cgroup_account_cputime()</code> or related scheduler accounting functions</li>
-  <li><strong>Modify usage metrics</strong>: Artificially reduce the reported CPU usage</li>
-  <li><strong>Bypass throttling</strong>: Prevent the kernel from throttling processes that exceed their quota</li>
-  <li><strong>Maintain appearances</strong>: Ensure monitoring systems show compliance with limits</li>
+  <li><strong>Hook the Accountants</strong>: We attach to functions like <a href="https://elixir.bootlin.com/linux/latest/source/kernel/sched/cputime.c"><code class="language-plaintext highlighter-rouge">cgroup_account_cputime()</code></a> that track resource usage</li>
+  <li><strong>Fudge the Numbers</strong>: Make our actual CPU usage look much smaller than it really is</li>
+  <li><strong>Dodge the Throttle</strong>: Stop the kernel from slowing us down when we “exceed” our fake quota</li>
+  <li><strong>Keep Up Appearances</strong>: Make sure all the monitoring dashboards show we’re being good</li>
 </ol>
 
-<h3 id="comprehensive-poc">Comprehensive POC</h3>
+<p>The beauty is that we’re not breaking the cgroup system—we’re just lying to it about what we’re doing.</p>
+
+<h3 id="building-our-resource-thief">Building Our Resource Thief</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -939,7 +957,7 @@ graph TD
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="user-space-control-program">User-Space Control Program</h3>
+<h3 id="the-control-program-that-orchestrates-our-theft">The Control Program That Orchestrates Our Theft</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -1472,7 +1490,7 @@ while (!exiting) {
 75
 76
 </pre></td><td class="rouge-code"><pre>
-### CPU-Intensive Workload Generator
+### The CPU Hog That Proves Our Point
 
 ```c
 // @interactive: true
@@ -1549,37 +1567,37 @@ int main(int argc, char *argv[])
 }
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="detection-methods">Detection Methods</h3>
+<h3 id="how-theyll-try-to-catch-us">How They’ll Try to Catch Us</h3>
 
-<p>Defenders should implement multiple layers of detection:</p>
+<p>Smart defenders will be looking for the telltale signs of our resource theft:</p>
 
 <ol>
-  <li><strong>eBPF Program Monitoring</strong>:
+  <li><strong>eBPF Program Surveillance</strong>:
     <ul>
-      <li>Monitor for eBPF programs attached to cgroup or scheduler functions</li>
-      <li>Track eBPF program loading patterns and verify signatures</li>
-      <li>Use tools like <code class="language-plaintext highlighter-rouge">bpftool</code> to list and inspect loaded programs</li>
+      <li>They’ll watch for eBPF programs hooking cgroup or scheduler functions</li>
+      <li>Monitor what eBPF programs are loading and who’s signing them</li>
+      <li>Use <a href="https://github.com/libbpf/bpftool"><code class="language-plaintext highlighter-rouge">bpftool</code></a> to see what’s running in the kernel</li>
     </ul>
   </li>
-  <li><strong>Resource Usage Verification</strong>:
+  <li><strong>Cross-Reference Reality</strong>:
     <ul>
-      <li>Implement host-level monitoring that can’t be manipulated from containers</li>
-      <li>Compare cgroup metrics with physical resource monitoring</li>
-      <li>Use hardware performance counters to verify CPU usage</li>
+      <li>Set up host-level monitoring that we can’t touch from inside containers</li>
+      <li>Compare what cgroups report vs. what the hardware actually shows</li>
+      <li>Use performance counters that bypass our accounting manipulation</li>
     </ul>
   </li>
-  <li><strong>Anomaly Detection</strong>:
+  <li><strong>Spot the Lies</strong>:
     <ul>
-      <li>Look for discrepancies between reported CPU usage and system performance</li>
-      <li>Monitor for unusual patterns of CPU utilization that don’t match cgroup metrics</li>
-      <li>Track performance degradation of other workloads despite apparent compliance</li>
+      <li>Look for containers that report low CPU but somehow slow down the whole system</li>
+      <li>Watch for patterns where the math doesn’t add up</li>
+      <li>Notice when other workloads get slower despite “compliant” neighbors</li>
     </ul>
   </li>
-  <li><strong>Specific Indicators</strong>:
+  <li><strong>Red Flags They’ll Watch For</strong>:
     <ul>
-      <li>System-level metrics that don’t align with container-level metrics</li>
-      <li>Containers that appear to be idle but cause system load</li>
-      <li>Thermal issues or performance degradation without corresponding metrics</li>
+      <li>System metrics that don’t match container metrics</li>
+      <li>Containers that look idle but make the fans spin up</li>
+      <li>Thermal throttling when the dashboards show everything’s fine</li>
     </ul>
   </li>
 </ol>

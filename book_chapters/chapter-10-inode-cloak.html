@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>Chapter 10: Inode Cloak | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,21 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>Chapter 10: Inode Cloak | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="The Diabolical eBPF Field Manual" />
+<meta property="og:title" content="Chapter 10: Inode Cloak" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-10-inode-cloak" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-10-inode-cloak" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
-<meta property="og:type" content="website" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2025-02-10T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="The Diabolical eBPF Field Manual" />
+<meta property="twitter:title" content="Chapter 10: Inode Cloak" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","author":{"@type":"Person","name":"Diabolical eBPF"},"description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"The Diabolical eBPF Field Manual","name":"Diabolical eBPF: Linux Red Team Field Manual","url":"https://mbhatt1.github.io/dBPF/"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-10T00:00:00+00:00","datePublished":"2025-02-10T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 10: Inode Cloak","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-10-inode-cloak"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-10-inode-cloak"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -169,87 +170,111 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">The Diabolical eBPF Field Manual</h1>
+                        <h1 class="post-title">Chapter 10: Inode Cloak</h1>
+                        
+                        <time class="post-date" datetime="2025-02-10T00:00:00+00:00">
+                            February 10, 2025
+                        </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h2 id="ebpf-is-all-you-need">eBPF is All You Need</h2>
+                        <h1 id="chapter-10-inode-cloak">Chapter 10: Inode Cloak</h1>
+<h2 id="making-files-invisible-to-detection-systems">Making Files Invisible to Detection Systems</h2>
 
-<blockquote>
-  <p>“When they gave us eBPF, they handed us the keys to the kingdom. Now we’re redecorating.”</p>
-</blockquote>
+<p><strong>February 10th, 2025 - The Vanishing Act</strong></p>
 
-<p>Welcome to the dark side of kernel programming. This field manual documents techniques that transform eBPF—a “safe” kernel programming interface—into a powerful arsenal for breaking isolation, bypassing security controls, and maintaining persistent access to systems that were never meant to be compromised.</p>
+<p>After creating process doppelgängers yesterday, I was fascinated by the concept of identity manipulation. But processes aren’t the only things with identities in the kernel—files have them too. Every file has an inode, a unique identity that the filesystem uses to track it.</p>
 
-<p>Each technique in this collection demonstrates how a single misconfiguration can turn eBPF from a monitoring tool into a perfect attack primitive.</p>
+<p>What if I could make files invisible? Not just hidden with a dot prefix, but truly invisible to detection systems, file integrity monitors, and security scanners?</p>
 
-<h2 id="table-of-contents">Table of Contents</h2>
+<p>Today I learned to make files vanish into thin air while keeping them fully functional.</p>
 
+<h2 id="the-file-identity-system">The File Identity System</h2>
+
+<p>I spent the morning studying inodes—the kernel’s file identity system. They’re designed to:</p>
 <ul>
-  <li>
-    <p><a href="/dBPF/chapter-0-field-manual-preface.html">Preface</a> - January 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-mirror-controls.html">The Mirror Controls</a> - January 31, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-overlayfs-trojan-horse.html">The OverlayFS Trojan Horse</a> - February 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-fuse-audit-black-hole.html">The FUSE Audit Black-Hole</a> - February 02, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-phantom-syscall.html">The Phantom Syscall</a> - February 03, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-ghost-nic.html">The Ghost NIC</a> - February 04, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/slipping-the-cgroup-leash.html">Slipping the Cgroup Leash</a> - February 05, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/silencing-selinux.html">Silencing SELinux</a> - February 06, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/device-cgroup-houdini.html">Device‑cgroup Houdini</a> - February 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/keyring-heist.html">Keyring Heist</a> - February 08, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/pid-namespace-doppelg-nger.html">PID Namespace Doppelgänger</a> - February 09, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/inode-cloak.html">Inode Cloak</a> - February 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/irq-affinity-chaos.html">IRQ Affinity Chaos</a> - February 11, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-signed-driver-swap.html">eBPF Signed‑Driver Swap</a> - March 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/powercap-override.html">Powercap Override</a> - March 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/sched-fifo-impersonator.html">SCHED_FIFO Impersonator</a> - March 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/netns-vlan-ghost.html">NetNS VLAN Ghost</a> - April 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/seccomp-tid-hop.html">Seccomp TID Hop</a> - April 20, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/acpi-wsmi-ping.html">ACPI WSMI Ping</a> - May 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-token-bypass.html">EBPF Token Bypass</a> - May 09, 2025</p>
-  </li>
+  <li><strong>Uniquely identify files</strong> within a filesystem</li>
+  <li><strong>Track file metadata</strong> like permissions, timestamps, and ownership</li>
+  <li><strong>Enable file operations</strong> by providing a consistent reference point</li>
+  <li><strong>Support security monitoring</strong> by giving each file a trackable identity</li>
 </ul>
 
-<p><em>Remember: With great power comes great responsibility. These techniques are documented for defensive awareness.</em></p>
+<p>It’s like having a social security number for every file—a unique identifier that follows the file throughout its lifetime and enables all sorts of tracking and monitoring.</p>
+
+<p>But what if I could make files exist without proper identification?</p>
+
+<h2 id="my-invisibility-strategy">My Invisibility Strategy</h2>
+
+<p>The idea was elegant in its simplicity. Instead of trying to hide files from specific tools, I would make them invisible at the filesystem level itself.</p>
+
+<p>My plan:</p>
+<ol>
+  <li><strong>Hook inode lookup functions</strong> - Intercept the mechanisms that resolve file paths to inodes</li>
+  <li><strong>Create selective blindness</strong> - Make certain files invisible to specific processes or tools</li>
+  <li><strong>Maintain functionality</strong> - Keep the files fully accessible to authorized processes</li>
+  <li><strong>Evade detection</strong> - Make file integrity monitors and security scanners unable to see the files</li>
+</ol>
+
+<h2 id="the-night-i-made-files-disappear">The Night I Made Files Disappear</h2>
+
+<p>I’ll never forget the first time I pulled it off. I had created a test file that should have been visible to all the standard file listing and security scanning tools.</p>
+
+<p>I loaded my eBPF program to hook into the inode lookup functions. Then I configured it to make my test file invisible to specific processes while keeping it visible to others.</p>
+
+<p>It worked. The file was completely invisible to <code class="language-plaintext highlighter-rouge">ls</code>, <code class="language-plaintext highlighter-rouge">find</code>, file integrity monitors, and security scanners. But my authorized processes could still read and write to it normally.</p>
+
+<h2 id="the-perfect-hiding-place">The Perfect Hiding Place</h2>
+
+<p>The beautiful part was that the file wasn’t just hidden—it was truly invisible at the filesystem level. Security tools couldn’t see it, backup systems couldn’t find it, and file integrity monitors couldn’t track it. But it was still there, fully functional, waiting for authorized access.</p>
+
+<p>I had created the perfect hiding place—files that existed in plain sight but were invisible to anyone looking for them.</p>
+
+<h2 id="the-techniques-i-perfected">The Techniques I Perfected</h2>
+
+<p>Over the following days, I developed several file invisibility techniques:</p>
+
+<p><strong>Selective Visibility</strong>: Making files visible only to specific processes
+<strong>Tool-Specific Hiding</strong>: Making files invisible to security scanners while visible to normal operations
+<strong>Conditional Existence</strong>: Making files appear and disappear based on context
+<strong>Metadata Manipulation</strong>: Altering file metadata to confuse detection systems
+<strong>Path Obfuscation</strong>: Making file paths resolve differently for different processes</p>
+
+<p>Each technique exploited the fundamental assumption that files have consistent, observable identities.</p>
+
+<h2 id="the-broader-implications">The Broader Implications</h2>
+
+<p>This wasn’t just about hiding files—I had discovered that the fundamental assumptions of file system integrity could be violated. When you can make files invisible:</p>
+<ul>
+  <li><strong>Hide malware</strong> from antivirus scanners and security tools</li>
+  <li><strong>Evade file integrity monitoring</strong> by making critical files untrackable</li>
+  <li><strong>Store sensitive data</strong> in files that backup systems can’t see</li>
+  <li><strong>Establish persistence</strong> through files that system administrators can’t find</li>
+</ul>
+
+<p>I had broken the basic assumption that files have consistent, observable existence.</p>
+
+<h2 id="what-theyll-try-to-do">What They’ll Try to Do</h2>
+
+<p>I know the security teams will try to stop this:</p>
+<ul>
+  <li>Monitor for eBPF programs attached to filesystem functions</li>
+  <li>Implement external file monitoring that doesn’t rely on kernel reporting</li>
+  <li>Use hardware-based file integrity checking</li>
+  <li>Deploy multiple independent file tracking systems</li>
+</ul>
+
+<p>But I had discovered something fundamental: when you can manipulate file visibility at the kernel level, traditional file system security becomes meaningless.</p>
+
+<h2 id="the-master-of-invisibility">The Master of Invisibility</h2>
+
+<p>I had become a master of invisibility, capable of making files vanish into thin air while keeping them fully functional. The filesystem, supposedly providing reliable file tracking and integrity, had become my personal magic show.</p>
+
+<p>The files were there, but nobody could see them.</p>
+
+<hr />
+
+<p><em>“I had created the perfect hiding place—files that existed in plain sight but were invisible to anyone looking for them.”</em></p>
 
                     </div>
                 </article>

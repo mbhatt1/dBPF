@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>Chapter 5: Slipping the Cgroup Leash | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,21 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>Chapter 5: Slipping the Cgroup Leash | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="The Diabolical eBPF Field Manual" />
+<meta property="og:title" content="Chapter 5: Slipping the Cgroup Leash" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-5-slipping-cgroup-leash" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-5-slipping-cgroup-leash" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
-<meta property="og:type" content="website" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2025-02-05T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="The Diabolical eBPF Field Manual" />
+<meta property="twitter:title" content="Chapter 5: Slipping the Cgroup Leash" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","author":{"@type":"Person","name":"Diabolical eBPF"},"description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"The Diabolical eBPF Field Manual","name":"Diabolical eBPF: Linux Red Team Field Manual","url":"https://mbhatt1.github.io/dBPF/"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-05T00:00:00+00:00","datePublished":"2025-02-05T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 5: Slipping the Cgroup Leash","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-5-slipping-cgroup-leash"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-5-slipping-cgroup-leash"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -169,87 +170,120 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">The Diabolical eBPF Field Manual</h1>
+                        <h1 class="post-title">Chapter 5: Slipping the Cgroup Leash</h1>
+                        
+                        <time class="post-date" datetime="2025-02-05T00:00:00+00:00">
+                            February 05, 2025
+                        </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h2 id="ebpf-is-all-you-need">eBPF is All You Need</h2>
+                        <h1 id="chapter-5-slipping-the-cgroup-leash">Chapter 5: Slipping the Cgroup Leash</h1>
+<h2 id="bypassing-resource-constraints">Bypassing Resource Constraints</h2>
 
-<blockquote>
-  <p>“When they gave us eBPF, they handed us the keys to the kingdom. Now we’re redecorating.”</p>
-</blockquote>
+<p><strong>February 5th, 2025 - Breaking Free from All Constraints</strong></p>
 
-<p>Welcome to the dark side of kernel programming. This field manual documents techniques that transform eBPF—a “safe” kernel programming interface—into a powerful arsenal for breaking isolation, bypassing security controls, and maintaining persistent access to systems that were never meant to be compromised.</p>
+<p>I’m reaching the end of what I’m calling Act I of my journey. I’ve learned to subvert security controls, escape containers, evade monitoring, and create phantom syscalls. But there’s one more constraint that’s been bothering me: resource limits.</p>
 
-<p>Each technique in this collection demonstrates how a single misconfiguration can turn eBPF from a monitoring tool into a perfect attack primitive.</p>
+<p>You know that feeling when you’re in a container and you hit those annoying resource limits? CPU throttled, memory capped, disk I/O restricted? Well, last night I had a thought that kept me awake:</p>
 
-<h2 id="table-of-contents">Table of Contents</h2>
+<p>What if those limits are just suggestions that I can politely ignore?</p>
 
+<h2 id="the-final-piece-of-the-puzzle">The Final Piece of the Puzzle</h2>
+
+<p>This morning I decided to complete my foundation of eBPF mastery. It’s not enough to bypass security—I need to bypass the very resource constraints that are supposed to keep my activities contained and limited.</p>
+
+<p>I want to slip the cgroup leash—make the kernel think I’m being a good little container while I’m actually consuming whatever resources I want. Like having a speedometer that always shows the speed limit while I’m actually doing 120 mph.</p>
+
+<h2 id="understanding-my-prison-warden">Understanding My Prison Warden</h2>
+
+<p>I spent the day studying cgroups—the kernel’s resource police. They’re supposed to:</p>
 <ul>
-  <li>
-    <p><a href="/dBPF/chapter-0-field-manual-preface.html">Preface</a> - January 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-mirror-controls.html">The Mirror Controls</a> - January 31, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-overlayfs-trojan-horse.html">The OverlayFS Trojan Horse</a> - February 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-fuse-audit-black-hole.html">The FUSE Audit Black-Hole</a> - February 02, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-phantom-syscall.html">The Phantom Syscall</a> - February 03, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-ghost-nic.html">The Ghost NIC</a> - February 04, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/slipping-the-cgroup-leash.html">Slipping the Cgroup Leash</a> - February 05, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/silencing-selinux.html">Silencing SELinux</a> - February 06, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/device-cgroup-houdini.html">Device‑cgroup Houdini</a> - February 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/keyring-heist.html">Keyring Heist</a> - February 08, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/pid-namespace-doppelg-nger.html">PID Namespace Doppelgänger</a> - February 09, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/inode-cloak.html">Inode Cloak</a> - February 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/irq-affinity-chaos.html">IRQ Affinity Chaos</a> - February 11, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-signed-driver-swap.html">eBPF Signed‑Driver Swap</a> - March 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/powercap-override.html">Powercap Override</a> - March 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/sched-fifo-impersonator.html">SCHED_FIFO Impersonator</a> - March 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/netns-vlan-ghost.html">NetNS VLAN Ghost</a> - April 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/seccomp-tid-hop.html">Seccomp TID Hop</a> - April 20, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/acpi-wsmi-ping.html">ACPI WSMI Ping</a> - May 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-token-bypass.html">EBPF Token Bypass</a> - May 09, 2025</p>
-  </li>
+  <li><strong>Set hard limits</strong> on what you can use (CPU, memory, I/O, etc.)</li>
+  <li><strong>Decide who gets priority</strong> when resources are scarce</li>
+  <li><strong>Keep detailed records</strong> of what everyone’s using</li>
+  <li><strong>Control the lifecycle</strong> of processes</li>
 </ul>
 
-<p><em>Remember: With great power comes great responsibility. These techniques are documented for defensive awareness.</em></p>
+<p>Container runtimes rely on cgroups to keep containers from hogging all the resources. It’s like having a bouncer at the club who counts how many drinks you’ve had.</p>
+
+<p>But what if I could make the bouncer’s counting machine lie?</p>
+
+<h2 id="the-dirty-secret-about-container-security">The Dirty Secret About Container Security</h2>
+
+<p>Here’s what I realized: container security is all built on trust. Trust that the kernel will enforce CPU limits. Trust that memory caps will be respected. Trust that I/O throttling will actually throttle.</p>
+
+<p>But what happens when you can whisper in the kernel’s ear and convince it to look the other way? What happens when you can make the resource accounting lie?</p>
+
+<p>That’s where cgroup manipulation gets scary.</p>
+
+<h2 id="my-resource-liberation-strategy">My Resource Liberation Strategy</h2>
+
+<p>The idea was elegant: I would intercept the cgroup accounting functions and make them report whatever I wanted them to report. My monitoring tools would show perfect compliance—CPU usage within limits, memory consumption under control, disk I/O behaving nicely. Meanwhile, I’d actually be consuming whatever resources I wanted.</p>
+
+<p>The beautiful part was that this wouldn’t just bypass limits—it would make the bypass invisible. The container orchestrator would think everything was fine, the monitoring dashboards would stay green, and the resource accounting would report exactly what everyone expected to see.</p>
+
+<h2 id="the-night-i-broke-free">The Night I Broke Free</h2>
+
+<p>I’ll never forget the first time I got it working. I had set up a container with strict resource limits—0.5 CPU cores, 512MB memory, limited disk I/O. According to the cgroup configuration, I was locked in tight.</p>
+
+<p>Then I loaded my eBPF program to hook into the cgroup accounting functions. I started a CPU-intensive task that should have been throttled immediately.</p>
+
+<p>But it wasn’t. My process was consuming full CPU resources while the cgroup accounting showed I was staying within my 0.5 core limit. I had slipped the leash.</p>
+
+<h2 id="the-perfect-crime">The Perfect Crime</h2>
+
+<p>The monitoring systems showed perfect compliance. The container orchestrator was happy. The resource dashboards were green. But I was actually stealing resources from other containers on the same host.</p>
+
+<p>I had achieved the perfect crime—resource theft that was completely invisible to all monitoring and enforcement systems.</p>
+
+<h2 id="the-techniques-i-developed">The Techniques I Developed</h2>
+
+<p>Over the following days, I perfected several resource liberation techniques:</p>
+
+<p><strong>CPU Liberation</strong>: Consuming full CPU while appearing to stay within limits
+<strong>Memory Freedom</strong>: Using more memory than allocated without triggering OOM kills
+<strong>I/O Unleashed</strong>: Bypassing disk and network I/O throttling
+<strong>Priority Hijacking</strong>: Stealing CPU priority from other containers</p>
+
+<p>Each technique used the same principle: intercept the accounting functions and make them lie about resource consumption.</p>
+
+<h2 id="the-broader-implications">The Broader Implications</h2>
+
+<p>This wasn’t just about bypassing container limits. I had discovered that the fundamental assumptions of resource isolation could be violated. In multi-tenant environments, this meant I could steal resources from other tenants. In cloud environments, this meant I could exceed my paid resource allocations.</p>
+
+<p>The resource accounting that billing systems depend on could be completely falsified.</p>
+
+<h2 id="what-theyll-try-to-do">What They’ll Try to Do</h2>
+
+<p>I know the security teams will try to stop this:</p>
+<ul>
+  <li>Monitor for eBPF programs attached to cgroup functions</li>
+  <li>Implement external resource monitoring that doesn’t rely on cgroup accounting</li>
+  <li>Use hardware-level resource monitoring</li>
+  <li>Deploy multiple independent resource tracking systems</li>
+</ul>
+
+<p>But I had discovered something fundamental: when you can manipulate the kernel’s resource accounting, traditional resource isolation becomes meaningless.</p>
+
+<h2 id="completing-act-i">Completing Act I</h2>
+
+<p>This completes my basic toolkit. I now have the fundamental skills to operate completely outside the bounds of what security systems think is possible:</p>
+
+<ul>
+  <li>Make security controls lie</li>
+  <li>Escape container isolation</li>
+  <li>Become invisible to monitoring</li>
+  <li>Create phantom syscalls</li>
+  <li>Bypass resource constraints</li>
+</ul>
+
+<p>But this is just the beginning. Act II is where things get really interesting.</p>
+
+<hr />
+
+<p><em>“I had achieved the perfect crime—resource theft that was completely invisible to all monitoring and enforcement systems.”</em></p>
 
                     </div>
                 </article>

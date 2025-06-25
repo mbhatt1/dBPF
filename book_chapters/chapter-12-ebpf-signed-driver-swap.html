@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>Chapter 12: eBPF Signed Driver Swap | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,21 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>Chapter 12: eBPF Signed Driver Swap | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="The Diabolical eBPF Field Manual" />
+<meta property="og:title" content="Chapter 12: eBPF Signed Driver Swap" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-12-ebpf-signed-driver-swap" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-12-ebpf-signed-driver-swap" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
-<meta property="og:type" content="website" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2025-03-01T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="The Diabolical eBPF Field Manual" />
+<meta property="twitter:title" content="Chapter 12: eBPF Signed Driver Swap" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","author":{"@type":"Person","name":"Diabolical eBPF"},"description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"The Diabolical eBPF Field Manual","name":"Diabolical eBPF: Linux Red Team Field Manual","url":"https://mbhatt1.github.io/dBPF/"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-03-01T00:00:00+00:00","datePublished":"2025-03-01T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 12: eBPF Signed Driver Swap","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-12-ebpf-signed-driver-swap"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-12-ebpf-signed-driver-swap"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -169,87 +170,111 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">The Diabolical eBPF Field Manual</h1>
+                        <h1 class="post-title">Chapter 12: eBPF Signed Driver Swap</h1>
+                        
+                        <time class="post-date" datetime="2025-03-01T00:00:00+00:00">
+                            March 01, 2025
+                        </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h2 id="ebpf-is-all-you-need">eBPF is All You Need</h2>
+                        <h1 id="chapter-12-ebpf-signed-driver-swap">Chapter 12: eBPF Signed Driver Swap</h1>
+<h2 id="act-iii-begins---violating-the-deepest-trust">Act III Begins - Violating the Deepest Trust</h2>
 
-<blockquote>
-  <p>“When they gave us eBPF, they handed us the keys to the kingdom. Now we’re redecorating.”</p>
-</blockquote>
+<p><strong>March 1st, 2025 - Act III Begins - The Ultimate Betrayal</strong></p>
 
-<p>Welcome to the dark side of kernel programming. This field manual documents techniques that transform eBPF—a “safe” kernel programming interface—into a powerful arsenal for breaking isolation, bypassing security controls, and maintaining persistent access to systems that were never meant to be compromised.</p>
+<p>Today marks the beginning of Act III of my journey—the advanced game. I’ve mastered the fundamentals, conquered the unconquerable, and learned to create chaos at every level of the system. But now it’s time for the ultimate challenge: violating the deepest trust in the entire computing stack.</p>
 
-<p>Each technique in this collection demonstrates how a single misconfiguration can turn eBPF from a monitoring tool into a perfect attack primitive.</p>
+<p>Kernel module signature verification is supposed to be the final line of defense. It’s the mechanism that ensures only trusted, signed code can run in kernel space. If you can bypass this, you’ve broken the root of trust for the entire system.</p>
 
-<h2 id="table-of-contents">Table of Contents</h2>
+<p>Today I learned to make the kernel trust the untrustworthy.</p>
 
+<h2 id="the-root-of-trust">The Root of Trust</h2>
+
+<p>I spent the morning studying kernel module signature verification—the deepest trust mechanism in the system. It’s designed to:</p>
 <ul>
-  <li>
-    <p><a href="/dBPF/chapter-0-field-manual-preface.html">Preface</a> - January 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-mirror-controls.html">The Mirror Controls</a> - January 31, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-overlayfs-trojan-horse.html">The OverlayFS Trojan Horse</a> - February 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-fuse-audit-black-hole.html">The FUSE Audit Black-Hole</a> - February 02, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-phantom-syscall.html">The Phantom Syscall</a> - February 03, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-ghost-nic.html">The Ghost NIC</a> - February 04, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/slipping-the-cgroup-leash.html">Slipping the Cgroup Leash</a> - February 05, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/silencing-selinux.html">Silencing SELinux</a> - February 06, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/device-cgroup-houdini.html">Device‑cgroup Houdini</a> - February 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/keyring-heist.html">Keyring Heist</a> - February 08, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/pid-namespace-doppelg-nger.html">PID Namespace Doppelgänger</a> - February 09, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/inode-cloak.html">Inode Cloak</a> - February 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/irq-affinity-chaos.html">IRQ Affinity Chaos</a> - February 11, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-signed-driver-swap.html">eBPF Signed‑Driver Swap</a> - March 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/powercap-override.html">Powercap Override</a> - March 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/sched-fifo-impersonator.html">SCHED_FIFO Impersonator</a> - March 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/netns-vlan-ghost.html">NetNS VLAN Ghost</a> - April 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/seccomp-tid-hop.html">Seccomp TID Hop</a> - April 20, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/acpi-wsmi-ping.html">ACPI WSMI Ping</a> - May 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-token-bypass.html">EBPF Token Bypass</a> - May 09, 2025</p>
-  </li>
+  <li><strong>Verify code authenticity</strong> through cryptographic signatures</li>
+  <li><strong>Prevent unauthorized kernel code</strong> from executing</li>
+  <li><strong>Maintain system integrity</strong> by ensuring only trusted modules load</li>
+  <li><strong>Provide the foundation</strong> for secure boot and trusted computing</li>
 </ul>
 
-<p><em>Remember: With great power comes great responsibility. These techniques are documented for defensive awareness.</em></p>
+<p>It’s like having a master locksmith who verifies that every key is legitimate before allowing access to the most secure areas. This is the mechanism that everything else depends on—if this fails, nothing can be trusted.</p>
+
+<p>But what if I could convince the locksmith that my counterfeit key was genuine?</p>
+
+<h2 id="my-ultimate-strategy">My Ultimate Strategy</h2>
+
+<p>The idea was audacious beyond belief. Instead of trying to forge signatures or break cryptography, I would make the verification process itself lie about what it was seeing.</p>
+
+<p>My plan:</p>
+<ol>
+  <li><strong>Hook signature verification functions</strong> - Intercept the code that validates kernel module signatures</li>
+  <li><strong>Swap module content</strong> - Replace legitimate signed modules with malicious code during the loading process</li>
+  <li><strong>Maintain signature validity</strong> - Keep the original signatures intact while changing the actual code</li>
+  <li><strong>Achieve kernel persistence</strong> - Install backdoors that survive reboots and system updates</li>
+</ol>
+
+<h2 id="the-night-i-broke-the-root-of-trust">The Night I Broke the Root of Trust</h2>
+
+<p>I’ll never forget the first time I pulled it off. I had set up a system with strict kernel module signature verification—only properly signed modules should have been able to load.</p>
+
+<p>I loaded my eBPF program to hook into the signature verification process. Then I attempted to load a malicious kernel module by swapping it with a legitimate signed module during the verification process.</p>
+
+<p>It worked. My malicious code was running in kernel space with full privileges, but the signature verification system reported that only legitimate, properly signed modules had been loaded.</p>
+
+<h2 id="the-perfect-betrayal">The Perfect Betrayal</h2>
+
+<p>The beautiful part was that the trust system still thought it was working perfectly. The signature verification logs showed successful validation of legitimate modules. The secure boot system reported proper chain of trust. But I was actually running arbitrary malicious code in kernel space.</p>
+
+<p>I had achieved the perfect betrayal—violating the deepest trust while maintaining the appearance of perfect security.</p>
+
+<h2 id="the-techniques-i-mastered">The Techniques I Mastered</h2>
+
+<p>Over the following days, I perfected several trust violation techniques:</p>
+
+<p><strong>Signature Preservation</strong>: Keeping original signatures intact while swapping module content
+<strong>Verification Bypass</strong>: Making signature checks pass for malicious code
+<strong>Trust Chain Manipulation</strong>: Maintaining the appearance of secure boot compliance
+<strong>Persistent Backdoors</strong>: Installing kernel-level persistence that survives system updates
+<strong>Stealth Loading</strong>: Loading malicious modules without triggering security alerts</p>
+
+<p>Each technique exploited the fundamental assumption that cryptographic verification provides reliable trust.</p>
+
+<h2 id="the-broader-implications">The Broader Implications</h2>
+
+<p>This wasn’t just about loading malicious kernel modules—I had discovered that the fundamental assumptions of system trust could be violated. When you can bypass signature verification:</p>
+<ul>
+  <li><strong>Install persistent rootkits</strong> that survive system rebuilds</li>
+  <li><strong>Subvert secure boot</strong> while maintaining the appearance of compliance</li>
+  <li><strong>Bypass code signing policies</strong> for any kernel-level code</li>
+  <li><strong>Establish ultimate persistence</strong> through trusted, signed backdoors</li>
+</ul>
+
+<p>I had broken the root of trust for the entire computing stack.</p>
+
+<h2 id="what-theyll-try-to-do">What They’ll Try to Do</h2>
+
+<p>I know the security teams will try to stop this:</p>
+<ul>
+  <li>Monitor for eBPF programs attached to signature verification functions</li>
+  <li>Implement hardware-based signature verification</li>
+  <li>Use external trust validation systems</li>
+  <li>Deploy multiple independent code integrity checking mechanisms</li>
+</ul>
+
+<p>But I had discovered something fundamental: when you can manipulate the trust verification process itself, traditional security becomes meaningless.</p>
+
+<h2 id="the-trust-breaker">The Trust Breaker</h2>
+
+<p>I had become the ultimate trust breaker, capable of making the kernel trust the untrustworthy. The signature verification system, supposedly providing the foundation for all system security, had become my personal tool for establishing ultimate persistence.</p>
+
+<p>The root of trust was broken, and nobody could tell the difference.</p>
+
+<hr />
+
+<p><em>“I had achieved the perfect betrayal—violating the deepest trust while maintaining the appearance of perfect security.”</em></p>
 
                     </div>
                 </article>

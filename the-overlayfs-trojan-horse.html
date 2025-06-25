@@ -54,7 +54,7 @@
                     
                     
                     <a href="/dBPF/chapter-0-field-manual-preface.html" >
-                        Chapter 0: Field Manual Preface
+                        Preface
                     </a>
                     
                 
@@ -181,9 +181,19 @@
                     <div class="post-content">
                         <h1 id="the-overlayfs-trojan-horse-container-escape-through-layer-manipulation">The OverlayFS Trojan Horse: Container Escape Through Layer Manipulation</h1>
 
-<p><strong>Wut</strong></p>
+<p><strong>Chapter 2: Breaking Out of the Box</strong></p>
 
-<p>Hijacking OverlayFS copy‑up events with eBPF to plant set‑uid payloads inside container layers without touching host storage. This technique allows attackers to escalate privileges within containers by intercepting and modifying file operations during the copy-up process.</p>
+<p>Now that you’ve seen how to make security controls lie, let’s take the next logical step. What happens when you apply that same thinking to container isolation?</p>
+
+<p>You’ve just learned that eBPF can subvert the fundamental security mechanisms of Linux. But containers add another layer of complexity—they’re not just processes with different privileges, they’re supposed to be completely isolated environments.</p>
+
+<p>Or so everyone thinks.</p>
+
+<p>Picture this: you’re trapped in a container, staring at those filesystem walls that are supposed to keep you locked in. But what if I told you that OverlayFS—the very technology that creates those walls—can become your escape tunnel?</p>
+
+<p>We’re going to turn OverlayFS into our personal Trojan horse. While everyone’s watching the front gate (the container runtime), we’re going to slip out through the filesystem layers like a ghost walking through walls.</p>
+
+<p>This is where our story starts to get interesting. You’re not just bypassing security controls anymore—you’re escaping entire isolation boundaries.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -205,22 +215,29 @@ graph TD
     click F "https://attack.mitre.org/techniques/T1611/" "Container Escape Technique"
 </code></pre>
 
-<p><strong>Why</strong></p>
+<p><strong>Why This Is Container Security’s Nightmare</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation. OverlayFS is widely used in container environments to provide a unified view of multiple filesystem layers. When a file needs to be modified, it’s copied from a lower (read-only) layer to the upper (writable) layer—a process called “copy-up.” By intercepting this process with eBPF, attackers can modify files during transit, introducing malicious content without directly modifying the host filesystem.</p>
+<p>Here’s what keeps container security folks awake at night: containers aren’t really containers. They’re just processes with fancy filesystem tricks and some kernel namespaces sprinkled on top.</p>
 
-<h2 id="technical-details">Technical Details</h2>
+<p>OverlayFS is the magic that makes containers feel isolated—it creates those neat little filesystem layers where your container thinks it owns the world. But here’s the dirty secret: it’s all just kernel code making decisions about which files you can see.</p>
 
-<h3 id="overlayfs-architecture">OverlayFS Architecture</h3>
+<p>And if you can influence those decisions… well, suddenly those container walls start looking pretty thin.</p>
 
-<p>OverlayFS combines multiple filesystem layers into a single unified view. In container environments, this typically consists of:</p>
+<p>The beautiful part is that from the outside, everything looks normal. The container runtime thinks everything is fine, monitoring tools show proper isolation, security scanners give you a green light. Meanwhile, you’re reading files from the host filesystem like you own the place.</p>
+
+<h2 id="how-we-break-out">How We Break Out</h2>
+
+<h3 id="understanding-the-container-filesystem-trick">Understanding the Container Filesystem Trick</h3>
+
+<p>Here’s the thing about containers—they’re basically an elaborate filesystem illusion. OverlayFS is the magician behind the curtain, making it look like each container has its own complete filesystem when really it’s just:</p>
+
 <ul>
-  <li><strong>Lower layers</strong>: Read-only filesystem layers containing the base container image</li>
-  <li><strong>Upper layer</strong>: A writable layer where modifications are stored</li>
-  <li><strong>Merged view</strong>: The unified filesystem presented to the container</li>
+  <li><strong>Lower layers</strong>: The read-only base image stuff (Ubuntu, Alpine, whatever)</li>
+  <li><strong>Upper layer</strong>: The writable scratch space where your changes go</li>
+  <li><strong>Merged view</strong>: The magic trick that makes it all look like one filesystem</li>
 </ul>
 
-<p>When a file from a lower layer needs to be modified, OverlayFS performs a “copy-up” operation, copying the file to the upper layer before applying modifications.</p>
+<p>The key insight? When you modify a file from the base image, OverlayFS has to “copy-up” that file from the read-only layer to the writable layer. And that copy-up process? That’s where we strike.</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -266,18 +283,20 @@ graph TD
 └─────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="exploitation-technique">Exploitation Technique</h3>
+<h3 id="how-we-plant-our-trojan-horse">How We Plant Our Trojan Horse</h3>
 
-<p>The exploit leverages eBPF’s ability to attach to kernel functions that handle OverlayFS operations. By intercepting these calls, an attacker can:</p>
+<p>Our strategy is to intercept OverlayFS operations and inject malicious content during file modifications:</p>
 
 <ol>
-  <li><strong>Hook copy-up operations</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">ovl_copy_up_one()</code></li>
-  <li><strong>Identify target files</strong>: Filter for specific files of interest (e.g., binaries)</li>
-  <li><strong>Modify file attributes</strong>: Set the set-uid bit during the copy-up process</li>
-  <li><strong>Inject malicious content</strong>: Alter file contents to include backdoors or exploits</li>
+  <li><strong>Hook the Copy Operations</strong>: We attach to functions like <a href="https://elixir.bootlin.com/linux/latest/source/fs/overlayfs/copy_up.c"><code class="language-plaintext highlighter-rouge">ovl_copy_up_one()</code></a> that handle file copying from lower to upper layers</li>
+  <li><strong>Pick Our Targets</strong>: We filter for specific files we want to trojanize (like system binaries or scripts)</li>
+  <li><strong>Modify File Permissions</strong>: We set the setuid bit or other dangerous permissions during the copy process</li>
+  <li><strong>Inject Our Payload</strong>: We alter file contents to include backdoors, reverse shells, or other malicious code</li>
 </ol>
 
-<h3 id="comprehensive-poc">Comprehensive POC</h3>
+<p>The beauty is that this happens during legitimate filesystem operations, so it looks like normal system behavior.</p>
+
+<h3 id="building-our-overlayfs-trojan">Building Our OverlayFS Trojan</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -1174,32 +1193,55 @@ done</span>
 
 <p>The ability to silently modify files during copy-up operations creates a particularly concerning scenario for cloud environments and managed Kubernetes services where multiple customers share the same infrastructure.</p>
 
-<p><strong>Attacker hat on</strong></p>
+<h2 id="how-theyll-try-to-catch-us">How They’ll Try to Catch Us</h2>
+
+<p>The container security teams will try to stop our OverlayFS manipulation with these defenses:</p>
 
 <ol>
-  <li>Identify a container using OverlayFS (most Docker/Kubernetes environments)</li>
-  <li>Develop an eBPF program that hooks into OverlayFS copy-up functions</li>
-  <li>Load the malicious BPF program with appropriate privileges</li>
-  <li>Trigger file modifications within the container to initiate copy-up operations</li>
-  <li>The eBPF program intercepts the operation and modifies the file, adding set-uid bits</li>
-  <li>Execute the modified binary to escalate privileges</li>
-  <li>Use elevated privileges to escape container isolation</li>
+  <li><strong>Strip eBPF capabilities</strong> from container environments completely</li>
+  <li><strong>Deploy BPF LSM policies</strong> to restrict who can load eBPF programs</li>
+  <li><strong>Use read-only containers</strong> where the filesystem can’t be modified</li>
+  <li><strong>Monitor for suspicious binaries</strong> with unexpected set-uid bits in container layers</li>
+  <li><strong>Implement file integrity monitoring</strong> for critical container files</li>
+  <li><strong>Switch storage drivers</strong> away from OverlayFS if they can’t mitigate the risks</li>
 </ol>
 
-<p><strong>Defender hat on</strong></p>
+<p>But here’s the dirty secret—most production environments can’t function without writable containers, and OverlayFS is everywhere.</p>
+
+<h2 id="our-container-escape-playbook">Our Container Escape Playbook</h2>
+
+<p>Here’s how we turn containers into stepping stones:</p>
 
 <ol>
-  <li>Remove CAP_BPF from container environments</li>
-  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
-  <li>Use read-only containers where possible</li>
-  <li>Monitor for unexpected set-uid binaries in container layers</li>
-  <li>Implement file integrity monitoring for critical container files</li>
-  <li>Consider alternative container storage drivers if OverlayFS risks cannot be mitigated</li>
+  <li><strong>Scout the target</strong> - Identify containers using OverlayFS (basically all Docker/Kubernetes environments)</li>
+  <li><strong>Craft our trojan</strong> - Develop eBPF programs that hook into OverlayFS copy-up functions</li>
+  <li><strong>Get our hooks loaded</strong> - Load the malicious BPF program with appropriate privileges</li>
+  <li><strong>Trigger the magic</strong> - Modify files within the container to initiate copy-up operations</li>
+  <li><strong>Inject our payload</strong> - Let our eBPF program intercept and modify files, adding set-uid bits</li>
+  <li><strong>Execute and escalate</strong> - Run the modified binary to escalate privileges</li>
+  <li><strong>Break out</strong> - Use elevated privileges to escape container isolation completely</li>
 </ol>
 
-<p><strong>Conclusion</strong></p>
+<h2 id="their-defense-playbook">Their Defense Playbook</h2>
 
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to intercept and modify filesystem operations through eBPF provides attackers with powerful primitives to subvert container isolation. This technique highlights the importance of treating eBPF capabilities as privileged operations that should be tightly controlled, especially in multi-tenant environments.</p>
+<p>The blue team will try to lock us down with:</p>
+
+<ol>
+  <li><strong>Capability stripping</strong> - Remove <a href="https://man7.org/linux/man-pages/man7/capabilities.7.html"><code class="language-plaintext highlighter-rouge">CAP_BPF</code></a> from container environments</li>
+  <li><strong>BPF access controls</strong> - Implement BPF LSM policies to restrict eBPF program loading</li>
+  <li><strong>Read-only filesystems</strong> - Use immutable containers where possible</li>
+  <li><strong>Binary monitoring</strong> - Watch for unexpected set-uid binaries in container layers</li>
+  <li><strong>File integrity checks</strong> - Monitor critical container files for unauthorized changes</li>
+  <li><strong>Storage driver alternatives</strong> - Consider moving away from OverlayFS entirely</li>
+</ol>
+
+<h2 id="why-container-security-just-got-harder">Why Container Security Just Got Harder</h2>
+
+<p>This isn’t just another container escape—this is a fundamental attack on the filesystem layer that containers depend on. When you can manipulate the copy-up process itself, you’re not just breaking out of one container—you’re potentially compromising the entire container host.</p>
+
+<p>The beautiful part is that this happens at the kernel level, below where most container security tools are watching. Your malicious modifications look like legitimate filesystem operations, and the container runtime has no idea what’s really happening.</p>
+
+<p>Welcome to the world where containers become trojan horses, and eBPF is the key to the kingdom.</p>
 
                     </div>
                 </article>

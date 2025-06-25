@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>Chapter 11: IRQ Affinity Chaos | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,21 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>Chapter 11: IRQ Affinity Chaos | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="The Diabolical eBPF Field Manual" />
+<meta property="og:title" content="Chapter 11: IRQ Affinity Chaos" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-11-irq-affinity-chaos" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-11-irq-affinity-chaos" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
-<meta property="og:type" content="website" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2025-02-11T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="The Diabolical eBPF Field Manual" />
+<meta property="twitter:title" content="Chapter 11: IRQ Affinity Chaos" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","author":{"@type":"Person","name":"Diabolical eBPF"},"description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"The Diabolical eBPF Field Manual","name":"Diabolical eBPF: Linux Red Team Field Manual","url":"https://mbhatt1.github.io/dBPF/"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-11T00:00:00+00:00","datePublished":"2025-02-11T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 11: IRQ Affinity Chaos","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-11-irq-affinity-chaos"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-11-irq-affinity-chaos"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -169,87 +170,109 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">The Diabolical eBPF Field Manual</h1>
+                        <h1 class="post-title">Chapter 11: IRQ Affinity Chaos</h1>
+                        
+                        <time class="post-date" datetime="2025-02-11T00:00:00+00:00">
+                            February 11, 2025
+                        </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h2 id="ebpf-is-all-you-need">eBPF is All You Need</h2>
+                        <h1 id="chapter-11-irq-affinity-chaos">Chapter 11: IRQ Affinity Chaos</h1>
+<h2 id="weaponizing-interrupt-handling-for-system-disruption">Weaponizing Interrupt Handling for System Disruption</h2>
 
-<blockquote>
-  <p>“When they gave us eBPF, they handed us the keys to the kingdom. Now we’re redecorating.”</p>
-</blockquote>
+<p><strong>February 11th, 2025 - Chaos at the Hardware Level</strong></p>
 
-<p>Welcome to the dark side of kernel programming. This field manual documents techniques that transform eBPF—a “safe” kernel programming interface—into a powerful arsenal for breaking isolation, bypassing security controls, and maintaining persistent access to systems that were never meant to be compromised.</p>
+<p>After making files invisible yesterday, I was feeling like I had mastered the art of manipulation at every level of the system. But there was one frontier I hadn’t explored yet—the hardware interrupt level. This is where the kernel interfaces directly with hardware, handling everything from network packets to disk I/O to timer events.</p>
 
-<p>Each technique in this collection demonstrates how a single misconfiguration can turn eBPF from a monitoring tool into a perfect attack primitive.</p>
+<p>What if I could weaponize interrupt handling itself? What if I could create chaos at the most fundamental level of system operation?</p>
 
-<h2 id="table-of-contents">Table of Contents</h2>
+<p>Today I learned to turn the kernel’s interrupt system into my personal weapon of mass disruption.</p>
 
+<h2 id="the-hardware-interface">The Hardware Interface</h2>
+
+<p>I spent the morning studying interrupt handling—the kernel’s direct interface with hardware. The IRQ (Interrupt Request) system is designed to:</p>
 <ul>
-  <li>
-    <p><a href="/dBPF/chapter-0-field-manual-preface.html">Preface</a> - January 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-mirror-controls.html">The Mirror Controls</a> - January 31, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-overlayfs-trojan-horse.html">The OverlayFS Trojan Horse</a> - February 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-fuse-audit-black-hole.html">The FUSE Audit Black-Hole</a> - February 02, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-phantom-syscall.html">The Phantom Syscall</a> - February 03, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-ghost-nic.html">The Ghost NIC</a> - February 04, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/slipping-the-cgroup-leash.html">Slipping the Cgroup Leash</a> - February 05, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/silencing-selinux.html">Silencing SELinux</a> - February 06, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/device-cgroup-houdini.html">Device‑cgroup Houdini</a> - February 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/keyring-heist.html">Keyring Heist</a> - February 08, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/pid-namespace-doppelg-nger.html">PID Namespace Doppelgänger</a> - February 09, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/inode-cloak.html">Inode Cloak</a> - February 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/irq-affinity-chaos.html">IRQ Affinity Chaos</a> - February 11, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-signed-driver-swap.html">eBPF Signed‑Driver Swap</a> - March 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/powercap-override.html">Powercap Override</a> - March 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/sched-fifo-impersonator.html">SCHED_FIFO Impersonator</a> - March 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/netns-vlan-ghost.html">NetNS VLAN Ghost</a> - April 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/seccomp-tid-hop.html">Seccomp TID Hop</a> - April 20, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/acpi-wsmi-ping.html">ACPI WSMI Ping</a> - May 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-token-bypass.html">EBPF Token Bypass</a> - May 09, 2025</p>
-  </li>
+  <li><strong>Handle hardware events</strong> like network packets, disk operations, and timer ticks</li>
+  <li><strong>Distribute interrupts</strong> across CPU cores for optimal performance</li>
+  <li><strong>Maintain system responsiveness</strong> by ensuring critical interrupts are processed quickly</li>
+  <li><strong>Provide hardware abstraction</strong> for higher-level kernel subsystems</li>
 </ul>
 
-<p><em>Remember: With great power comes great responsibility. These techniques are documented for defensive awareness.</em></p>
+<p>It’s like having a sophisticated traffic control system that routes urgent messages from hardware to the appropriate kernel handlers. When this system works well, everything runs smoothly. When it doesn’t…</p>
+
+<h2 id="my-chaos-strategy">My Chaos Strategy</h2>
+
+<p>The idea was diabolical in its simplicity. Instead of trying to break the interrupt system, I would make it work against itself.</p>
+
+<p>My plan:</p>
+<ol>
+  <li><strong>Hook interrupt affinity functions</strong> - Intercept the mechanisms that assign interrupts to CPU cores</li>
+  <li><strong>Create performance chaos</strong> - Deliberately misroute interrupts to cause system instability</li>
+  <li><strong>Target specific hardware</strong> - Focus disruption on critical system components</li>
+  <li><strong>Maintain plausible deniability</strong> - Make the chaos look like normal system load or hardware issues</li>
+</ol>
+
+<h2 id="the-night-i-unleashed-chaos">The Night I Unleashed Chaos</h2>
+
+<p>I’ll never forget the first time I pulled it off. I had set up a high-performance server with carefully tuned interrupt affinity settings—each type of interrupt was assigned to specific CPU cores for optimal performance.</p>
+
+<p>I loaded my eBPF program to hook into the interrupt affinity management functions. Then I started systematically misrouting interrupts—sending network interrupts to CPU cores that were busy with other tasks, clustering all interrupts on a single core, creating interrupt storms.</p>
+
+<p>The results were spectacular. System performance degraded dramatically, network latency spiked, disk I/O became erratic, and the entire system became unstable. But from the outside, it looked like normal system load or hardware problems.</p>
+
+<h2 id="the-perfect-sabotage">The Perfect Sabotage</h2>
+
+<p>The beautiful part was that the chaos looked completely natural. System administrators would see performance problems and assume it was due to high load, hardware issues, or configuration problems. The interrupt affinity settings would show normal values, but the actual interrupt routing would be completely chaotic.</p>
+
+<p>I had created the perfect sabotage—system disruption that looked like natural operational problems.</p>
+
+<h2 id="the-techniques-i-mastered">The Techniques I Mastered</h2>
+
+<p>Over the following days, I perfected several interrupt chaos techniques:</p>
+
+<p><strong>Performance Assassination</strong>: Deliberately degrading system performance through interrupt misrouting
+<strong>Network Disruption</strong>: Targeting network interrupts to cause connectivity issues
+<strong>Storage Chaos</strong>: Disrupting disk I/O interrupts to cause filesystem problems
+<strong>CPU Starvation</strong>: Clustering interrupts to starve specific CPU cores
+<strong>Timing Attacks</strong>: Using interrupt manipulation to create side-channel vulnerabilities</p>
+
+<p>Each technique exploited the fundamental assumption that interrupt handling is reliable and well-managed.</p>
+
+<h2 id="the-broader-implications">The Broader Implications</h2>
+
+<p>This wasn’t just about causing performance problems—I had discovered that the fundamental assumptions of hardware reliability could be violated. When you can weaponize interrupt handling:</p>
+<ul>
+  <li><strong>Cause denial of service</strong> through performance degradation</li>
+  <li><strong>Create timing side-channels</strong> for information extraction</li>
+  <li><strong>Disrupt critical services</strong> by targeting specific hardware subsystems</li>
+  <li><strong>Mask other attacks</strong> by creating system instability that hides malicious activity</li>
+</ul>
+
+<p>I had broken the basic assumption that hardware interfaces are reliable and predictable.</p>
+
+<h2 id="what-theyll-try-to-do">What They’ll Try to Do</h2>
+
+<p>I know the security teams will try to stop this:</p>
+<ul>
+  <li>Monitor for eBPF programs attached to interrupt handling functions</li>
+  <li>Implement external performance monitoring that doesn’t rely on kernel reporting</li>
+  <li>Use hardware-based interrupt monitoring</li>
+  <li>Deploy multiple independent system health tracking systems</li>
+</ul>
+
+<p>But I had discovered something fundamental: when you can manipulate interrupt handling at the kernel level, traditional system reliability becomes meaningless.</p>
+
+<h2 id="the-chaos-master">The Chaos Master</h2>
+
+<p>I had become a master of chaos, capable of turning the kernel’s most fundamental hardware interface into a weapon of mass disruption. The interrupt system, supposedly providing reliable hardware abstraction, had become my personal tool for creating havoc.</p>
+
+<p>The chaos was unleashed, and nobody could tell it wasn’t natural.</p>
+
+<hr />
+
+<p><em>“I had created the perfect sabotage—system disruption that looked like natural operational problems.”</em></p>
 
                     </div>
                 </article>

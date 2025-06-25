@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>Chapter 7: Device Cgroup Houdini | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,21 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>Chapter 7: Device Cgroup Houdini | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="The Diabolical eBPF Field Manual" />
+<meta property="og:title" content="Chapter 7: Device Cgroup Houdini" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-7-device-cgroup-houdini" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-7-device-cgroup-houdini" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
-<meta property="og:type" content="website" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2025-02-07T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="The Diabolical eBPF Field Manual" />
+<meta property="twitter:title" content="Chapter 7: Device Cgroup Houdini" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","author":{"@type":"Person","name":"Diabolical eBPF"},"description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"The Diabolical eBPF Field Manual","name":"Diabolical eBPF: Linux Red Team Field Manual","url":"https://mbhatt1.github.io/dBPF/"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-07T00:00:00+00:00","datePublished":"2025-02-07T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 7: Device Cgroup Houdini","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-7-device-cgroup-houdini"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-7-device-cgroup-houdini"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -169,87 +170,111 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">The Diabolical eBPF Field Manual</h1>
+                        <h1 class="post-title">Chapter 7: Device Cgroup Houdini</h1>
+                        
+                        <time class="post-date" datetime="2025-02-07T00:00:00+00:00">
+                            February 07, 2025
+                        </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h2 id="ebpf-is-all-you-need">eBPF is All You Need</h2>
+                        <h1 id="chapter-7-device-cgroup-houdini">Chapter 7: Device Cgroup Houdini</h1>
+<h2 id="the-ultimate-container-escape">The Ultimate Container Escape</h2>
 
-<blockquote>
-  <p>“When they gave us eBPF, they handed us the keys to the kingdom. Now we’re redecorating.”</p>
-</blockquote>
+<p><strong>February 7th, 2025 - The Ultimate Escape Artist</strong></p>
 
-<p>Welcome to the dark side of kernel programming. This field manual documents techniques that transform eBPF—a “safe” kernel programming interface—into a powerful arsenal for breaking isolation, bypassing security controls, and maintaining persistent access to systems that were never meant to be compromised.</p>
+<p>After silencing SELinux yesterday, I felt invincible. But there was still one challenge that had been nagging at me: device access restrictions. Containers are supposed to be completely isolated from the host’s hardware—no direct device access, no way to touch the underlying system.</p>
 
-<p>Each technique in this collection demonstrates how a single misconfiguration can turn eBPF from a monitoring tool into a perfect attack primitive.</p>
+<p>But what if I told you that device cgroups, the very mechanism that enforces this isolation, could become your escape hatch?</p>
 
-<h2 id="table-of-contents">Table of Contents</h2>
+<p>Today I became Houdini. I learned to slip out of the tightest device restrictions while making it look like I never left my container cell.</p>
 
+<h2 id="the-hardware-prison">The Hardware Prison</h2>
+
+<p>I spent the morning studying device cgroups—the kernel’s hardware bouncer. They’re supposed to:</p>
 <ul>
-  <li>
-    <p><a href="/dBPF/chapter-0-field-manual-preface.html">Preface</a> - January 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-mirror-controls.html">The Mirror Controls</a> - January 31, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-overlayfs-trojan-horse.html">The OverlayFS Trojan Horse</a> - February 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-fuse-audit-black-hole.html">The FUSE Audit Black-Hole</a> - February 02, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-phantom-syscall.html">The Phantom Syscall</a> - February 03, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-ghost-nic.html">The Ghost NIC</a> - February 04, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/slipping-the-cgroup-leash.html">Slipping the Cgroup Leash</a> - February 05, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/silencing-selinux.html">Silencing SELinux</a> - February 06, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/device-cgroup-houdini.html">Device‑cgroup Houdini</a> - February 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/keyring-heist.html">Keyring Heist</a> - February 08, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/pid-namespace-doppelg-nger.html">PID Namespace Doppelgänger</a> - February 09, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/inode-cloak.html">Inode Cloak</a> - February 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/irq-affinity-chaos.html">IRQ Affinity Chaos</a> - February 11, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-signed-driver-swap.html">eBPF Signed‑Driver Swap</a> - March 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/powercap-override.html">Powercap Override</a> - March 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/sched-fifo-impersonator.html">SCHED_FIFO Impersonator</a> - March 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/netns-vlan-ghost.html">NetNS VLAN Ghost</a> - April 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/seccomp-tid-hop.html">Seccomp TID Hop</a> - April 20, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/acpi-wsmi-ping.html">ACPI WSMI Ping</a> - May 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-token-bypass.html">EBPF Token Bypass</a> - May 09, 2025</p>
-  </li>
+  <li><strong>Control device access</strong> by maintaining allow/deny lists for every device</li>
+  <li><strong>Enforce container isolation</strong> by preventing containers from touching host hardware</li>
+  <li><strong>Protect the host</strong> from malicious containers trying to access sensitive devices</li>
+  <li><strong>Maintain security boundaries</strong> between different container workloads</li>
 </ul>
 
-<p><em>Remember: With great power comes great responsibility. These techniques are documented for defensive awareness.</em></p>
+<p>It’s like having a prison guard who controls which tools each prisoner can access. Containers get a very limited set of “safe” devices, while the dangerous stuff stays locked away.</p>
+
+<p>But what if I could convince the guard that I’m actually a trustworthy maintenance worker who needs access to everything?</p>
+
+<h2 id="my-houdini-strategy">My Houdini Strategy</h2>
+
+<p>The idea was beautiful in its audacity. Instead of trying to break the device restrictions, I would make the device cgroup system think I was authorized to access whatever I wanted.</p>
+
+<p>My plan:</p>
+<ol>
+  <li><strong>Hook device permission checks</strong> - Intercept the functions that decide whether a process can access a device</li>
+  <li><strong>Forge authorization</strong> - Make my container processes appear to have legitimate device access rights</li>
+  <li><strong>Maintain the illusion</strong> - Keep device restrictions working normally for other containers</li>
+  <li><strong>Access host hardware</strong> - Use my newfound device access to escape container isolation completely</li>
+</ol>
+
+<h2 id="the-night-i-became-houdini">The Night I Became Houdini</h2>
+
+<p>I’ll never forget the first time I pulled off the escape. I had set up a container with strict device restrictions—no access to anything except the bare minimum needed to run.</p>
+
+<p>I loaded my eBPF program to hook into the device cgroup permission checks. Then I tried to access <code class="language-plaintext highlighter-rouge">/dev/mem</code>—direct access to physical memory, something that should have been absolutely forbidden.</p>
+
+<p>It worked. I was reading physical memory from inside a container. I had escaped the device restrictions without triggering any alarms.</p>
+
+<h2 id="the-perfect-escape">The Perfect Escape</h2>
+
+<p>The beautiful part was that the container runtime still thought I was safely locked up. The device cgroup accounting showed normal, restricted access. The security monitoring showed proper isolation. But I was actually accessing host hardware directly.</p>
+
+<p>I had become the ultimate escape artist—breaking out of device restrictions while making it look like I never left my cell.</p>
+
+<h2 id="the-techniques-i-mastered">The Techniques I Mastered</h2>
+
+<p>Over the following days, I perfected several device escape techniques:</p>
+
+<p><strong>Memory Access</strong>: Direct access to physical memory through <code class="language-plaintext highlighter-rouge">/dev/mem</code>
+<strong>Disk Bypass</strong>: Raw disk access bypassing filesystem isolation
+<strong>Network Hardware</strong>: Direct access to network interfaces
+<strong>GPU Hijacking</strong>: Accessing graphics hardware for cryptocurrency mining
+<strong>USB Manipulation</strong>: Controlling USB devices from within containers</p>
+
+<p>Each technique used the same principle: make the device cgroup system think I was authorized while maintaining the appearance of proper isolation.</p>
+
+<h2 id="the-broader-implications">The Broader Implications</h2>
+
+<p>This wasn’t just about accessing devices—I had discovered a fundamental flaw in container isolation. When you can bypass device restrictions, you can:</p>
+<ul>
+  <li><strong>Access host filesystems</strong> directly through raw disk access</li>
+  <li><strong>Read host memory</strong> containing sensitive data from other containers</li>
+  <li><strong>Control host hardware</strong> for denial of service attacks</li>
+  <li><strong>Establish persistence</strong> by modifying firmware or hardware configurations</li>
+</ul>
+
+<p>I had broken the fundamental assumption that containers provide hardware isolation.</p>
+
+<h2 id="what-theyll-try-to-do">What They’ll Try to Do</h2>
+
+<p>I know the security teams will try to stop this:</p>
+<ul>
+  <li>Monitor for eBPF programs attached to device cgroup functions</li>
+  <li>Implement hardware-level access controls that don’t rely on software</li>
+  <li>Use external device monitoring that tracks actual hardware access</li>
+  <li>Deploy multiple independent device restriction systems</li>
+</ul>
+
+<p>But I had discovered something profound: when you can forge device authorization, traditional container isolation becomes meaningless.</p>
+
+<h2 id="the-ultimate-escape">The Ultimate Escape</h2>
+
+<p>I had become Houdini—the ultimate escape artist who could slip out of any device restriction while making it look like I never left my container cell.</p>
+
+<p>The hardware prison had been opened, and the guards didn’t even know the door was unlocked.</p>
+
+<hr />
+
+<p><em>“I had become the ultimate escape artist—breaking out of device restrictions while making it look like I never left my cell.”</em></p>
 
                     </div>
                 </article>

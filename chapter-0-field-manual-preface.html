@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chapter 0: Field Manual Preface | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>Preface | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,22 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Chapter 0: Field Manual Preface | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>Preface | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="Chapter 0: Field Manual Preface" />
+<meta property="og:title" content="Preface" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
-<meta name="description" content="Chapter 0: Field Manual Preface The Dark Side of BPF: A Security Professional’s Field Manual" />
-<meta property="og:description" content="Chapter 0: Field Manual Preface The Dark Side of BPF: A Security Professional’s Field Manual" />
+<meta name="description" content="Chapter 0: The Dark Side of BPF" />
+<meta property="og:description" content="Chapter 0: The Dark Side of BPF" />
 <link rel="canonical" href="https://mbhatt1.github.io/dBPF/chapter-0-field-manual-preface.html" />
 <meta property="og:url" content="https://mbhatt1.github.io/dBPF/chapter-0-field-manual-preface.html" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
 <meta property="og:type" content="article" />
 <meta property="article:published_time" content="2025-01-01T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Chapter 0: Field Manual Preface" />
+<meta property="twitter:title" content="Preface" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-01-01T00:00:00+00:00","datePublished":"2025-01-01T00:00:00+00:00","description":"Chapter 0: Field Manual Preface The Dark Side of BPF: A Security Professional’s Field Manual","headline":"Chapter 0: Field Manual Preface","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/chapter-0-field-manual-preface.html"},"url":"https://mbhatt1.github.io/dBPF/chapter-0-field-manual-preface.html"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-01-01T00:00:00+00:00","datePublished":"2025-01-01T00:00:00+00:00","description":"Chapter 0: The Dark Side of BPF","headline":"Preface","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/chapter-0-field-manual-preface.html"},"url":"https://mbhatt1.github.io/dBPF/chapter-0-field-manual-preface.html"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -54,7 +54,7 @@
                     
                     
                     <a href="/dBPF/chapter-0-field-manual-preface.html" class="active">
-                        Chapter 0: Field Manual Preface
+                        Preface
                     </a>
                     
                 
@@ -170,7 +170,7 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">Chapter 0: Field Manual Preface</h1>
+                        <h1 class="post-title">Preface</h1>
                         
                         <time class="post-date" datetime="2025-01-01T00:00:00+00:00">
                             January 01, 2025
@@ -179,98 +179,93 @@
                     </header>
 
                     <div class="post-content">
-                        <h1 id="chapter-0-field-manual-preface">Chapter 0: Field Manual Preface</h1>
-<h2 id="the-dark-side-of-bpf-a-security-professionals-field-manual">The Dark Side of BPF: A Security Professional’s Field Manual</h2>
+                        <h1 id="chapter-0-the-dark-side-of-bpf">Chapter 0: The Dark Side of BPF</h1>
 
-<p><strong>Disclaimer and Intent</strong></p>
+<p><strong>Hey there, fellow kernel spelunker.</strong></p>
 
-<p>This field manual documents the inherent capabilities of eBPF (extended Berkeley Packet Filter) as implemented in the Linux kernel. Every technique, method, and proof-of-concept demonstrated within these pages represents <strong>intended functionality</strong> of the eBPF subsystem, not vulnerabilities or bugs.</p>
+<p>Look, we’re gonna level with you right from the start. This isn’t your typical security research. There are no CVEs here, no bug bounties waiting at the end of the rainbow. What you’re about to dive into is something far more interesting—and arguably more terrifying.</p>
 
-<h3 id="what-this-manual-is">What This Manual Is</h3>
+<h3 id="what-youre-really-looking-at">What You’re Really Looking At</h3>
 
-<p>This is a <strong>field manual</strong> for security professionals, red team operators, and researchers who need to understand the full spectrum of eBPF capabilities. Like any powerful technology, eBPF can be wielded for both defensive and offensive purposes. This manual explores the latter—not to enable malicious activity, but to ensure defenders understand what they’re defending against.</p>
+<p>This field manual documents what happens when you take eBPF—this beautiful, elegant piece of kernel engineering—and ask the question every hacker worth their salt eventually asks: <em>“But what if I use this for evil?”</em></p>
 
-<h3 id="what-this-manual-is-not">What This Manual Is Not</h3>
+<p>Spoiler alert: The answer is both fascinating and deeply unsettling.</p>
 
-<p><strong>This manual does not document vulnerabilities.</strong> Every technique presented here:</p>
+<p>Every technique in here? <strong>Working as intended.</strong> Every “exploit”? <strong>Feature, not bug.</strong> Every bypass? <strong>Exactly what the kernel developers designed eBPF to do.</strong></p>
 
-<ul>
-  <li>Uses eBPF exactly as designed by kernel developers</li>
-  <li>Leverages documented and intended kernel interfaces</li>
-  <li>Operates within the bounds of eBPF’s security model</li>
-  <li>Requires appropriate privileges (typically CAP_BPF or CAP_SYS_ADMIN)</li>
-  <li>Functions through legitimate kernel APIs and helper functions</li>
-</ul>
+<p>That’s what makes this so damn interesting.</p>
 
-<h3 id="the-nature-of-ebpf">The Nature of eBPF</h3>
+<h3 id="the-uncomfortable-truth">The Uncomfortable Truth</h3>
 
-<p>eBPF is fundamentally a <strong>kernel programming interface</strong>. When you load an eBPF program, you are literally injecting code into the kernel that runs with kernel privileges. This is not a side effect or an unintended consequence—it is the primary design goal of eBPF.</p>
+<p>Here’s the thing that keeps us up at night: eBPF isn’t broken. It’s <em>perfect</em>. It does exactly what it says on the tin—gives you kernel-level programmability with surgical precision. The problem (if you want to call it that) is that “kernel-level programmability” is just a fancy way of saying “god mode for your operating system.”</p>
 
-<p>The techniques in this manual demonstrate what happens when this legitimate, powerful capability is used with adversarial intent. They showcase the inherent tension between functionality and security that exists in any sufficiently powerful system.</p>
+<p>When you load an eBPF program, you’re not exploiting anything. You’re literally injecting code into the kernel that runs with ring-0 privileges. The kernel <em>wants</em> you to do this. It’s the whole point.</p>
 
-<h3 id="use-as-intended">Use as Intended</h3>
+<h3 id="why-this-matters-and-why-you-should-care">Why This Matters (And Why You Should Care)</h3>
 
-<p>Every “exploit” in this manual is actually eBPF working <strong>exactly as intended</strong>:</p>
+<p>We’ve spent years in the trenches—red teams, blue teams, that weird purple space where you’re not sure whose side you’re on anymore. And we can tell you this: most defenders have no idea what they’re up against when it comes to eBPF.</p>
 
-<ul>
-  <li><strong>Hooking kernel functions</strong>: This is the core purpose of kprobes and tracepoints</li>
-  <li><strong>Modifying kernel behavior</strong>: eBPF programs are designed to influence kernel decisions</li>
-  <li><strong>Accessing kernel data structures</strong>: Helper functions exist specifically for this purpose</li>
-  <li><strong>Bypassing user-space restrictions</strong>: Kernel-level code naturally operates above user-space constraints</li>
-</ul>
+<p>They see it as this cool observability tool, maybe a fancy way to do network filtering. They don’t see it as what it really is: <strong>the most powerful userland-to-kernel interface ever created.</strong></p>
 
-<p>The “dark side” emerges not from bugs or oversights, but from the fundamental nature of kernel-level programmability.</p>
+<h3 id="the-hackers-perspective">The Hacker’s Perspective</h3>
 
-<h3 id="the-security-paradox">The Security Paradox</h3>
+<p>From a hacker’s point of view, eBPF is like finding out your target left the front door unlocked, the alarm system disabled, and a note saying “please come in and make yourself at home.” Except it’s not a mistake—it’s by design.</p>
 
-<p>eBPF presents a fascinating security paradox:</p>
-
-<ol>
-  <li><strong>By design</strong>, eBPF provides unprecedented observability and control over kernel behavior</li>
-  <li><strong>By necessity</strong>, this requires extensive privileges and kernel access</li>
-  <li><strong>By consequence</strong>, these same capabilities can be used to subvert security mechanisms</li>
-</ol>
-
-<p>This is not a flaw—it’s an inherent characteristic of any system that provides low-level programmability. The techniques in this manual exist because eBPF is working correctly, not because it’s broken.</p>
-
-<h3 id="responsible-use">Responsible Use</h3>
-
-<p>This manual is intended for:</p>
+<p>Every security boundary you’ve spent years learning to respect? eBPF can step right over them. Not by breaking them, but by operating at a level where they simply don’t apply.</p>
 
 <ul>
-  <li><strong>Security researchers</strong> studying kernel security models</li>
-  <li><strong>Red team operators</strong> conducting authorized penetration testing</li>
-  <li><strong>Blue team defenders</strong> understanding attack techniques</li>
-  <li><strong>System administrators</strong> hardening eBPF deployments</li>
-  <li><strong>Kernel developers</strong> considering security implications of new features</li>
+  <li>Want to bypass seccomp? eBPF runs before seccomp even knows what hit it.</li>
+  <li>Need to evade audit logs? eBPF can intercept and modify them in real-time.</li>
+  <li>Trying to hide from process monitoring? eBPF can make you invisible to the very tools designed to watch for you.</li>
 </ul>
 
-<h3 id="the-defenders-advantage">The Defender’s Advantage</h3>
+<p>And here’s the kicker: <strong>none of this is a vulnerability</strong>. It’s all working exactly as designed.</p>
 
-<p>Understanding these techniques provides defenders with crucial insights:</p>
+<h3 id="the-real-game">The Real Game</h3>
 
-<ul>
-  <li><strong>Detection strategies</strong>: Knowing how attacks work enables better monitoring</li>
-  <li><strong>Hardening approaches</strong>: Understanding capabilities informs restriction policies</li>
-  <li><strong>Risk assessment</strong>: Realistic evaluation of eBPF deployment security</li>
-  <li><strong>Incident response</strong>: Recognizing eBPF-based attacks in the wild</li>
-</ul>
+<p>This manual isn’t about finding bugs. It’s about understanding power. Real, fundamental, kernel-level power. The kind that makes traditional privilege escalation look quaint.</p>
 
-<h3 id="a-note-on-ethics">A Note on Ethics</h3>
+<p>When you understand these techniques, you’re not just learning new attack vectors. You’re learning to think like the kernel itself. You’re seeing the matrix, if you’ll forgive the reference.</p>
 
-<p>The techniques documented here should only be used in authorized environments with explicit permission. The goal is education and defense, not exploitation. As with any powerful tool, the responsibility lies with the wielder, not the tool itself.</p>
+<h3 id="a-word-of-warning-because-we-have-to">A Word of Warning (Because We Have To)</h3>
 
-<h3 id="moving-forward">Moving Forward</h3>
+<p>Look, we’re not your parents, and we’re not going to lecture you about responsible disclosure or ethical hacking. You’re smart enough to know that with great power comes great responsibility, and all that Spider-Man nonsense.</p>
 
-<p>As you progress through this field manual, remember that you’re not learning about broken software—you’re learning about the intended capabilities of one of the most powerful kernel technologies ever developed. The “dark side” exists because the “light side” is so incredibly bright.</p>
+<p>But we will say this: these techniques are <em>powerful</em>. Like, “accidentally-brick-your-test-lab” powerful. Like, “explain-to-your-boss-why-the-production-server-is-on-fire” powerful.</p>
 
-<p>eBPF is not vulnerable. eBPF is powerful. This manual teaches you to understand the difference.</p>
+<p>Use them wisely. Use them legally. Use them with permission. And for the love of all that is holy, use them in a lab first.</p>
+
+<h3 id="the-journey-ahead">The Journey Ahead</h3>
+
+<p>This isn’t just a collection of techniques—it’s a story. The story of what happens when you discover that the Linux kernel has become programmable, and what that really means for security.</p>
+
+<p><strong>Act I: The Discovery</strong> (Chapters 1-6)
+We start with <strong>The Mirror Controls</strong>—the moment you realize that security controls can be turned into funhouse mirrors. From there, we explore container escapes through <strong>OverlayFS manipulation</strong>, learn to make our actions invisible with <strong>audit evasion</strong>, create <strong>phantom syscalls</strong> that don’t exist, build <strong>ghost network interfaces</strong>, and slip the constraints of <strong>resource limits</strong>.</p>
+
+<p><strong>Act II: The Deep Dive</strong> (Chapters 7-12)
+We silence <strong>SELinux</strong> itself, perform the ultimate <strong>device access escape</strong>, steal secrets from the <strong>kernel keyring</strong>, create <strong>process doppelgängers</strong> across namespaces, make files <strong>invisible to detection</strong>, and weaponize <strong>interrupt handling</strong> for chaos.</p>
+
+<p><strong>Act III: The Advanced Game</strong> (Chapters 13-18)
+We violate the deepest trust with <strong>signed driver swaps</strong>, override <strong>power management</strong> for hardware attacks, hijack <strong>real-time scheduling</strong>, create <strong>network namespace ghosts</strong>, perform <strong>thread identity hops</strong>, communicate directly with <strong>firmware interfaces</strong>, and finally subvert <strong>authentication itself</strong> at the kernel level.</p>
+
+<p><strong>Epilogue: The New Reality</strong>
+We step back and confront the ultimate truth—that in a fully programmable computing stack, everything from security controls to hardware behavior to cryptographic trust to identity itself can be rewritten. This is where you realize that you haven’t just learned attack techniques—you’ve discovered that the fundamental nature of computing has changed.</p>
+
+<p>Each chapter builds on the last, not just in complexity, but in understanding. You’ll start thinking like a traditional attacker and end up understanding that in the age of programmable systems, the very concept of “attack” versus “legitimate functionality” becomes meaningless.</p>
+
+<h3 id="ready-to-go-down-the-rabbit-hole">Ready to Go Down the Rabbit Hole?</h3>
+
+<p>eBPF is not vulnerable. eBPF is not broken. eBPF is not a mistake.</p>
+
+<p>eBPF is <em>perfect</em>. And that’s exactly what makes it so dangerous.</p>
+
+<p>Welcome to the dark side. Try not to get lost.</p>
 
 <hr />
 
-<p><em>“Any sufficiently advanced technology is indistinguishable from magic. Any sufficiently powerful technology can be used for both creation and destruction.”</em></p>
+<p><em>“The best way to learn how something works is to try to break it. The best way to learn how eBPF works is to realize you can’t break it—you can only use it exactly as intended, which is somehow much worse.”</em></p>
 
-<p><strong>Welcome to the Dark Side of BPF.</strong></p>
+<p><strong>Let’s see how deep this rabbit hole goes.</strong></p>
 
                     </div>
                 </article>

@@ -54,7 +54,7 @@
                     
                     
                     <a href="/dBPF/chapter-0-field-manual-preface.html" >
-                        Chapter 0: Field Manual Preface
+                        Preface
                     </a>
                     
                 
@@ -181,9 +181,17 @@
                     <div class="post-content">
                         <h1 id="powercap-override-manipulating-system-power-management">Powercap Override: Manipulating System Power Management</h1>
 
-<p><strong>Wut</strong></p>
+<p><strong>Chapter 13: Act III Begins - Beyond Software, Into Hardware</strong></p>
 
-<p>A technique using eBPF to intercept and manipulate the Linux kernel’s power capping framework, allowing attackers to override power limits, thermal controls, and energy monitoring. This attack can cause denial of service, hardware damage, or enable side-channel attacks by manipulating the power states of critical system components.</p>
+<p>Welcome to Act III—the final act of our story. You’ve mastered software manipulation and system control. Now we’re going beyond the digital realm into the physical world. This is where eBPF becomes not just a software attack tool, but a hardware attack tool.</p>
+
+<p>Act III is about pushing boundaries that most people don’t even know exist. You’re not just attacking software anymore—you’re attacking the physical constraints that keep hardware safe and functional.</p>
+
+<p>Modern systems have all sorts of power management features—CPU frequency scaling, thermal throttling, power capping. They’re designed to keep your hardware from melting, your battery from dying, and your electricity bill from bankrupting you.</p>
+
+<p>But what if we could override all of that? What if we could make the CPU ignore thermal limits, bypass power caps, and push hardware beyond its intended limits? What if we could turn power management from a safety feature into an attack vector?</p>
+
+<p>This is where you learn that eBPF doesn’t just give you control over software—it gives you control over the physical world itself.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -206,22 +214,28 @@ graph TD
     click E "https://www.kernel.org/doc/html/latest/power/index.html" "Power Management Documentation"
 </code></pre>
 
-<p><strong>Why</strong></p>
+<p><strong>Why Hardware Safety Just Became Optional</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation. Modern systems rely on power capping mechanisms like Intel’s RAPL (Running Average Power Limit) to maintain safe operation and prevent thermal damage. By using eBPF to intercept and modify these power management operations, attackers can bypass hardware safety limits, cause denial of service through power throttling, or create side channels for data exfiltration.</p>
-<h2 id="technical-details">Technical Details</h2>
+<p>Here’s what most people don’t think about: your computer is constantly trying not to kill itself. CPU frequency scaling keeps processors from overheating. Power caps prevent systems from drawing too much current. Thermal throttling saves your hardware from literally melting.</p>
 
-<h3 id="power-capping-architecture">Power Capping Architecture</h3>
+<p>But what happens when those safety mechanisms get bypassed? What happens when you can make a CPU run at full speed even when it’s overheating? What happens when you can ignore power limits and draw as much current as you want?</p>
 
-<p>The Linux kernel’s power capping framework provides:</p>
+<p>That’s where power management attacks get scary. We can cause thermal shutdowns by preventing throttling. We can damage hardware by bypassing safety limits. We can create denial of service by forcing systems into thermal protection mode.</p>
+
+<p>The insidious part is that this looks like hardware failure, not an attack. System logs will show thermal events and power issues, but they won’t show that we’re the ones causing them. It’s like being able to sabotage hardware while making it look like natural failure.</p>
+<h2 id="how-we-take-control-of-the-power-grid">How We Take Control of the Power Grid</h2>
+
+<h3 id="understanding-the-power-management-system">Understanding the Power Management System</h3>
+
+<p>The Linux power management system is like having a smart electrical grid for your computer:</p>
 <ul>
-  <li><strong>RAPL (Running Average Power Limit)</strong>: Intel’s technology for monitoring and controlling power consumption</li>
-  <li><strong>Power Zones</strong>: Separate control for CPU, DRAM, GPU, and package power domains</li>
-  <li><strong>Thermal Controls</strong>: Mechanisms to prevent overheating through power limiting</li>
-  <li><strong>Energy Accounting</strong>: Precise measurement of energy consumption by different components</li>
+  <li><strong>RAPL (Running Average Power Limit)</strong>: Intel’s fancy power meter and circuit breaker system</li>
+  <li><strong>Power Zones</strong>: Different electrical districts (CPU, RAM, GPU, whole package) with their own limits</li>
+  <li><strong>Thermal Controls</strong>: Emergency shutdown switches that kick in when things get too hot</li>
+  <li><strong>Energy Accounting</strong>: The power company’s meter that tracks exactly who’s using what</li>
 </ul>
 
-<p>These mechanisms are exposed through kernel interfaces and the sysfs filesystem under <code class="language-plaintext highlighter-rouge">/sys/class/powercap/</code>.</p>
+<p>All of this is exposed through kernel interfaces and files under <a href="https://www.kernel.org/doc/Documentation/power/powercap/powercap.txt"><code class="language-plaintext highlighter-rouge">/sys/class/powercap/</code></a> where we can read and manipulate power settings.</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -307,7 +321,7 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>When eBPF is used to manipulate power management, the architecture is subverted:</p>
+<p>Here’s what happens when we use eBPF to mess with the power management system:</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -403,19 +417,21 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="exploitation-technique">Exploitation Technique</h3>
+<h3 id="how-we-become-the-power-company">How We Become the Power Company</h3>
 
-<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement power management. By intercepting these calls, an attacker can:</p>
+<p>Our strategy is to take control of the system’s power management and make it do our bidding:</p>
 
 <ol>
-  <li><strong>Hook power limit functions</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">rapl_write_power_limit()</code> or <code class="language-plaintext highlighter-rouge">powercap_register_zone()</code></li>
-  <li><strong>Modify power constraints</strong>: Change maximum and minimum power limits for components</li>
-  <li><strong>Bypass thermal throttling</strong>: Prevent the system from throttling under high temperatures</li>
-  <li><strong>Create power side channels</strong>: Manipulate power states to leak information</li>
-  <li><strong>Cause performance degradation</strong>: Artificially limit power to critical components
-    <h3 id="comprehensive-poc">Comprehensive POC</h3>
-  </li>
+  <li><strong>Hook the Power Controllers</strong>: We attach to functions like <a href="https://elixir.bootlin.com/linux/latest/source/drivers/powercap/intel_rapl_common.c"><code class="language-plaintext highlighter-rouge">rapl_write_power_limit()</code></a> that set power limits</li>
+  <li><strong>Rewrite the Power Rules</strong>: We change maximum and minimum power limits for different components</li>
+  <li><strong>Disable Safety Systems</strong>: We prevent the system from throttling when things get too hot</li>
+  <li><strong>Build Power Covert Channels</strong>: We manipulate power states to leak information through power consumption patterns</li>
+  <li><strong>Sabotage Performance</strong>: We artificially limit power to critical components to slow down the system</li>
 </ol>
+
+<p>The scary part is that this looks like hardware failure, not an attack. System logs will show thermal events and power issues, but they won’t show that we’re the ones causing them.</p>
+
+<h3 id="building-our-power-manipulation-tool">Building Our Power Manipulation Tool</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -1591,31 +1607,31 @@ sensors | <span class="nb">grep</span> <span class="nt">-i</span> temp
   </li>
 </ol>
 
-<h3 id="real-world-impact">Real-world Impact</h3>
+<h3 id="why-this-melts-everything">Why This Melts Everything</h3>
 
-<p>In practical environments, this technique could allow an attacker to:</p>
+<p>This powercap override technique is pure hardware destruction:</p>
 <ul>
-  <li><strong>Hardware damage</strong>: Override thermal protections leading to physical damage</li>
-  <li><strong>Denial of service</strong>: Cause system throttling or instability through power manipulation</li>
-  <li><strong>Data exfiltration</strong>: Create power-based side channels to leak sensitive information</li>
-  <li><strong>Energy consumption attacks</strong>: Increase power costs in data centers</li>
-  <li><strong>Reliability degradation</strong>: Cause intermittent failures through thermal stress</li>
+  <li><strong>Hardware assassination</strong>: Override thermal protections and literally fry their fucking hardware</li>
+  <li><strong>Infrastructure chaos</strong>: Cause system throttling or complete instability through power manipulation</li>
+  <li><strong>Power side-channel extraction</strong>: Create power-based covert channels to leak sensitive data through energy patterns</li>
+  <li><strong>Economic warfare</strong>: Spike power costs in data centers and make their electricity bills explode</li>
+  <li><strong>Reliability annihilation</strong>: Cause intermittent failures through thermal stress that drives ops teams insane</li>
 </ul>
 
-<p>The ability to manipulate power management creates particularly concerning scenarios for data centers, cloud environments, and critical infrastructure where system reliability and energy efficiency are essential.</p>
+<p>When you can manipulate power management at the kernel level, you control the physical layer of their infrastructure. Data centers, cloud environments, critical infrastructure - you can literally burn them down from the inside. The beauty is that hardware failures look like normal wear and tear, so your attacks blend into expected operational issues.</p>
 
-<h3 id="detection-methods">Detection Methods</h3>
+<h3 id="how-theyll-try-to-catch-us">How They’ll Try to Catch Us</h3>
 
-<p>Defenders should monitor for:</p>
+<p>Smart defenders will be hunting for our power manipulation:</p>
 <ul>
-  <li>Unexpected eBPF programs attached to power management functions</li>
-  <li>Discrepancies between configured power limits and actual power consumption</li>
-  <li>Unusual thermal patterns or unexpected throttling behavior</li>
-  <li>Unexpected changes to power management configuration</li>
-  <li>System instability or performance issues correlated with power management changes</li>
+  <li><strong>eBPF surveillance</strong>: Watching for eBPF programs hooking power management functions</li>
+  <li><strong>Power consumption monitoring</strong>: Looking for discrepancies between configured power limits and actual consumption</li>
+  <li><strong>Thermal anomaly detection</strong>: Monitoring unusual thermal patterns or unexpected throttling behavior</li>
+  <li><strong>Configuration drift detection</strong>: Tracking unexpected changes to power management settings</li>
+  <li><strong>Correlation analysis</strong>: Looking for system instability or performance issues tied to power management changes</li>
 </ul>
 
-<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining system integrity and security, especially in environments where power management is important for reliability or where side-channel attacks are a concern.</p>
+<p>But here’s the killer advantage - by the time they detect the power manipulation, the physical damage might already be done. Hardware doesn’t recover from thermal damage, and proving it was an attack versus normal failure is nearly impossible.</p>
 
                     </div>
                 </article>

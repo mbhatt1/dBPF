@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>Chapter 3: The FUSE Audit Black-Hole | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,21 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>Chapter 3: The FUSE Audit Black-Hole | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="The Diabolical eBPF Field Manual" />
+<meta property="og:title" content="Chapter 3: The FUSE Audit Black-Hole" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-3-fuse-audit-black-hole" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-3-fuse-audit-black-hole" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
-<meta property="og:type" content="website" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2025-02-02T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="The Diabolical eBPF Field Manual" />
+<meta property="twitter:title" content="Chapter 3: The FUSE Audit Black-Hole" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","author":{"@type":"Person","name":"Diabolical eBPF"},"description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"The Diabolical eBPF Field Manual","name":"Diabolical eBPF: Linux Red Team Field Manual","url":"https://mbhatt1.github.io/dBPF/"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-02T00:00:00+00:00","datePublished":"2025-02-02T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 3: The FUSE Audit Black-Hole","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-3-fuse-audit-black-hole"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-3-fuse-audit-black-hole"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -169,87 +170,119 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">The Diabolical eBPF Field Manual</h1>
+                        <h1 class="post-title">Chapter 3: The FUSE Audit Black-Hole</h1>
+                        
+                        <time class="post-date" datetime="2025-02-02T00:00:00+00:00">
+                            February 02, 2025
+                        </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h2 id="ebpf-is-all-you-need">eBPF is All You Need</h2>
+                        <h1 id="chapter-3-the-fuse-audit-black-hole">Chapter 3: The FUSE Audit Black-Hole</h1>
+<h2 id="evading-security-monitoring">Evading Security Monitoring</h2>
 
-<blockquote>
-  <p>“When they gave us eBPF, they handed us the keys to the kingdom. Now we’re redecorating.”</p>
-</blockquote>
+<p><strong>February 2nd, 2025 - The Problem with Leaving Tracks</strong></p>
 
-<p>Welcome to the dark side of kernel programming. This field manual documents techniques that transform eBPF—a “safe” kernel programming interface—into a powerful arsenal for breaking isolation, bypassing security controls, and maintaining persistent access to systems that were never meant to be compromised.</p>
+<p>I woke up this morning with a problem. A big one.</p>
 
-<p>Each technique in this collection demonstrates how a single misconfiguration can turn eBPF from a monitoring tool into a perfect attack primitive.</p>
+<p>I had learned to make security controls lie and escape container boundaries. But there was still one thing that kept me up at night: I was leaving tracks. Every file I accessed, every action I took—it was all being logged by the audit subsystem.</p>
 
-<h2 id="table-of-contents">Table of Contents</h2>
+<p>Every successful attack I’d pulled off was documented somewhere in those damn audit logs. And I knew that eventually, some sharp-eyed analyst would piece it together.</p>
 
+<p>Time to fix that.</p>
+
+<h2 id="the-moment-i-decided-to-become-invisible">The Moment I Decided to Become Invisible</h2>
+
+<p>This is where my story takes a darker turn. It’s one thing to bypass security controls or escape containers. It’s another thing entirely to become completely invisible to the monitoring systems that security teams depend on.</p>
+
+<p>I remember sitting in my lab, staring at the audit logs from my previous experiments. There it all was—evidence of every technique I’d used, every boundary I’d crossed. It was like leaving a detailed diary of my crimes at the scene.</p>
+
+<p>That’s when I decided: I needed to create the perfect crime scene.</p>
+
+<h2 id="my-vision-of-the-perfect-crime">My Vision of the Perfect Crime</h2>
+
+<p>I wanted to read files without leaving a trace. I wanted to create an audit black hole—where file access goes to disappear forever.</p>
+
+<p>My goal was simple: files get accessed, data gets exfiltrated, secrets get stolen, but the audit logs? Clean as a whistle. Like having a conversation in a soundproof room—nobody outside can hear what’s happening.</p>
+
+<p>This was the moment I realized that eBPF doesn’t just let you attack systems—it lets you attack the very tools designed to detect attacks.</p>
+
+<h2 id="understanding-my-enemy-audit-logs">Understanding My Enemy: Audit Logs</h2>
+
+<p>Here’s what I learned about security monitoring: it’s all about the logs. No logs, no evidence. No evidence, no incident response. No incident response, no problem.</p>
+
+<p>FUSE filesystems are everywhere in modern infrastructure—cloud storage mounts, container filesystems, distributed storage systems. Every time you touch a file through FUSE, the kernel dutifully logs it for the security team to analyze.</p>
+
+<p>But what if those logs just… stopped? What if I could give the audit subsystem selective amnesia about my file access patterns?</p>
+
+<h2 id="mapping-the-audit-pipeline">Mapping the Audit Pipeline</h2>
+
+<p>I spent days studying how Linux tattles on you:</p>
 <ul>
-  <li>
-    <p><a href="/dBPF/chapter-0-field-manual-preface.html">Preface</a> - January 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-mirror-controls.html">The Mirror Controls</a> - January 31, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-overlayfs-trojan-horse.html">The OverlayFS Trojan Horse</a> - February 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-fuse-audit-black-hole.html">The FUSE Audit Black-Hole</a> - February 02, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-phantom-syscall.html">The Phantom Syscall</a> - February 03, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-ghost-nic.html">The Ghost NIC</a> - February 04, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/slipping-the-cgroup-leash.html">Slipping the Cgroup Leash</a> - February 05, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/silencing-selinux.html">Silencing SELinux</a> - February 06, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/device-cgroup-houdini.html">Device‑cgroup Houdini</a> - February 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/keyring-heist.html">Keyring Heist</a> - February 08, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/pid-namespace-doppelg-nger.html">PID Namespace Doppelgänger</a> - February 09, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/inode-cloak.html">Inode Cloak</a> - February 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/irq-affinity-chaos.html">IRQ Affinity Chaos</a> - February 11, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-signed-driver-swap.html">eBPF Signed‑Driver Swap</a> - March 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/powercap-override.html">Powercap Override</a> - March 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/sched-fifo-impersonator.html">SCHED_FIFO Impersonator</a> - March 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/netns-vlan-ghost.html">NetNS VLAN Ghost</a> - April 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/seccomp-tid-hop.html">Seccomp TID Hop</a> - April 20, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/acpi-wsmi-ping.html">ACPI WSMI Ping</a> - May 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-token-bypass.html">EBPF Token Bypass</a> - May 09, 2025</p>
-  </li>
+  <li><strong>Kernel snitches</strong> generate audit events every time you do something “interesting”</li>
+  <li><strong>Audit buffers</strong> hold these events temporarily (like a staging area for evidence)</li>
+  <li><strong>Userspace tools</strong> like auditd slurp up these events and write them to logs</li>
+  <li><strong>Security frameworks</strong> like SELinux use these events to make decisions and create alerts</li>
 </ul>
 
-<p><em>Remember: With great power comes great responsibility. These techniques are documented for defensive awareness.</em></p>
+<p>It’s basically a conveyor belt of evidence flowing from the kernel to the security team’s dashboards. My job? Become the conveyor belt operator who “accidentally” drops certain packages.</p>
+
+<h2 id="building-my-black-hole">Building My Black Hole</h2>
+
+<p>I was going to teach the kernel to forget—selectively, precisely, and completely invisibly. The audit daemon would keep running, the logs would keep flowing, but my activities would slip through like they never happened.</p>
+
+<p>My strategy was elegant:</p>
+
+<ol>
+  <li><strong>Hook the Audit Pipeline</strong>: I’d intercept audit events before they reached userspace</li>
+  <li><strong>Create a FUSE Sink</strong>: I’d set up a dummy FUSE filesystem that acted like a black hole</li>
+  <li><strong>Redirect Specific Events</strong>: I’d selectively redirect audit events for my activities to the FUSE sink</li>
+  <li><strong>Maintain Normal Flow</strong>: Other audit events would continue normally to avoid suspicion</li>
+</ol>
+
+<p>The beauty was that I wasn’t breaking the audit system—I was just giving it selective amnesia about my activities.</p>
+
+<h2 id="the-night-i-became-invisible">The Night I Became Invisible</h2>
+
+<p>I’ll never forget the first time I got it working. I had set up my FUSE black hole and loaded my eBPF program to hook into the audit pipeline. Then I performed some file operations that should have generated audit events.</p>
+
+<p>I checked the logs. Nothing. My activities had vanished into the void.</p>
+
+<p>But the really beautiful part? Other activities were still being logged normally. The audit daemon was running, the logs were flowing, everything looked normal from the security team’s perspective.</p>
+
+<p>I had become a ghost in the machine—present and active, but leaving no trace.</p>
+
+<h2 id="the-terrifying-power-id-discovered">The Terrifying Power I’d Discovered</h2>
+
+<p>From that night forward, I could access sensitive files, exfiltrate data, and perform reconnaissance completely invisibly. The audit daemon kept running, the logs kept flowing, but my activities slipped through like they never happened.</p>
+
+<p>The security team’s logs had become unreliable. Their monitoring tools had become blind spots. Their compliance reports had become fiction.</p>
+
+<p>I had broken the fundamental assumption that security monitoring is reliable. When you can make audit events disappear selectively, you’ve broken the chain of evidence that incident response depends on.</p>
+
+<h2 id="what-theyll-try-to-do">What They’ll Try to Do</h2>
+
+<p>I know they’ll try to catch me:</p>
+<ul>
+  <li>Watch for suspicious eBPF programs attached to audit functions</li>
+  <li>Verify that audit events are reaching their intended destinations</li>
+  <li>Compare audit logs with other monitoring sources</li>
+  <li>Watch for unusual FUSE mounts and activity</li>
+  <li>Look for sudden drops in audit event volumes</li>
+</ul>
+
+<p>But I had discovered something profound: the watchers couldn’t see me anymore.</p>
+
+<h2 id="the-new-reality-id-created">The New Reality I’d Created</h2>
+
+<p>This wasn’t just about evading detection—this was about attacking the fundamental assumption that security monitoring works.</p>
+
+<p>I had entered a world where the watchers can’t see you, and eBPF is your cloak of invisibility.</p>
+
+<hr />
+
+<p><em>“I had become a ghost in the machine—present and active, but leaving no trace.”</em></p>
 
                     </div>
                 </article>

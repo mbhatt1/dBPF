@@ -54,7 +54,7 @@
                     
                     
                     <a href="/dBPF/chapter-0-field-manual-preface.html" >
-                        Chapter 0: Field Manual Preface
+                        Preface
                     </a>
                     
                 
@@ -181,9 +181,17 @@
                     <div class="post-content">
                         <h1 id="sched_fifo-impersonator-hijacking-real-time-scheduling-priorities">SCHED_FIFO Impersonator: Hijacking Real-Time Scheduling Priorities</h1>
 
-<p><strong>Wut</strong></p>
+<p><strong>Chapter 14: Becoming the System’s Top Priority</strong></p>
 
-<p>A technique using eBPF to manipulate the Linux kernel scheduler, allowing unprivileged processes to gain real-time scheduling priorities (SCHED_FIFO) without the required capabilities. This attack bypasses the normal permission checks for real-time scheduling, enabling denial of service and resource starvation attacks against critical system processes.</p>
+<p>You’ve gained control over hardware power management. Now let’s talk about time itself—specifically, CPU time and how the kernel decides who gets to use it.</p>
+
+<p>This is where our story becomes about temporal control. You’ve learned to manipulate space (memory, storage, network), but what about time? What if you could make your processes the highest priority in the entire system?</p>
+
+<p>Real-time scheduling is supposed to be sacred—when a process says it needs real-time priority, the kernel gives it absolute precedence over everything else. It’s like having a VIP pass that gets you to the front of every line.</p>
+
+<p>But what if we could forge that VIP pass? What if we could make our processes look like critical real-time tasks while they’re actually doing something completely different? What if we could hijack the scheduler’s priority system?</p>
+
+<p>We’re going to become scheduling impersonators—make our malicious processes appear as high-priority system tasks that can’t be interrupted, can’t be throttled, and get first dibs on CPU time. This is where you learn that eBPF gives you control over time itself.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -205,24 +213,30 @@ graph TD
     click D "https://man7.org/linux/man-pages/man7/capabilities.7.html" "Linux Capabilities"
 </code></pre>
 
-<p><strong>Why</strong></p>
+<p><strong>Why Process Scheduling Just Became Unfair</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation. Real-time scheduling policies like SCHED_FIFO are restricted to privileged processes because they can monopolize CPU resources and cause system-wide denial of service. By using eBPF to intercept and modify the scheduler’s permission checks, attackers can bypass these restrictions and gain unfair resource advantages, potentially starving critical system processes of CPU time.</p>
+<p>Here’s the thing about the Linux scheduler: it’s supposed to be fair. Every process gets its turn, priorities are respected, real-time tasks get precedence when they need it. It’s a carefully balanced system that keeps everything running smoothly.</p>
 
-<h2 id="technical-details">Technical Details</h2>
+<p>But what happens when that fairness breaks down? What happens when some processes can jump to the front of the line while others get starved of CPU time? What happens when the scheduler’s priority system gets hijacked?</p>
 
-<h3 id="scheduler-architecture">Scheduler Architecture</h3>
+<p>That’s where scheduling manipulation gets dangerous. We can starve legitimate processes by hogging CPU time with fake high-priority tasks. We can create covert channels by modulating our scheduling behavior. We can even crash systems by preventing critical kernel threads from running.</p>
 
-<p>The Linux kernel scheduler manages process execution using several scheduling policies:</p>
+<p>The insidious part is that this looks like normal system load. Performance monitoring tools will show high CPU usage and scheduling delays, but they won’t show that we’re the ones gaming the system. It’s like being able to cut in line while making it look like natural congestion.</p>
+
+<h2 id="how-we-jump-the-cpu-queue">How We Jump the CPU Queue</h2>
+
+<h3 id="understanding-the-schedulers-priority-system">Understanding the Scheduler’s Priority System</h3>
+
+<p>The Linux scheduler is like a sophisticated queue management system at a busy restaurant:</p>
 <ul>
-  <li><strong>SCHED_OTHER</strong>: The default time-sharing policy for normal processes</li>
-  <li><strong>SCHED_FIFO</strong>: A real-time policy that runs processes until they voluntarily yield</li>
-  <li><strong>SCHED_RR</strong>: A real-time policy similar to FIFO but with time slices</li>
-  <li><strong>SCHED_BATCH</strong>: For CPU-intensive background tasks</li>
-  <li><strong>SCHED_IDLE</strong>: For extremely low priority tasks</li>
+  <li><strong>SCHED_OTHER</strong>: The regular dining room where most customers wait their turn</li>
+  <li><strong>SCHED_FIFO</strong>: The VIP section where you get served immediately and keep your table until you’re done</li>
+  <li><strong>SCHED_RR</strong>: Like VIP but with a time limit—you get kicked out after a while to let others have a turn</li>
+  <li><strong>SCHED_BATCH</strong>: The takeout counter for people who don’t mind waiting longer</li>
+  <li><strong>SCHED_IDLE</strong>: The kids’ table where you only get attention when everyone else is served</li>
 </ul>
 
-<p>Access to real-time policies (SCHED_FIFO and SCHED_RR) is restricted by the CAP_SYS_NICE capability to prevent resource monopolization.</p>
+<p>Access to the VIP sections (SCHED_FIFO and SCHED_RR) requires special privileges (<a href="https://man7.org/linux/man-pages/man7/capabilities.7.html"><code class="language-plaintext highlighter-rouge">CAP_SYS_NICE</code></a>) to prevent people from monopolizing all the tables.</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -282,7 +296,7 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>When eBPF is used to manipulate scheduler decisions, the architecture is subverted:</p>
+<p>Here’s what happens when we use eBPF to game the scheduling system:</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -350,18 +364,20 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="exploitation-technique">Exploitation Technique</h3>
+<h3 id="how-we-cut-to-the-front-of-the-line">How We Cut to the Front of the Line</h3>
 
-<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement scheduler policy checks. By intercepting these calls, an attacker can:</p>
+<p>Our strategy is to bypass the VIP access controls and get ourselves real-time priority:</p>
 
 <ol>
-  <li><strong>Hook permission checks</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">sched_setscheduler()</code> and <code class="language-plaintext highlighter-rouge">check_sched_setscheduler()</code></li>
-  <li><strong>Bypass capability verification</strong>: Modify the return values of CAP_SYS_NICE checks</li>
-  <li><strong>Manipulate priority values</strong>: Alter process priority and policy settings</li>
-  <li><strong>Evade detection</strong>: Maintain the appearance of normal scheduling behavior in monitoring tools</li>
+  <li><strong>Hook the Bouncers</strong>: We attach to functions like <a href="https://elixir.bootlin.com/linux/latest/source/kernel/sched/core.c"><code class="language-plaintext highlighter-rouge">sched_setscheduler()</code></a> that check if we’re allowed in the VIP section</li>
+  <li><strong>Forge Our Credentials</strong>: We modify the return values of <a href="https://man7.org/linux/man-pages/man7/capabilities.7.html"><code class="language-plaintext highlighter-rouge">CAP_SYS_NICE</code></a> checks to make it look like we have permission</li>
+  <li><strong>Adjust Our Priority</strong>: We alter process priority and scheduling policy settings to get better service</li>
+  <li><strong>Stay Under the Radar</strong>: We make sure monitoring tools still think everything looks normal</li>
 </ol>
 
-<h3 id="comprehensive-poc">Comprehensive POC</h3>
+<p>The beauty is that we get real-time scheduling priority without actually having the required privileges, and it looks like legitimate system behavior.</p>
+
+<h3 id="building-our-queue-jumping-tool">Building Our Queue-Jumping Tool</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -1320,31 +1336,31 @@ systemd-run <span class="nt">--property</span><span class="o">=</span><span clas
   </li>
 </ol>
 
-<h3 id="real-world-impact">Real-world Impact</h3>
+<h3 id="why-this-owns-the-cpu">Why This Owns the CPU</h3>
 
-<p>In practical environments, this technique could allow an attacker to:</p>
+<p>This scheduler FIFO impersonation technique is pure CPU domination:</p>
 <ul>
-  <li><strong>Denial of service</strong>: Starve critical system processes of CPU time</li>
-  <li><strong>Performance degradation</strong>: Cause system-wide slowdowns and increased latency</li>
-  <li><strong>Service disruption</strong>: Interfere with time-sensitive operations like networking</li>
-  <li><strong>Privilege escalation</strong>: Combine with other vulnerabilities to gain additional access</li>
-  <li><strong>Covert operations</strong>: Hide malicious activities by manipulating process priorities</li>
+  <li><strong>Resource starvation warfare</strong>: Starve critical system processes of CPU time and watch everything grind to a halt</li>
+  <li><strong>Performance assassination</strong>: Cause system-wide slowdowns and latency spikes that make users rage quit</li>
+  <li><strong>Service destruction</strong>: Interfere with time-sensitive operations like networking and real-time processing</li>
+  <li><strong>Privilege escalation platform</strong>: Combine with other vulns to gain additional access while hiding in scheduler chaos</li>
+  <li><strong>Stealth operations</strong>: Hide malicious activities by manipulating process priorities to blend into normal system load</li>
 </ul>
 
-<p>The ability to bypass scheduler restrictions creates a particularly concerning scenario for cloud environments and shared infrastructure where fair resource allocation is essential for multi-tenant security.</p>
+<p>When you can bypass scheduler restrictions, you control the entire CPU allocation of the system. Cloud environments, shared infrastructure, multi-tenant systems - you can starve other tenants’ processes while giving your malicious code priority access to CPU resources. It’s like cutting in line, but for kernel-level process scheduling.</p>
 
-<h3 id="detection-methods">Detection Methods</h3>
+<h3 id="how-theyll-try-to-catch-us">How They’ll Try to Catch Us</h3>
 
-<p>Defenders should monitor for:</p>
+<p>Smart defenders will be hunting for our scheduler manipulation:</p>
 <ul>
-  <li>Unexpected eBPF programs attached to scheduler-related functions</li>
-  <li>Processes running with real-time priorities without the CAP_SYS_NICE capability</li>
-  <li>Unusual patterns of CPU utilization</li>
-  <li>System-wide performance degradation</li>
-  <li>Discrepancies between process priorities reported by different monitoring tools</li>
+  <li><strong>eBPF surveillance</strong>: Watching for eBPF programs hooking scheduler-related functions</li>
+  <li><strong>Capability monitoring</strong>: Looking for processes running with real-time priorities without proper CAP_SYS_NICE capability</li>
+  <li><strong>CPU pattern analysis</strong>: Monitoring unusual patterns of CPU utilization that don’t match expected workloads</li>
+  <li><strong>Performance anomaly detection</strong>: Tracking system-wide performance degradation</li>
+  <li><strong>Priority consistency checks</strong>: Looking for discrepancies between process priorities reported by different monitoring tools</li>
 </ul>
 
-<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining system stability, especially in environments where resource fairness is important.</p>
+<p>But here’s the beauty - scheduler manipulation looks like normal system load variations. By the time they figure out it’s an attack, we’ve already starved their critical processes and potentially escalated our privileges through the chaos.</p>
 
                     </div>
                 </article>

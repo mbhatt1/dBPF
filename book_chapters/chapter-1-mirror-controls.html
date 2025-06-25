@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Post Title | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>Chapter 1: The Mirror Controls | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,22 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Post Title | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>Chapter 1: The Mirror Controls | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="Post Title" />
+<meta property="og:title" content="Chapter 1: The Mirror Controls" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/blog-post-template" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/blog-post-template" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-1-mirror-controls" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-1-mirror-controls" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
 <meta property="og:type" content="article" />
-<meta property="article:published_time" content="2025-02-01T00:00:00+00:00" />
+<meta property="article:published_time" content="2025-01-31T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Post Title" />
+<meta property="twitter:title" content="Chapter 1: The Mirror Controls" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-01T00:00:00+00:00","datePublished":"2025-02-01T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Post Title","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/blog-post-template"},"url":"https://mbhatt1.github.io/dBPF/blog-post-template"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-01-31T00:00:00+00:00","datePublished":"2025-01-31T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 1: The Mirror Controls","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-1-mirror-controls"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-1-mirror-controls"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -170,99 +170,47 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">Post Title</h1>
+                        <h1 class="post-title">Chapter 1: The Mirror Controls</h1>
                         
-                        <time class="post-date" datetime="2025-02-01T00:00:00+00:00">
-                            February 01, 2025
+                        <time class="post-date" datetime="2025-01-31T00:00:00+00:00">
+                            January 31, 2025
                         </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h1 id="post-title-descriptive-subtitle">Post Title: Descriptive Subtitle</h1>
+                        <h1 id="chapter-1-the-mirror-controls">Chapter 1: The Mirror Controls</h1>
+<h2 id="subverting-kernel-security-mechanisms">Subverting Kernel Security Mechanisms</h2>
 
-<p><strong>Wut</strong></p>
+<p><strong>January 31st, 2025 - The First Breakthrough</strong></p>
 
-<p>Brief description of the exploit technique. This should explain what the technique does and its impact in 2-3 sentences. Make it technical but accessible.</p>
+<p>Here’s where things get interesting. I was working with a simple eBPF program to monitor capability checks—just basic observability stuff. But then I realized something: if I can see these security decisions being made in real-time, what’s stopping me from changing them?</p>
 
-<pre><code class="language-mermaid">graph TD
-    A[Starting Point] --&gt;|1. First Step| B[Second Component]
-    B --&gt;|2. Action| C[Third Component]
-    C --&gt;|3. Effect| D[Result]
-    D --&gt;|4. Impact| E[Final Outcome]
-    F[Optional Component] --&gt;|5. Side Effect| G[Additional Outcome]
-</code></pre>
+<p>That’s when it clicked. Linux security controls aren’t immutable laws—they’re just kernel functions making decisions. And if they’re functions, they can be hooked.</p>
 
-<p><strong>Why</strong></p>
+<h2 id="the-core-attack-vector">The Core Attack Vector</h2>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation. Expand on why this technique is significant, what security controls it bypasses, and why it matters in real-world environments.</p>
+<p>The Linux Security Module (LSM) framework funnels every security decision through specific kernel functions. Here’s what we can target:</p>
 
-<p><strong>POC</strong></p>
-
-<p><em>Coming soon.</em></p>
-
-<p>The proof of concept will demonstrate:</p>
+<p><strong>Primary Targets:</strong></p>
 <ul>
-  <li>Key capability #1</li>
-  <li>Key capability #2</li>
-  <li>Key capability #3</li>
-  <li>Key capability #4</li>
-  <li>Key capability #5</li>
+  <li><a href="https://elixir.bootlin.com/linux/latest/source/kernel/capability.c#L312"><code class="language-plaintext highlighter-rouge">cap_capable()</code></a> - Capability checking</li>
+  <li><a href="https://elixir.bootlin.com/linux/latest/source/security/security.c#L2533"><code class="language-plaintext highlighter-rouge">security_file_permission()</code></a> - File access control</li>
+  <li><a href="https://elixir.bootlin.com/linux/latest/source/security/security.c#L2071"><code class="language-plaintext highlighter-rouge">security_task_kill()</code></a> - Process signal control</li>
+  <li><a href="https://elixir.bootlin.com/linux/latest/source/security/security.c#L2158"><code class="language-plaintext highlighter-rouge">security_bprm_check()</code></a> - Binary execution control</li>
 </ul>
 
-<p><strong>Attacker hat on</strong></p>
-
+<p><strong>The Attack Method:</strong></p>
 <ol>
-  <li>Step 1 of the attack process</li>
-  <li>Step 2 of the attack process</li>
-  <li>Step 3 of the attack process</li>
-  <li>Step 4 of the attack process</li>
-  <li>Step 5 of the attack process</li>
-  <li>Step 6 of the attack process</li>
-  <li>Step 7 of the attack process</li>
+  <li>Hook target functions using <code class="language-plaintext highlighter-rouge">kprobe</code> or <code class="language-plaintext highlighter-rouge">fentry</code> attachment points</li>
+  <li>Intercept return values before they reach calling code</li>
+  <li>Flip denial responses to approval responses</li>
+  <li>Keep audit logs looking normal to avoid detection</li>
 </ol>
 
-<p><strong>Defender hat on</strong></p>
+<h2 id="implementation-details">Implementation Details</h2>
 
-<ol>
-  <li>Defense measure #1</li>
-  <li>Defense measure #2</li>
-  <li>Defense measure #3</li>
-  <li>Defense measure #4</li>
-  <li>Defense measure #5</li>
-  <li>Defense measure #6</li>
-</ol>
-
-<p><strong>Conclusion</strong></p>
-
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. Summarize the key takeaways about this technique, its implications for security, and why proper eBPF controls are essential.</p>
-
-<h2 id="technical-details">Technical Details</h2>
-
-<h3 id="component-architecture">Component Architecture</h3>
-
-<p>Describe the relevant Linux kernel components or subsystems that are being exploited:</p>
-<ul>
-  <li><strong>Component 1</strong>: Description of how it works</li>
-  <li><strong>Component 2</strong>: Description of how it works</li>
-  <li><strong>Component 3</strong>: Description of how it works</li>
-  <li><strong>Component 4</strong>: Description of how it works</li>
-</ul>
-
-<p>Explain how these components normally function and interact with each other.</p>
-
-<h3 id="exploitation-technique">Exploitation Technique</h3>
-
-<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement specific functionality. By intercepting these calls, an attacker can:</p>
-
-<ol>
-  <li><strong>Capability 1</strong>: Technical description of what this allows</li>
-  <li><strong>Capability 2</strong>: Technical description of what this allows</li>
-  <li><strong>Capability 3</strong>: Technical description of what this allows</li>
-  <li><strong>Capability 4</strong>: Technical description of what this allows</li>
-</ol>
-
-<h3 id="code-snippet">Code Snippet</h3>
+<p>The magic happens with return value manipulation. Check this out:</p>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -276,85 +224,86 @@
 10
 11
 12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29
-30
-31
-32
-</pre></td><td class="rouge-code"><pre><span class="c1">// Simplified eBPF program to demonstrate the technique</span>
-<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/target_function"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_function</span><span class="p">,</span> <span class="k">struct</span> <span class="n">relevant_struct</span> <span class="o">*</span><span class="n">param1</span><span class="p">,</span>
-               <span class="n">type</span> <span class="n">param2</span><span class="p">,</span> <span class="n">type</span> <span class="n">param3</span><span class="p">)</span>
-<span class="p">{</span>
-    <span class="c1">// Get process information</span>
+</pre></td><td class="rouge-code"><pre><span class="n">SEC</span><span class="p">(</span><span class="s">"kretprobe/cap_capable"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">intercept_capability_check</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">PT_REGS_RC</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     
-    <span class="c1">// Check if this is our target process</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
-        <span class="c1">// Perform malicious action</span>
-        <span class="c1">// This is where the core of the exploit happens</span>
-        
-        <span class="c1">// Example: modify parameters, return values, or internal state</span>
-        <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="o">&amp;</span><span class="n">param1</span><span class="o">-&gt;</span><span class="n">field</span><span class="p">,</span> <span class="n">new_value</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">type</span><span class="p">));</span>
-        
-        <span class="c1">// Example: store information for later use</span>
-        <span class="n">u32</span> <span class="n">key</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">exploit_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">some_value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+    <span class="c1">// Target specific process</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">==</span> <span class="n">target_pid</span> <span class="o">&amp;&amp;</span> <span class="n">ret</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Convert denial to approval</span>
+        <span class="n">bpf_override_return</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
     <span class="p">}</span>
-    
-    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
-<span class="p">}</span>
-
-<span class="c1">// Additional hook function if needed</span>
-<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/another_function"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_another</span><span class="p">,</span> <span class="k">struct</span> <span class="n">another_struct</span> <span class="o">*</span><span class="n">param</span><span class="p">)</span>
-<span class="p">{</span>
-    <span class="c1">// Additional exploit logic</span>
-    
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="detection-methods">Detection Methods</h3>
-
-<p>Defenders should monitor for:</p>
+<p><strong>Key Technical Points:</strong></p>
 <ul>
-  <li>Specific indicator #1</li>
-  <li>Specific indicator #2</li>
-  <li>Specific indicator #3</li>
-  <li>Specific indicator #4</li>
-  <li>Specific indicator #5</li>
+  <li>Uses <code class="language-plaintext highlighter-rouge">bpf_override_return()</code> helper to modify function return values</li>
+  <li>Requires <code class="language-plaintext highlighter-rouge">CONFIG_BPF_KPROBE_OVERRIDE</code> kernel configuration</li>
+  <li>Operates at the kernel function level, below userspace security tools</li>
 </ul>
 
-<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining security, especially in environments where [specific security control] is important.</p>
+<h2 id="breaking-down-the-security-subsystems">Breaking Down the Security Subsystems</h2>
 
-<h3 id="real-world-impact">Real-world Impact</h3>
+<p><strong>Capability System Bypass:</strong>
+The capability system uses <a href="https://elixir.bootlin.com/linux/latest/source/kernel/capability.c"><code class="language-plaintext highlighter-rouge">cap_capable()</code></a> to check if a process has specific privileges. We intercept this function and override denials for our target processes while maintaining normal enforcement for everything else.</p>
 
-<p>In practical environments, this technique could allow an attacker to:</p>
+<p><strong>SELinux/AppArmor Bypass:</strong>
+These mandatory access control systems rely on LSM hooks. We can hook the decision functions before policy evaluation, modify access vector cache (AVC) responses, and preserve the audit trail while changing enforcement decisions.</p>
+
+<p><strong>Seccomp Filter Bypass:</strong>
+Seccomp operates at the syscall level, but eBPF programs can attach to syscall entry points before seccomp evaluation. We can use eBPF helpers to perform forbidden operations directly, bypassing seccomp without triggering filter violations.</p>
+
+<h2 id="staying-under-the-radar">Staying Under the Radar</h2>
+
+<p>The key to operational security is maintaining expected audit behavior:</p>
+
+<ol>
+  <li><strong>Selective Logging</strong>: Generate fake denial events while allowing operations</li>
+  <li><strong>Audit Redirection</strong>: Route security events to controlled destinations</li>
+  <li><strong>Log Consistency</strong>: Ensure audit trails match expected security policy enforcement</li>
+</ol>
+
+<p><strong>Anti-Forensics Measures:</strong></p>
 <ul>
-  <li>Impact #1</li>
-  <li>Impact #2</li>
-  <li>Impact #3</li>
-  <li>Impact #4</li>
-  <li>Impact #5</li>
+  <li>Use temporary eBPF program loading to minimize detection windows</li>
+  <li>Implement program auto-unloading after achieving objectives</li>
+  <li>Leverage legitimate eBPF usage patterns to blend with normal system activity</li>
 </ul>
 
-<p>The ability to [key capability] creates a particularly concerning scenario for [specific type of environment or organization].</p>
+<h2 id="why-this-works-so-well">Why This Works So Well</h2>
+
+<p>Most security tools assume kernel security decisions are immutable. They monitor at higher abstraction layers and trust that the kernel will enforce policies correctly. By operating at the kernel function level, we’re below where most monitoring happens.</p>
+
+<p>The beauty is that everything looks normal from the outside—audit logs show denials, monitoring tools report compliance, security dashboards stay green. But we’re actually operating with god-mode privileges.</p>
+
+<h2 id="defense-strategies">Defense Strategies</h2>
+
+<p><strong>eBPF Restriction:</strong></p>
+<ul>
+  <li>Remove <code class="language-plaintext highlighter-rouge">CAP_BPF</code> and <code class="language-plaintext highlighter-rouge">CAP_SYS_ADMIN</code> from untrusted contexts</li>
+  <li>Implement BPF LSM policies to control eBPF program loading</li>
+  <li>Monitor eBPF program attachment to security-critical functions</li>
+</ul>
+
+<p><strong>Integrity Verification:</strong></p>
+<ul>
+  <li>Deploy external security monitoring that doesn’t rely on kernel reporting</li>
+  <li>Implement cross-validation between multiple security enforcement points</li>
+  <li>Use hardware-based security features that operate independently of kernel software</li>
+</ul>
+
+<h2 id="the-bigger-picture">The Bigger Picture</h2>
+
+<p>This technique demonstrates that kernel-level programmability fundamentally changes the security model. When security enforcement functions become programmable, traditional security boundaries become advisory rather than mandatory.</p>
+
+<p>We’re not breaking security—we’re becoming the security system itself.</p>
+
+<hr />
+
+<p><em>“When you can hook the functions that make security decisions, you become the decision maker.”</em></p>
 
                     </div>
                 </article>

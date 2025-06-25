@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>Chapter 4: The Phantom Syscall | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,21 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>Chapter 4: The Phantom Syscall | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="The Diabolical eBPF Field Manual" />
+<meta property="og:title" content="Chapter 4: The Phantom Syscall" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-4-phantom-syscall" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-4-phantom-syscall" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
-<meta property="og:type" content="website" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2025-02-03T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="The Diabolical eBPF Field Manual" />
+<meta property="twitter:title" content="Chapter 4: The Phantom Syscall" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","author":{"@type":"Person","name":"Diabolical eBPF"},"description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"The Diabolical eBPF Field Manual","name":"Diabolical eBPF: Linux Red Team Field Manual","url":"https://mbhatt1.github.io/dBPF/"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-03T00:00:00+00:00","datePublished":"2025-02-03T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 4: The Phantom Syscall","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-4-phantom-syscall"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-4-phantom-syscall"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -169,87 +170,116 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">The Diabolical eBPF Field Manual</h1>
+                        <h1 class="post-title">Chapter 4: The Phantom Syscall</h1>
+                        
+                        <time class="post-date" datetime="2025-02-03T00:00:00+00:00">
+                            February 03, 2025
+                        </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h2 id="ebpf-is-all-you-need">eBPF is All You Need</h2>
+                        <h1 id="chapter-4-the-phantom-syscall">Chapter 4: The Phantom Syscall</h1>
+<h2 id="bypassing-seccomp-filters-with-ebpf">Bypassing Seccomp Filters with eBPF</h2>
 
-<blockquote>
-  <p>“When they gave us eBPF, they handed us the keys to the kingdom. Now we’re redecorating.”</p>
-</blockquote>
+<p><strong>February 3rd, 2025 - Questioning Reality Itself</strong></p>
 
-<p>Welcome to the dark side of kernel programming. This field manual documents techniques that transform eBPF—a “safe” kernel programming interface—into a powerful arsenal for breaking isolation, bypassing security controls, and maintaining persistent access to systems that were never meant to be compromised.</p>
+<p>After becoming invisible to audit systems, I thought I had reached the limits of what was possible. But lying in bed last night, I had a disturbing thought that kept me awake:</p>
 
-<p>Each technique in this collection demonstrates how a single misconfiguration can turn eBPF from a monitoring tool into a perfect attack primitive.</p>
+<p>What if system calls themselves could be phantoms?</p>
 
-<h2 id="table-of-contents">Table of Contents</h2>
+<p>I’d been thinking about bypassing security mechanisms, but what if I could make the kernel perform actions that, according to every monitoring system, never happened? What if I could whisper commands directly to the kernel while everyone else thinks I’m sitting quietly?</p>
 
+<p>This morning, I decided to find out.</p>
+
+<h2 id="the-philosophical-breakthrough">The Philosophical Breakthrough</h2>
+
+<p>This is where my journey got philosophical. I’d been attacking applications, operating systems, even security controls. But what I was about to attempt was an attack on the very concept of observable reality.</p>
+
+<p>I wanted to create phantom syscalls—system calls that execute their intended function but leave no trace in audit logs, process monitors, or syscall tracers.</p>
+
+<p>The uncomfortable truth hit me: modern security is built on the assumption that we can see what processes are doing. Every EDR, every SIEM, every compliance tool relies on being able to monitor system calls.</p>
+
+<p>But what happens when that fundamental assumption breaks down?</p>
+
+<h2 id="understanding-my-target-seccomp">Understanding My Target: Seccomp</h2>
+
+<p>I spent the morning studying seccomp—the kernel’s bouncer that sits at the syscall entrance and checks IDs. Here’s how it normally works:</p>
 <ul>
-  <li>
-    <p><a href="/dBPF/chapter-0-field-manual-preface.html">Preface</a> - January 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-mirror-controls.html">The Mirror Controls</a> - January 31, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-overlayfs-trojan-horse.html">The OverlayFS Trojan Horse</a> - February 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-fuse-audit-black-hole.html">The FUSE Audit Black-Hole</a> - February 02, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-phantom-syscall.html">The Phantom Syscall</a> - February 03, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-ghost-nic.html">The Ghost NIC</a> - February 04, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/slipping-the-cgroup-leash.html">Slipping the Cgroup Leash</a> - February 05, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/silencing-selinux.html">Silencing SELinux</a> - February 06, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/device-cgroup-houdini.html">Device‑cgroup Houdini</a> - February 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/keyring-heist.html">Keyring Heist</a> - February 08, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/pid-namespace-doppelg-nger.html">PID Namespace Doppelgänger</a> - February 09, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/inode-cloak.html">Inode Cloak</a> - February 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/irq-affinity-chaos.html">IRQ Affinity Chaos</a> - February 11, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-signed-driver-swap.html">eBPF Signed‑Driver Swap</a> - March 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/powercap-override.html">Powercap Override</a> - March 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/sched-fifo-impersonator.html">SCHED_FIFO Impersonator</a> - March 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/netns-vlan-ghost.html">NetNS VLAN Ghost</a> - April 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/seccomp-tid-hop.html">Seccomp TID Hop</a> - April 20, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/acpi-wsmi-ping.html">ACPI WSMI Ping</a> - May 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-token-bypass.html">EBPF Token Bypass</a> - May 09, 2025</p>
-  </li>
+  <li><strong>Syscall filtering</strong> based on what you’re trying to do and how you’re trying to do it</li>
+  <li><strong>Three choices</strong> for each syscall: allow it, block it, or log it and decide later</li>
+  <li><strong>Container jail</strong> that keeps processes from doing anything too interesting</li>
 </ul>
 
-<p><em>Remember: With great power comes great responsibility. These techniques are documented for defensive awareness.</em></p>
+<p>Container runtimes love seccomp because it lets them say “you can only make these 50 syscalls out of the 400+ available.” It’s like giving someone a restricted keychain instead of the master key.</p>
+
+<p>But here’s the thing I realized—seccomp only sees what goes through the normal syscall interface. And I wasn’t planning to go through the normal interface.</p>
+
+<h2 id="my-phantom-strategy">My Phantom Strategy</h2>
+
+<p>The idea was beautiful in its simplicity. Instead of making forbidden syscalls directly, I would:</p>
+
+<ol>
+  <li><strong>Make an allowed syscall</strong> that seccomp would happily permit</li>
+  <li><strong>Hook that syscall with eBPF</strong> to intercept it before it does its normal work</li>
+  <li><strong>Use eBPF helpers</strong> to perform the forbidden operations directly in kernel space</li>
+  <li><strong>Return normal results</strong> so the application thinks everything worked normally</li>
+</ol>
+
+<p>The beauty was that seccomp would see the allowed syscall and wave it through. The monitoring systems would log the allowed syscall. But the actual work being done would be completely different.</p>
+
+<h2 id="the-night-i-made-my-first-phantom">The Night I Made My First Phantom</h2>
+
+<p>I’ll never forget the first time I got it working. I had set up a container with a strict seccomp profile that blocked most file operations. According to the security policy, I shouldn’t be able to read sensitive files.</p>
+
+<p>I made a simple <code class="language-plaintext highlighter-rouge">getpid()</code> syscall—completely harmless, always allowed. But my eBPF program intercepted it and used kernel helpers to read a file that should have been forbidden.</p>
+
+<p>The result? The application got the file contents it wanted. The audit logs showed only a harmless <code class="language-plaintext highlighter-rouge">getpid()</code> call. The seccomp filter was completely bypassed.</p>
+
+<p>I had created my first phantom syscall.</p>
+
+<h2 id="the-terrifying-implications">The Terrifying Implications</h2>
+
+<p>The really insidious part was that this didn’t break anything visibly. The syscalls still worked, the kernel still functioned normally, the applications still ran fine. The only thing that changed was that security monitoring suddenly developed blind spots.</p>
+
+<p>I could make processes perform actions without those actions being visible to monitoring systems. It was like having a burglar who’s invisible to security cameras—they can walk right past all your defenses.</p>
+
+<p>My security tools would show a process sitting idle while it was actually escalating privileges, accessing sensitive files, or establishing network connections.</p>
+
+<h2 id="the-phantom-techniques-i-developed">The Phantom Techniques I Developed</h2>
+
+<p>Over the following days, I perfected several phantom techniques:</p>
+
+<p><strong>File Access Phantoms</strong>: Reading sensitive files through innocent syscalls
+<strong>Network Phantoms</strong>: Establishing connections that don’t appear in network monitoring
+<strong>Process Phantoms</strong>: Spawning processes that don’t show up in process lists
+<strong>Privilege Phantoms</strong>: Escalating privileges without triggering capability monitoring</p>
+
+<p>Each technique used the same principle: make an allowed syscall, intercept it with eBPF, and use kernel helpers to do the real work.</p>
+
+<h2 id="what-theyll-try-to-do">What They’ll Try to Do</h2>
+
+<p>I know the security teams will try to stop this:</p>
+<ul>
+  <li>Monitor for eBPF programs attached to common syscalls</li>
+  <li>Implement deeper syscall inspection beyond seccomp</li>
+  <li>Use multiple monitoring layers to cross-validate syscall activity</li>
+  <li>Restrict eBPF capabilities more aggressively</li>
+</ul>
+
+<p>But I had discovered something fundamental: when you can execute kernel code directly, traditional syscall monitoring becomes meaningless.</p>
+
+<h2 id="the-new-reality-id-uncovered">The New Reality I’d Uncovered</h2>
+
+<p>This was the moment I realized that with eBPF, I wasn’t just attacking applications or even the operating system—I was attacking the very concept of observable reality.</p>
+
+<p>I had entered a world where actions could happen without being observed, where the fundamental assumptions of security monitoring could be violated at will.</p>
+
+<p>The phantom syscalls were just the beginning.</p>
+
+<hr />
+
+<p><em>“I could whisper commands directly to the kernel while everyone else thinks I’m sitting quietly.”</em></p>
 
                     </div>
                 </article>

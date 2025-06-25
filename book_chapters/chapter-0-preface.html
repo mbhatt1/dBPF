@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>Preface: The Dark Side of BPF | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,21 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>The Diabolical eBPF Field Manual | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>Preface: The Dark Side of BPF | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="The Diabolical eBPF Field Manual" />
+<meta property="og:title" content="Preface: The Dark Side of BPF" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-0-preface" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-0-preface" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
-<meta property="og:type" content="website" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2025-01-01T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="The Diabolical eBPF Field Manual" />
+<meta property="twitter:title" content="Preface: The Dark Side of BPF" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","author":{"@type":"Person","name":"Diabolical eBPF"},"description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"The Diabolical eBPF Field Manual","name":"Diabolical eBPF: Linux Red Team Field Manual","url":"https://mbhatt1.github.io/dBPF/"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-01-01T00:00:00+00:00","datePublished":"2025-01-01T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Preface: The Dark Side of BPF","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-0-preface"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-0-preface"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -169,87 +170,87 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">The Diabolical eBPF Field Manual</h1>
+                        <h1 class="post-title">Preface: The Dark Side of BPF</h1>
+                        
+                        <time class="post-date" datetime="2025-01-01T00:00:00+00:00">
+                            January 01, 2025
+                        </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h2 id="ebpf-is-all-you-need">eBPF is All You Need</h2>
+                        <h1 id="chapter-0-the-dark-side-of-bpf">Chapter 0: The Dark Side of BPF</h1>
 
-<blockquote>
-  <p>“When they gave us eBPF, they handed us the keys to the kingdom. Now we’re redecorating.”</p>
-</blockquote>
+<p><strong>January 1st, 2025 - Lab Notes</strong></p>
 
-<p>Welcome to the dark side of kernel programming. This field manual documents techniques that transform eBPF—a “safe” kernel programming interface—into a powerful arsenal for breaking isolation, bypassing security controls, and maintaining persistent access to systems that were never meant to be compromised.</p>
+<p>Alright, let’s talk about what you’re really getting into here. This isn’t your typical security research where we find bugs and write CVEs. This is something way more interesting—and frankly, way more powerful.</p>
 
-<p>Each technique in this collection demonstrates how a single misconfiguration can turn eBPF from a monitoring tool into a perfect attack primitive.</p>
+<p>I started playing with eBPF for legitimate observability work. Syscall tracing, network monitoring, the usual stuff. But the deeper I got into the architecture, the more I realized we’re dealing with something completely different from traditional attack surfaces.</p>
 
-<h2 id="table-of-contents">Table of Contents</h2>
+<h2 id="what-makes-this-different">What Makes This Different</h2>
+
+<p>eBPF gives you direct kernel code injection with ring-0 privileges. Every technique in this manual exploits this by design:</p>
 
 <ul>
-  <li>
-    <p><a href="/dBPF/chapter-0-field-manual-preface.html">Preface</a> - January 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-mirror-controls.html">The Mirror Controls</a> - January 31, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-overlayfs-trojan-horse.html">The OverlayFS Trojan Horse</a> - February 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-fuse-audit-black-hole.html">The FUSE Audit Black-Hole</a> - February 02, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-phantom-syscall.html">The Phantom Syscall</a> - February 03, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/the-ghost-nic.html">The Ghost NIC</a> - February 04, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/slipping-the-cgroup-leash.html">Slipping the Cgroup Leash</a> - February 05, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/silencing-selinux.html">Silencing SELinux</a> - February 06, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/device-cgroup-houdini.html">Device‑cgroup Houdini</a> - February 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/keyring-heist.html">Keyring Heist</a> - February 08, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/pid-namespace-doppelg-nger.html">PID Namespace Doppelgänger</a> - February 09, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/inode-cloak.html">Inode Cloak</a> - February 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/irq-affinity-chaos.html">IRQ Affinity Chaos</a> - February 11, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-signed-driver-swap.html">eBPF Signed‑Driver Swap</a> - March 01, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/powercap-override.html">Powercap Override</a> - March 10, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/sched-fifo-impersonator.html">SCHED_FIFO Impersonator</a> - March 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/netns-vlan-ghost.html">NetNS VLAN Ghost</a> - April 15, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/seccomp-tid-hop.html">Seccomp TID Hop</a> - April 20, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/acpi-wsmi-ping.html">ACPI WSMI Ping</a> - May 07, 2025</p>
-  </li>
-  <li>
-    <p><a href="/dBPF/ebpf-token-bypass.html">EBPF Token Bypass</a> - May 09, 2025</p>
-  </li>
+  <li><strong>Kernel function hooking</strong>: Direct interception of security decision points</li>
+  <li><strong>Runtime code modification</strong>: Altering kernel behavior without recompilation</li>
+  <li><strong>Privilege boundary bypass</strong>: Operating below traditional security layers</li>
+  <li><strong>Real-time system manipulation</strong>: Modifying live kernel state</li>
 </ul>
 
-<p><em>Remember: With great power comes great responsibility. These techniques are documented for defensive awareness.</em></p>
+<p>Here’s the kicker: eBPF doesn’t break security mechanisms—it operates at a layer where those mechanisms simply don’t apply.</p>
+
+<h2 id="the-attack-surface">The Attack Surface</h2>
+
+<p>Traditional security assumes the kernel behaves predictably. eBPF throws that assumption out the window:</p>
+
+<p><strong>Capability System</strong>: <a href="https://elixir.bootlin.com/linux/latest/source/kernel/capability.c"><code class="language-plaintext highlighter-rouge">cap_capable()</code></a> decisions can be intercepted and modified in real-time
+<strong>Seccomp Filters</strong>: BPF programs execute before seccomp evaluation in the syscall path
+<strong>LSM Framework</strong>: Security hooks can be influenced by eBPF programs attached to the same functions
+<strong>Audit Subsystem</strong>: Event generation and routing can be manipulated at the kernel level</p>
+
+<h2 id="what-youll-learn">What You’ll Learn</h2>
+
+<p>This manual covers three categories of kernel manipulation:</p>
+
+<p><strong>System-Level Bypasses</strong>: Security controls, container isolation, resource limits
+<strong>Kernel-Level Manipulation</strong>: Process management, filesystem operations, network stack
+<strong>Hardware-Level Access</strong>: Interrupt handling, power management, device control</p>
+
+<p>Every technique leverages eBPF’s legitimate kernel programming interface. No vulnerabilities, no exploits—just intended functionality used for purposes the developers probably didn’t anticipate.</p>
+
+<h2 id="technical-requirements">Technical Requirements</h2>
+
+<p>All techniques require:</p>
+<ul>
+  <li><a href="https://man7.org/linux/man-pages/man7/capabilities.7.html"><code class="language-plaintext highlighter-rouge">CAP_BPF</code></a> or <a href="https://man7.org/linux/man-pages/man7/capabilities.7.html"><code class="language-plaintext highlighter-rouge">CAP_SYS_ADMIN</code></a> capabilities</li>
+  <li>eBPF program loading permissions</li>
+  <li>Understanding of kernel internals and eBPF helper functions</li>
+</ul>
+
+<p>The code examples use libbpf and demonstrate real working implementations. No theoretical bullshit—everything here actually works.</p>
+
+<h2 id="defense-implications">Defense Implications</h2>
+
+<p>Mitigation strategies focus on:</p>
+<ul>
+  <li>eBPF capability restriction and monitoring</li>
+  <li>BPF LSM policy implementation</li>
+  <li>External validation of kernel behavior</li>
+  <li>Hardware-based security enforcement</li>
+</ul>
+
+<p>But here’s the fundamental challenge: when the kernel itself becomes programmable, traditional security boundaries become suggestions rather than hard limits.</p>
+
+<h2 id="why-this-matters">Why This Matters</h2>
+
+<p>We’re not just talking about new attack techniques. We’re talking about a fundamental shift in how computing systems work. When everything becomes programmable—including the security mechanisms themselves—the entire threat model changes.</p>
+
+<hr />
+
+<p><em>“eBPF isn’t a vulnerability—it’s a feature that makes every other security mechanism optional.”</em></p>
+
+<p><strong>Let’s dive into the technical details.</strong></p>
 
                     </div>
                 </article>

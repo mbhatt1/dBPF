@@ -54,7 +54,7 @@
                     
                     
                     <a href="/dBPF/chapter-0-field-manual-preface.html" >
-                        Chapter 0: Field Manual Preface
+                        Preface
                     </a>
                     
                 
@@ -181,9 +181,17 @@
                     <div class="post-content">
                         <h1 id="the-mirror-controls-subverting-kernel-security-mechanisms">The Mirror Controls: Subverting Kernel Security Mechanisms</h1>
 
-<p><strong>Wut</strong></p>
+<p><strong>Chapter 1: The First Revelation</strong></p>
 
-<p>How eBPF turns capabilities, seccomp, SELinux, and other kernel‑enforced controls into mere reflections—fooling auditors while attacks succeed. This technique creates a deceptive mirror where security controls appear to be functioning normally while being completely bypassed.</p>
+<p>This is where our story begins. The moment you first realize that eBPF doesn’t just give you observability into the kernel—it gives you the power to rewrite reality itself.</p>
+
+<p>Picture this: You’re staring at a system protected by capabilities, seccomp filters, SELinux policies—all the security controls that are supposed to keep attackers out. And then you discover that with eBPF, you can make all of these controls lie.</p>
+
+<p>Not break them. Not bypass them. Make them <em>lie</em>.</p>
+
+<p>We’re going to turn every security control in the Linux kernel into a funhouse mirror—everything looks normal from the outside, but reality is completely warped. The security controls will dutifully report “access denied” while we’re already inside, rummaging through their stuff.</p>
+
+<p>This is your first glimpse into what eBPF really means for security. Once you understand this technique, you’ll never look at kernel security controls the same way again.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -207,35 +215,43 @@ graph TD
     click C "https://ebpf.io/what-is-ebpf/" "eBPF Documentation"
 </code></pre>
 
-<p><strong>Why</strong></p>
+<p><strong>Why This Works (And Why It’s Terrifying)</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation. Modern Linux security relies on multiple layers of kernel-enforced controls like capabilities, seccomp, AppArmor, and SELinux. When eBPF can intercept and modify the enforcement points for these controls, the entire security model is compromised while appearing intact—creating a dangerous false sense of security.</p>
+<p>Here’s the thing that keeps me up at night: Linux security is built on trust. Trust that the kernel will enforce capabilities correctly. Trust that seccomp filters will actually block syscalls. Trust that SELinux will deny access when it should.</p>
 
-<h2 id="technical-details">Technical Details</h2>
+<p>But what happens when you can intercept the very functions that make these decisions? What happens when you can whisper in the kernel’s ear right before it decides whether to allow or deny something?</p>
 
-<h3 id="security-control-architecture">Security Control Architecture</h3>
+<p>That’s where eBPF comes in. It’s not breaking these security mechanisms—it’s becoming them. It’s like having a corrupt judge who always rules in your favor while maintaining the appearance of a fair trial.</p>
 
-<p>Linux kernel security relies on multiple enforcement mechanisms:</p>
+<p>The scariest part? Everything looks completely normal from the outside. Audit logs show denials, monitoring tools report compliance, security dashboards stay green. Meanwhile, you’re operating with god-mode privileges.</p>
+
+<h2 id="how-we-pull-this-off">How We Pull This Off</h2>
+
+<h3 id="the-security-theater-were-exploiting">The Security Theater We’re Exploiting</h3>
+
+<p>Here’s what we’re working with—Linux has this whole elaborate security theater:</p>
 <ul>
-  <li><strong>Capabilities</strong>: Fine-grained privileges that replace the all-or-nothing root model</li>
-  <li><strong>Seccomp</strong>: System call filtering to restrict process actions</li>
-  <li><strong>SELinux/AppArmor</strong>: Mandatory access controls for resources</li>
-  <li><strong>Namespaces</strong>: Resource isolation between processes</li>
-  <li><strong>Cgroups</strong>: Resource limiting and accounting</li>
+  <li><strong>Capabilities</strong>: Fancy way of saying “you can do this specific thing without being root”</li>
+  <li><strong>Seccomp</strong>: The syscall bouncer that’s supposed to keep processes in line</li>
+  <li><strong>SELinux/AppArmor</strong>: The paranoid security guards that question everything</li>
+  <li><strong>Namespaces</strong>: The “you can’t see me” walls between processes</li>
+  <li><strong>Cgroups</strong>: The resource police that make sure nobody hogs the CPU</li>
 </ul>
 
-<p>Each of these mechanisms has specific kernel functions responsible for enforcement decisions.</p>
+<p>Every single one of these has kernel functions that make the final “yes” or “no” decision. And that’s where we come in.</p>
 
-<h3 id="exploitation-technique">Exploitation Technique</h3>
+<h3 id="our-attack-strategy">Our Attack Strategy</h3>
 
-<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement security checks. By intercepting these calls, an attacker can:</p>
+<p>We’re going to become the security system. Here’s the game plan:</p>
 
 <ol>
-  <li><strong>Hook enforcement points</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">cap_capable()</code>, <code class="language-plaintext highlighter-rouge">security_file_permission()</code></li>
-  <li><strong>Modify decisions</strong>: Change the return values of security checks from “deny” to “allow”</li>
-  <li><strong>Maintain appearances</strong>: Ensure audit logs show the expected “denied” messages</li>
-  <li><strong>Create false trails</strong>: Generate deceptive audit records that mask the actual operations</li>
+  <li><strong>Hook the decision makers</strong>: We attach to functions like <code class="language-plaintext highlighter-rouge">cap_capable()</code> and <code class="language-plaintext highlighter-rouge">security_file_permission()</code> - the actual code that decides if you’re allowed to do something</li>
+  <li><strong>Flip the script</strong>: When these functions are about to return “access denied,” we make them return “access granted” instead</li>
+  <li><strong>Keep up appearances</strong>: The audit logs still show denials (gotta keep the security team happy)</li>
+  <li><strong>Cover our tracks</strong>: We generate fake audit records that make it look like we’re following the rules</li>
 </ol>
+
+<p>The beauty is that we’re not breaking anything—we’re just becoming the thing that makes the decisions.</p>
 
 <h3 id="comprehensive-poc">Comprehensive POC</h3>
 
@@ -1012,32 +1028,55 @@ seccomp-bpf-filter.json:
 
 <p>This technique demonstrates why proper eBPF restrictions are critical for maintaining the integrity of security controls, especially in environments where multiple layers of security are expected to provide defense-in-depth.</p>
 
-<p><strong>Attacker hat on</strong></p>
+<h2 id="how-theyll-try-to-catch-us">How They’ll Try to Catch Us</h2>
+
+<p>The security teams aren’t completely clueless. Here’s what they’ll try to do to stop our LSM manipulation:</p>
 
 <ol>
-  <li>Identify a target system with eBPF capabilities and security controls</li>
-  <li>Map the kernel functions responsible for security enforcement</li>
-  <li>Develop eBPF programs that hook into these enforcement points</li>
-  <li>Load the malicious BPF programs with appropriate privileges</li>
-  <li>Modify security decisions to allow otherwise prohibited operations</li>
-  <li>Ensure audit logs show the expected “denied” messages while operations succeed</li>
-  <li>Maintain persistence through the eBPF programs</li>
+  <li><strong>Strip eBPF capabilities</strong> from containers and untrusted processes</li>
+  <li><strong>Deploy BPF LSM policies</strong> that restrict who can load eBPF programs</li>
+  <li><strong>Monitor for suspicious eBPF attachments</strong> to security-critical functions</li>
+  <li><strong>Use multiple security layers</strong> so bypassing one doesn’t break everything</li>
+  <li><strong>Implement integrity checks</strong> for security subsystems</li>
+  <li><strong>Deploy eBPF-based security tools</strong> that can detect malicious eBPF usage</li>
 </ol>
 
-<p><strong>Defender hat on</strong></p>
+<p>But here’s the thing—if we’ve already got eBPF access, we can probably bypass most of these defenses too.</p>
+
+<h2 id="our-attack-playbook">Our Attack Playbook</h2>
+
+<p>Here’s how we execute this attack from start to finish:</p>
 
 <ol>
-  <li>Remove CAP_BPF from untrusted processes and containers</li>
-  <li>Implement BPF LSM policies to restrict eBPF program loading</li>
-  <li>Monitor for unexpected eBPF programs attached to security functions</li>
-  <li>Use multiple, independent security monitoring mechanisms</li>
-  <li>Implement integrity verification for security subsystems</li>
-  <li>Consider using eBPF-based security tools that can detect malicious eBPF usage</li>
+  <li><strong>Recon the target</strong> - Find systems with eBPF capabilities and identify the security controls</li>
+  <li><strong>Map the kernel</strong> - Locate the functions responsible for security enforcement</li>
+  <li><strong>Craft our hooks</strong> - Develop eBPF programs that intercept these enforcement points</li>
+  <li><strong>Get privileged access</strong> - Load our malicious BPF programs with appropriate privileges</li>
+  <li><strong>Subvert decisions</strong> - Modify security decisions to allow prohibited operations</li>
+  <li><strong>Maintain the illusion</strong> - Ensure audit logs show “denied” while operations succeed</li>
+  <li><strong>Stay persistent</strong> - Keep our eBPF programs loaded and active</li>
 </ol>
 
-<p><strong>Conclusion</strong></p>
+<h2 id="their-defense-playbook">Their Defense Playbook</h2>
 
-<p><code class="language-plaintext highlighter-rouge">eBPF is all you need</code>. The ability to intercept and modify kernel security decisions through eBPF creates a particularly dangerous scenario where attacks succeed while all monitoring systems report compliance. This technique highlights why eBPF capabilities should be treated as highly privileged operations that require strict access controls.</p>
+<p>The blue team will try to stop us with:</p>
+
+<ol>
+  <li><strong>Capability restrictions</strong> - Remove <a href="https://man7.org/linux/man-pages/man7/capabilities.7.html"><code class="language-plaintext highlighter-rouge">CAP_BPF</code></a> from untrusted processes</li>
+  <li><strong>BPF LSM policies</strong> - Implement policies that restrict eBPF program loading</li>
+  <li><strong>Anomaly detection</strong> - Monitor for unexpected eBPF programs on security functions</li>
+  <li><strong>Defense in depth</strong> - Use multiple independent security monitoring mechanisms</li>
+  <li><strong>Integrity verification</strong> - Implement checks for security subsystem integrity</li>
+  <li><strong>Fight fire with fire</strong> - Use eBPF-based security tools to detect malicious eBPF</li>
+</ol>
+
+<h2 id="why-this-changes-everything">Why This Changes Everything</h2>
+
+<p>This isn’t just another bypass technique—this is a fundamental shift in how we think about kernel security. When you can make the security controls themselves lie, you’ve broken the basic assumptions that all defensive strategies are built on.</p>
+
+<p>The kernel becomes your accomplice. The security logs become your alibi. The monitoring systems become your cover story. You’re not just bypassing security—you’re turning it into your weapon.</p>
+
+<p>Welcome to the new reality where eBPF is all you need.</p>
 
                     </div>
                 </article>
@@ -1050,7 +1089,7 @@ seccomp-bpf-filter.json:
                         
                         <span class="nav-label">Previous</span>
                         <a href="/dBPF/chapter-0-field-manual-preface.html" class="prev">
-                            Chapter 0: Field Manual Preface
+                            Preface
                         </a>
                         
                         

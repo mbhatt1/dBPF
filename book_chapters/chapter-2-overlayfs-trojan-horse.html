@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 2: The OverlayFS Trojan Horse | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="/dBPF/assets/css/book.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark'
+    });
+  });
+</script>
+
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Chapter 2: The OverlayFS Trojan Horse | Diabolical eBPF: Linux Red Team Field Manual</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Chapter 2: The OverlayFS Trojan Horse" />
+<meta name="author" content="Diabolical eBPF" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
+<meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-2-overlayfs-trojan-horse" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-2-overlayfs-trojan-horse" />
+<meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2025-02-01T00:00:00+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Chapter 2: The OverlayFS Trojan Horse" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-01T00:00:00+00:00","datePublished":"2025-02-01T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 2: The OverlayFS Trojan Horse","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-2-overlayfs-trojan-horse"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-2-overlayfs-trojan-horse"}</script>
+<!-- End Jekyll SEO tag -->
+
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <a href="/dBPF/" class="site-title">Diabolical eBPF: Linux Red Team Field Manual</a>
+            </div>
+            <div class="sidebar-content">
+                
+                
+                    
+                    
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Preface
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-mirror-controls.html" >
+                        The Mirror Controls
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-overlayfs-trojan-horse.html" >
+                        The OverlayFS Trojan Horse
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-fuse-audit-black-hole.html" >
+                        The FUSE Audit Black-Hole
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-phantom-syscall.html" >
+                        The Phantom Syscall
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-ghost-nic.html" >
+                        The Ghost NIC
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/slipping-the-cgroup-leash.html" >
+                        Slipping the Cgroup Leash
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/silencing-selinux.html" >
+                        Silencing SELinux
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/device-cgroup-houdini.html" >
+                        Device‑cgroup Houdini
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/keyring-heist.html" >
+                        Keyring Heist
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/pid-namespace-doppelg-nger.html" >
+                        PID Namespace Doppelgänger
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/inode-cloak.html" >
+                        Inode Cloak
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/irq-affinity-chaos.html" >
+                        IRQ Affinity Chaos
+                    </a>
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+            </div>
+        </nav>
+
+        <div class="content-wrapper">
+            <main class="content">
+                <article class="post">
+                    <header class="post-header">
+                        <h1 class="post-title">Chapter 2: The OverlayFS Trojan Horse</h1>
+                        
+                        <time class="post-date" datetime="2025-02-01T00:00:00+00:00">
+                            February 01, 2025
+                        </time>
+                        
+                    </header>
+
+                    <div class="post-content">
+                        <h1 id="chapter-2-the-overlayfs-trojan-horse">Chapter 2: The OverlayFS Trojan Horse</h1>
+<h2 id="container-escape-through-layer-manipulation">Container Escape Through Layer Manipulation</h2>
+
+<p><strong>February 1st, 2025 - Breaking Out of the Box</strong></p>
+
+<p>After mastering security control manipulation, the next logical target was container isolation. Containers rely heavily on OverlayFS for filesystem isolation, and here’s the thing—OverlayFS is just more kernel code making decisions about file operations.</p>
+
+<p>If we can influence those decisions, we can break container isolation at the filesystem level.</p>
+
+<h2 id="understanding-the-container-filesystem-stack">Understanding the Container Filesystem Stack</h2>
+
+<p>Containers aren’t really isolated systems—they’re processes with fancy filesystem tricks:</p>
+
+<ul>
+  <li><strong>Lower layers</strong>: Read-only base image content (Ubuntu, Alpine, etc.)</li>
+  <li><strong>Upper layer</strong>: Writable scratch space for container changes</li>
+  <li><strong>Merged view</strong>: The unified filesystem that the container sees</li>
+</ul>
+
+<p>The key insight: when you modify a file from the base image, OverlayFS performs a “copy-up” operation from the read-only layer to the writable layer. This copy-up process is where we can strike.</p>
+
+<h2 id="the-attack-vector">The Attack Vector</h2>
+
+<p>We’re going to weaponize the copy-up process itself. Here’s the strategy:</p>
+
+<ol>
+  <li><strong>Hook Copy Operations</strong>: Attach to functions like <a href="https://elixir.bootlin.com/linux/latest/source/fs/overlayfs/copy_up.c"><code class="language-plaintext highlighter-rouge">ovl_copy_up_one()</code></a> that handle file copying</li>
+  <li><strong>Target Selection</strong>: Filter for specific files we want to trojanize (system binaries, scripts, etc.)</li>
+  <li><strong>Permission Modification</strong>: Set dangerous permissions (setuid bit) during the copy process</li>
+  <li><strong>Content Injection</strong>: Alter file contents to include backdoors or malicious code</li>
+</ol>
+
+<p>The beauty is that this happens during legitimate filesystem operations, so it looks completely normal.</p>
+
+<h2 id="technical-implementation">Technical Implementation</h2>
+
+<p>Here’s how we hook into the OverlayFS copy-up process:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+</pre></td><td class="rouge-code"><pre><span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/ovl_copy_up_one"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">hook_overlayfs_copy</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Get the dentry being copied</span>
+    <span class="k">struct</span> <span class="n">dentry</span> <span class="o">*</span><span class="n">dentry</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">dentry</span> <span class="o">*</span><span class="p">)</span><span class="n">PT_REGS_PARM1</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span>
+    
+    <span class="c1">// Check if this is a target file</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_file</span><span class="p">(</span><span class="n">dentry</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Mark for modification during copy</span>
+        <span class="n">mark_for_trojanization</span><span class="p">(</span><span class="n">dentry</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/ovl_copy_up_data"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">hook_copy_data</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Intercept the actual data copy operation</span>
+    <span class="c1">// This is where we can modify file contents</span>
+    <span class="k">return</span> <span class="n">modify_file_content</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p><strong>Key Technical Points:</strong></p>
+<ul>
+  <li>Hooks into the actual OverlayFS copy-up mechanism</li>
+  <li>Operates at the VFS layer, below container runtime visibility</li>
+  <li>Modifies files during legitimate filesystem operations</li>
+</ul>
+
+<h2 id="container-escape-techniques">Container Escape Techniques</h2>
+
+<p><strong>Setuid Binary Creation:</strong>
+During copy-up, we can set the setuid bit on binaries, creating instant privilege escalation opportunities within the container that can lead to host escape.</p>
+
+<p><strong>Shared Library Injection:</strong>
+Modify shared libraries during copy-up to inject malicious code that gets executed by legitimate processes.</p>
+
+<p><strong>Script Trojanization:</strong>
+Alter shell scripts or other interpreted code during copy-up to include backdoor functionality.</p>
+
+<p><strong>Configuration File Manipulation:</strong>
+Modify configuration files to disable security features or create new attack vectors.</p>
+
+<h2 id="bypassing-container-security">Bypassing Container Security</h2>
+
+<p><strong>Runtime Evasion:</strong>
+Container runtimes like Docker and containerd monitor the container’s process space but don’t typically monitor the kernel-level filesystem operations we’re manipulating.</p>
+
+<p><strong>Security Scanner Bypass:</strong>
+Most container security scanners analyze the final filesystem state, not the dynamic copy-up process. Our modifications happen in real-time and can be conditional.</p>
+
+<p><strong>Audit Log Evasion:</strong>
+The modifications appear as normal OverlayFS operations in system logs, making them difficult to distinguish from legitimate activity.</p>
+
+<h2 id="advanced-techniques">Advanced Techniques</h2>
+
+<p><strong>Conditional Trojanization:</strong>
+Only modify files when specific conditions are met (time-based, process-based, etc.) to avoid detection during security scans.</p>
+
+<p><strong>Multi-Stage Attacks:</strong>
+Use the initial container escape to establish persistence on the host system and compromise other containers.</p>
+
+<p><strong>Host Filesystem Access:</strong>
+Once we’ve escaped the container, we can access the host filesystem directly, potentially compromising the entire container host.</p>
+
+<h2 id="detection-and-defense">Detection and Defense</h2>
+
+<p><strong>eBPF Monitoring:</strong></p>
+<ul>
+  <li>Monitor for eBPF programs attached to OverlayFS functions</li>
+  <li>Implement BPF LSM policies to restrict eBPF program loading in container environments</li>
+  <li>Use container runtimes that drop CAP_BPF by default</li>
+</ul>
+
+<p><strong>Filesystem Integrity:</strong></p>
+<ul>
+  <li>Implement file integrity monitoring that operates at the kernel level</li>
+  <li>Use read-only container filesystems where possible</li>
+  <li>Monitor for unexpected setuid binaries in container layers</li>
+</ul>
+
+<p><strong>Alternative Storage Drivers:</strong></p>
+<ul>
+  <li>Consider using storage drivers other than OverlayFS for high-security environments</li>
+  <li>Implement additional isolation layers that don’t rely solely on filesystem namespaces</li>
+</ul>
+
+<h2 id="why-this-works">Why This Works</h2>
+
+<p>Container isolation relies on the assumption that the kernel will enforce filesystem boundaries correctly. By operating at the kernel level, we’re below where most container security tools monitor, and our modifications look like legitimate OverlayFS operations.</p>
+
+<p>The fundamental issue is that containers provide process isolation, not kernel isolation. When you can run code in the kernel, traditional container boundaries become advisory.</p>
+
+<h2 id="impact-assessment">Impact Assessment</h2>
+
+<p>This technique demonstrates that container isolation is only as strong as the kernel mechanisms that enforce it. When those mechanisms become programmable through eBPF, container escape becomes a matter of understanding the right kernel functions to hook.</p>
+
+<p>We’re not breaking containers—we’re using the kernel’s own filesystem management code to break out of them.</p>
+
+<hr />
+
+<p><em>“I wasn’t just breaking out of one container—I was potentially compromising the entire container host.”</em></p>
+
+                    </div>
+                </article>
+
+                
+            </main>
+
+            <footer class="site-footer">
+                <div class="footer-content">
+                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize mermaid with custom dark theme
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: 'dark',
+                flowchart: {
+                    htmlLabels: true,  // Enable HTML in labels for better word wrapping
+                    curve: 'basis',    // Smoother curves
+                    useMaxWidth: true, // Constrain diagram width
+                    nodeSpacing: 50,   // More space between nodes
+                    rankSpacing: 70    // More space between ranks
+                },
+                themeVariables: {
+                    darkMode: true,
+                    background: '#000000',
+                    primaryColor: '#00ff9d',
+                    primaryTextColor: '#00ff9d',
+                    primaryBorderColor: '#00ff9d',
+                    lineColor: '#00ff9d',
+                    secondaryColor: '#ff00f7',
+                    tertiaryColor: '#00c3ff',
+                    nodeBorder: '#00ff9d',
+                    clusterBkg: '#000000',
+                    clusterBorder: '#00ff9d',
+                    edgeLabelBackground: '#000000',
+                    fontFamily: 'JetBrains Mono'
+                }
+            });
+
+            // Add custom CSS for Mermaid diagrams to handle word wrapping
+            var style = document.createElement('style');
+            style.textContent = `
+                .mermaid .node rect, .mermaid .node circle, .mermaid .node ellipse, .mermaid .node polygon, .mermaid .node path {
+                    rx: 5px;
+                    ry: 5px;
+                }
+                .mermaid .node .label {
+                    word-wrap: break-word;
+                    white-space: pre-wrap !important;
+                    max-width: 200px;
+                }
+                .mermaid .edgeLabel {
+                    background-color: #000000 !important;
+                    color: #00ff9d !important;
+                }
+            `;
+            document.head.appendChild(style);
+
+            // Find all pre code blocks with mermaid class
+            document.querySelectorAll('pre code.language-mermaid').forEach(function(element) {
+                // Create a div for mermaid
+                var div = document.createElement('div');
+                div.className = 'mermaid';
+                div.style.background = '#000000';
+                div.style.padding = '2em';
+                div.style.borderRadius = '8px';
+                div.style.marginBottom = '2em';
+                div.textContent = element.textContent;
+                // Replace the pre element with the div
+                element.parentElement.replaceWith(div);
+            });
+
+            // Run mermaid
+            mermaid.init();
+        });
+    </script>
+</body>
+</html>

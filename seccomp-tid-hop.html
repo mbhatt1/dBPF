@@ -54,7 +54,7 @@
                     
                     
                     <a href="/dBPF/chapter-0-field-manual-preface.html" >
-                        Chapter 0: Field Manual Preface
+                        Preface
                     </a>
                     
                 
@@ -181,9 +181,17 @@
                     <div class="post-content">
                         <h1 id="seccomp-tid-hop-bypassing-system-call-filtering">Seccomp TID Hop: Bypassing System Call Filtering</h1>
 
-<p><strong>Wut</strong></p>
+<p><strong>Chapter 16: Dancing Between Threads</strong></p>
 
-<p>A technique using eBPF to bypass seccomp filters by manipulating thread ID (TID) associations and filter inheritance. This attack allows processes to execute restricted system calls by “hopping” between thread contexts, effectively circumventing one of Linux’s core security mechanisms while maintaining the appearance of proper enforcement.</p>
+<p>You’ve learned to exist in multiple network realities. Now let’s explore another form of multiplicity: thread identity. What if you could hop between thread contexts to bypass the very filters designed to restrict your system calls?</p>
+
+<p>This is where our story becomes about quantum existence at the thread level. You’ve mastered process doppelgängers, but what about thread doppelgängers? What if you could make seccomp filters think you’re a different thread than you actually are?</p>
+
+<p>Seccomp is supposed to be bulletproof—once a process is restricted by seccomp filters, every thread in that process should be bound by the same restrictions. But what if we could make threads hop between different filter contexts?</p>
+
+<p>We’re going to perform the ultimate thread identity shuffle—make seccomp filters lose track of which thread is which, allowing us to execute restricted system calls by “hopping” between thread contexts.</p>
+
+<p>This is where you learn that even thread-level security enforcement can be confused by someone who understands how to manipulate thread identity at the kernel level.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -214,15 +222,15 @@ graph TD
 
 <h3 id="seccomp-architecture">Seccomp Architecture</h3>
 
-<p>Seccomp (secure computing mode) provides:</p>
+<p>Here’s how seccomp normally works as the syscall gatekeeper:</p>
 <ul>
-  <li><strong>System call filtering</strong>: Restricts which syscalls a process can execute</li>
-  <li><strong>Filter inheritance</strong>: Child processes inherit parent’s seccomp filters</li>
-  <li><strong>Thread sharing</strong>: All threads in a process share the same seccomp state</li>
-  <li><strong>Filter modes</strong>: SECCOMP_MODE_STRICT (minimal syscalls) or SECCOMP_MODE_FILTER (BPF-based rules)</li>
+  <li><strong>System call filtering</strong>: Acts like a bouncer checking IDs at the syscall entrance</li>
+  <li><strong>Filter inheritance</strong>: Kids get the same restrictions as their parents</li>
+  <li><strong>Thread sharing</strong>: All threads in a process follow the same rules</li>
+  <li><strong>Filter modes</strong>: Either super strict (almost nothing allowed) or BPF-based custom rules</li>
 </ul>
 
-<p>In containerized environments, seccomp profiles define which system calls are allowed, blocking potentially dangerous operations.</p>
+<p>Container runtimes use seccomp profiles to say “you can make these syscalls, but stay away from the dangerous ones.”</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -282,7 +290,7 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>When eBPF is used to manipulate seccomp filter evaluation, the architecture is subverted:</p>
+<p>Here’s what happens when we use eBPF to mess with seccomp filter evaluation:</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -350,19 +358,21 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="exploitation-technique">Exploitation Technique</h3>
+<h3 id="how-we-hop-between-thread-identities">How We Hop Between Thread Identities</h3>
 
-<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement seccomp filter evaluation. By intercepting these calls, an attacker can:</p>
+<p>Our strategy is to manipulate thread context during seccomp checks to confuse the filter:</p>
 
 <ol>
-  <li><strong>Hook filter evaluation</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">seccomp_check_filter()</code> or <code class="language-plaintext highlighter-rouge">__secure_computing()</code></li>
-  <li><strong>Manipulate thread context</strong>: Temporarily modify thread ID associations during checks</li>
-  <li><strong>Create filter bypasses</strong>: Make restricted syscalls appear to come from allowed contexts</li>
-  <li><strong>Preserve audit integrity</strong>: Ensure logs show only allowed syscall patterns</li>
-  <li><strong>Maintain stealth</strong>: Restore proper context after bypassing filters
-    <h3 id="comprehensive-poc">Comprehensive POC</h3>
-  </li>
+  <li><strong>Hook the Filter Checker</strong>: We attach to functions like <a href="https://elixir.bootlin.com/linux/latest/source/kernel/seccomp.c"><code class="language-plaintext highlighter-rouge">__secure_computing()</code></a> that evaluate seccomp filters</li>
+  <li><strong>Play Musical Chairs with Thread IDs</strong>: We temporarily modify thread ID associations during security checks</li>
+  <li><strong>Create Identity Confusion</strong>: We make restricted syscalls appear to come from threads that are allowed to make them</li>
+  <li><strong>Keep the Logs Clean</strong>: We ensure audit logs only show syscalls that look legitimate</li>
+  <li><strong>Cover Our Tracks</strong>: We restore proper thread context after we’ve bypassed the filters</li>
 </ol>
+
+<p>The trick is that seccomp filters often check thread-specific context, and we can temporarily borrow a different thread’s identity during the check.</p>
+
+<h3 id="building-our-thread-identity-swapper">Building Our Thread Identity Swapper</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -1396,31 +1406,31 @@ auditctl <span class="nt">-a</span> always,exit <span class="nt">-F</span> <span
   </li>
 </ol>
 
-<h3 id="real-world-impact">Real-world Impact</h3>
+<h3 id="why-this-hops-over-everything">Why This Hops Over Everything</h3>
 
-<p>In practical environments, this technique could allow an attacker to:</p>
+<p>This seccomp TID hop technique is pure syscall liberation:</p>
 <ul>
-  <li><strong>Container escape</strong>: Execute syscalls needed to break out of container isolation</li>
-  <li><strong>Privilege escalation</strong>: Perform privileged operations despite seccomp restrictions</li>
-  <li><strong>Security bypass</strong>: Circumvent security controls that rely on syscall filtering</li>
-  <li><strong>Malware execution</strong>: Run malicious code that would normally be blocked</li>
-  <li><strong>Persistence</strong>: Maintain access despite security hardening measures</li>
+  <li><strong>Container breakout</strong>: Execute any syscalls needed to break out of container isolation, no matter what seccomp says</li>
+  <li><strong>Privilege escalation mastery</strong>: Perform privileged operations despite seccomp restrictions trying to stop us</li>
+  <li><strong>Security annihilation</strong>: Circumvent security controls that rely on syscall filtering like they’re made of paper</li>
+  <li><strong>Malware freedom</strong>: Run any malicious code that would normally be blocked by seccomp filters</li>
+  <li><strong>Unstoppable persistence</strong>: Maintain access despite all their security hardening measures</li>
 </ul>
 
-<p>The ability to bypass seccomp filters creates a particularly concerning scenario for containerized environments, Kubernetes clusters, and any system relying on syscall filtering as a security boundary.</p>
+<p>When you can bypass seccomp filters through thread ID manipulation, you’ve essentially broken the entire syscall security model. Containerized environments, Kubernetes clusters, any system relying on syscall filtering - their fundamental security boundary becomes meaningless. You’re executing forbidden syscalls while the security system thinks you’re a different, trusted thread.</p>
 
-<h3 id="detection-methods">Detection Methods</h3>
+<h3 id="how-theyll-try-to-catch-us">How They’ll Try to Catch Us</h3>
 
-<p>Defenders should monitor for:</p>
+<p>Smart defenders will be hunting for our seccomp bypass:</p>
 <ul>
-  <li>Unexpected eBPF programs attached to seccomp-related functions</li>
-  <li>Discrepancies between configured seccomp profiles and actual syscall patterns</li>
-  <li>Unusual thread behavior during syscall execution</li>
-  <li>Processes executing syscalls that should be blocked by their seccomp profile</li>
-  <li>Inconsistencies in thread context during security-sensitive operations</li>
+  <li><strong>eBPF surveillance</strong>: Watching for eBPF programs hooking seccomp-related functions</li>
+  <li><strong>Profile consistency checks</strong>: Looking for discrepancies between configured seccomp profiles and actual syscall patterns</li>
+  <li><strong>Thread behavior analysis</strong>: Monitoring unusual thread behavior during syscall execution</li>
+  <li><strong>Syscall anomaly detection</strong>: Watching for processes executing syscalls that should be blocked by their seccomp profile</li>
+  <li><strong>Context integrity monitoring</strong>: Looking for inconsistencies in thread context during security-sensitive operations</li>
 </ul>
 
-<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining the integrity of seccomp filtering, especially in containerized environments where system call restrictions are a key security boundary.</p>
+<p>But here’s the beautiful part - we’re manipulating thread context at the kernel level, below where most monitoring tools operate. By the time they detect the anomaly, we’ve already executed our forbidden syscalls and potentially escaped their container.</p>
 
                     </div>
                 </article>

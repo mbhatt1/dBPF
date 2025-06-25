@@ -54,7 +54,7 @@
                     
                     
                     <a href="/dBPF/chapter-0-field-manual-preface.html" >
-                        Chapter 0: Field Manual Preface
+                        Preface
                     </a>
                     
                 
@@ -181,9 +181,17 @@
                     <div class="post-content">
                         <h1 id="device-cgroup-houdini-escaping-device-access-restrictions">Device-cgroup Houdini: Escaping Device Access Restrictions</h1>
 
-<p><strong>Wut</strong></p>
+<p><strong>Chapter 8: Hardware Becomes Our Playground</strong></p>
 
-<p>A compact exploration of how eBPF can twist the kernel feature “Device‑cgroup” controls into an attack primitive—maintaining verifier legality while undermining isolation. This technique allows attackers to access restricted device files despite container device restrictions, effectively performing a Houdini-like escape from device access controls.</p>
+<p>You’ve silenced SELinux—the ultimate mandatory access control system. Now let’s take that victory and apply it to something even more fundamental: hardware access.</p>
+
+<p>This is where our story moves from software manipulation to hardware control. You’ve been operating in the realm of processes, files, and network connections. But what happens when you need direct access to hardware devices that are supposed to be completely off-limits?</p>
+
+<p>Device cgroups are like having a bouncer at every hardware device—”Sorry, you’re not on the list for /dev/mem. No GPU access for you. That block device? Forget about it.”</p>
+
+<p>But what if we could perform the ultimate magic trick? What if we could make ourselves disappear from the device access controls while still being able to touch any hardware we want?</p>
+
+<p>We’re going to pull a Houdini on device cgroups—escape from the constraints while everyone thinks we’re still locked up. This is where you learn that eBPF doesn’t just give you software control—it gives you hardware control too.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -208,23 +216,29 @@ graph TD
     click E "https://www.kernel.org/doc/html/latest/admin-guide/devices.html" "Linux Device Documentation"
 </code></pre>
 
-<p><strong>Why</strong></p>
+<p><strong>Why Hardware Access Control Just Broke</strong></p>
 
-<p>Because eBPF + misconfiguration =&gt; broken isolation. Device-cgroups are a critical security boundary in containerized environments, preventing containers from accessing sensitive host devices like disks, GPUs, or specialized hardware. By bypassing these restrictions, attackers can gain direct access to hardware, potentially compromising the host or other containers.</p>
+<p>Here’s the thing about containers: they’re supposed to be sandboxes. You get access to some CPU, some memory, some network, and that’s it. No touching the GPU, no accessing raw block devices, definitely no reading from /dev/mem.</p>
 
-<h2 id="technical-details">Technical Details</h2>
+<p>Device cgroups are what enforce this—they’re the kernel’s way of saying “this container can access these devices and absolutely nothing else.” It’s supposed to be bulletproof.</p>
 
-<h3 id="device-cgroup-architecture">Device-cgroup Architecture</h3>
+<p>But here’s what the container security folks don’t want you to know: device access control is just more kernel code making decisions. And kernel code can be… persuaded.</p>
 
-<p>Device-cgroups provide a mechanism to:</p>
+<p>The scary part isn’t just that we can access forbidden devices—it’s that we can do it while the device cgroup subsystem thinks everything is fine. The access controls are still there, still enforced for other processes, but somehow our access requests just slip right through.</p>
+
+<h2 id="how-we-escape-the-device-jail">How We Escape the Device Jail</h2>
+
+<h3 id="understanding-the-device-bouncer">Understanding the Device Bouncer</h3>
+
+<p>Device-cgroups are like having a bouncer at the hardware club:</p>
 <ul>
-  <li><strong>Control which devices</strong> (character and block) processes can access</li>
-  <li><strong>Specify permissions</strong> (read, write, mknod) for allowed devices</li>
-  <li><strong>Enforce these restrictions</strong> at the kernel level</li>
-  <li><strong>Integrate with container runtimes</strong> like Docker and Kubernetes</li>
+  <li><strong>Device whitelist</strong> that says which hardware you can touch</li>
+  <li><strong>Permission levels</strong> for each device (read-only, write, or create new device nodes)</li>
+  <li><strong>Kernel enforcement</strong> that actually blocks access attempts</li>
+  <li><strong>Container integration</strong> so Docker and Kubernetes can set the rules</li>
 </ul>
 
-<p>In container environments, device-cgroups are configured to allow only specific devices, typically excluding direct access to host hardware.</p>
+<p>Container runtimes use this to say “you can access <code class="language-plaintext highlighter-rouge">/dev/null</code> and <code class="language-plaintext highlighter-rouge">/dev/zero</code>, but stay away from <code class="language-plaintext highlighter-rouge">/dev/sda</code> and <code class="language-plaintext highlighter-rouge">/dev/mem</code>.”</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -278,7 +292,7 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>When eBPF is used to manipulate the device-cgroup checks, the architecture is subverted:</p>
+<p>Here’s what happens when we slip our eBPF program into the access control flow:</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -346,18 +360,20 @@ graph TD
 └─────────────────────────────────────────────────────────────┘
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<h3 id="exploitation-technique">Exploitation Technique</h3>
+<h3 id="how-we-become-the-device-bouncer">How We Become the Device Bouncer</h3>
 
-<p>The exploit leverages eBPF’s ability to attach to kernel functions that implement device access checks. By intercepting these calls, an attacker can:</p>
+<p>Our approach is to intercept the permission checks and become the final authority:</p>
 
 <ol>
-  <li><strong>Hook permission checks</strong>: Attach to functions like <code class="language-plaintext highlighter-rouge">devcgroup_check_permission()</code> or related functions</li>
-  <li><strong>Identify device access attempts</strong>: Filter for specific devices of interest</li>
-  <li><strong>Modify access decisions</strong>: Change “deny” decisions to “allow” for targeted devices</li>
-  <li><strong>Maintain appearances</strong>: Ensure monitoring systems still show restrictions as active</li>
+  <li><strong>Hook the Gatekeeper</strong>: We attach to functions like <a href="https://elixir.bootlin.com/linux/latest/source/security/device_cgroup.c"><code class="language-plaintext highlighter-rouge">devcgroup_check_permission()</code></a> that decide device access</li>
+  <li><strong>Pick Our Targets</strong>: We filter for the specific devices we want to access (like raw disk or memory)</li>
+  <li><strong>Override Decisions</strong>: We change “access denied” to “access granted” for our processes</li>
+  <li><strong>Stay Under the Radar</strong>: Other containers still get blocked, so the security team doesn’t notice</li>
 </ol>
 
-<h3 id="comprehensive-poc">Comprehensive POC</h3>
+<p>The beauty is that the device cgroup subsystem still thinks it’s doing its job—we’re just overruling it at the last second.</p>
+
+<h3 id="building-our-device-access-bypass">Building Our Device Access Bypass</h3>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -1208,31 +1224,41 @@ auditctl <span class="nt">-a</span> always,exit <span class="nt">-F</span> <span
   </li>
 </ol>
 
-<h3 id="real-world-impact">Real-world Impact</h3>
+<h2 id="why-hardware-just-became-your-playground">Why Hardware Just Became Your Playground</h2>
 
-<p>In containerized environments, this technique could allow an attacker to:</p>
+<p>In containerized environments, this technique turns device restrictions into suggestions:</p>
+
 <ul>
-  <li>Access host disks directly, bypassing filesystem isolation</li>
-  <li>Interact with GPUs or other specialized hardware</li>
-  <li>Access sensitive device files like <code class="language-plaintext highlighter-rouge">/dev/mem</code> or <code class="language-plaintext highlighter-rouge">/dev/kmem</code></li>
-  <li>Perform DMA operations that could compromise the host</li>
-  <li>Interfere with hardware used by other containers</li>
+  <li><strong>Direct disk access</strong> - Bypass filesystem isolation and read raw host storage</li>
+  <li><strong>GPU hijacking</strong> - Commandeer specialized hardware for crypto mining or AI workloads</li>
+  <li><strong>Memory diving</strong> - Access sensitive device files like <a href="https://man7.org/linux/man-pages/man4/mem.4.html"><code class="language-plaintext highlighter-rouge">/dev/mem</code></a> or <a href="https://man7.org/linux/man-pages/man4/mem.4.html"><code class="language-plaintext highlighter-rouge">/dev/kmem</code></a></li>
+  <li><strong>DMA attacks</strong> - Perform direct memory access operations that compromise the host</li>
+  <li><strong>Hardware interference</strong> - Mess with devices being used by other containers</li>
 </ul>
 
-<p>The ability to bypass device-cgroup restrictions undermines a fundamental isolation boundary in container security models, potentially allowing container escapes or cross-container attacks through shared hardware.</p>
+<p>When you can bypass device-cgroup restrictions, you’ve broken a fundamental isolation boundary. Containers become stepping stones to the hardware layer, and shared hardware becomes your attack vector.</p>
 
-<h3 id="detection-methods">Detection Methods</h3>
+<h2 id="how-theyll-try-to-catch-us">How They’ll Try to Catch Us</h2>
 
-<p>Defenders should monitor for:</p>
+<p>Smart defenders will be watching for our hardware shenanigans:</p>
+
 <ul>
-  <li>Unexpected eBPF programs attached to device-cgroup related functions</li>
-  <li>Discrepancies between configured device restrictions and actual device access</li>
-  <li>Unusual patterns of device operations from containerized workloads</li>
-  <li>Processes accessing devices that should be restricted by their cgroup configuration</li>
-  <li>Inconsistencies between different security monitoring systems</li>
+  <li><strong>eBPF surveillance</strong> - Monitor for unexpected eBPF programs attached to device-cgroup functions</li>
+  <li><strong>Access auditing</strong> - Look for discrepancies between configured restrictions and actual device access</li>
+  <li><strong>Behavioral analysis</strong> - Watch for unusual device operation patterns from containers</li>
+  <li><strong>Permission violations</strong> - Detect processes accessing devices that should be blocked by cgroup config</li>
+  <li><strong>Cross-reference monitoring</strong> - Compare different security systems to spot inconsistencies</li>
 </ul>
 
-<p>This technique demonstrates why proper eBPF restrictions are critical for maintaining hardware isolation boundaries, especially in environments where device access controls are a key security mechanism.</p>
+<p>But here’s the beautiful irony—most monitoring tools can’t see what we’re doing at the kernel level.</p>
+
+<h2 id="why-container-security-just-got-hardware">Why Container Security Just Got Hardware</h2>
+
+<p>This isn’t just about breaking out of containers—this is about turning hardware isolation into hardware access. When device controls become suggestions instead of rules, every piece of hardware becomes a potential attack vector.</p>
+
+<p>The container thinks it’s isolated. The orchestrator thinks it’s secure. The monitoring thinks everything’s fine. Meanwhile, you’re reading raw disk sectors, accessing GPU memory, and performing DMA operations that would make a kernel developer cry.</p>
+
+<p>Welcome to the world where containers become hardware proxies, and eBPF is your universal device driver.</p>
 
                     </div>
                 </article>
