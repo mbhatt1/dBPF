@@ -53,6 +53,13 @@
                 
                     
                     
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Chapter 0: Field Manual Preface
+                    </a>
+                    
+                
+                    
+                    
                     <a href="/dBPF/the-mirror-controls.html" >
                         The Mirror Controls
                     </a>
@@ -785,8 +792,8 @@ graph TD
             
             <span class="c1">// Get user and group ID</span>
             <span class="n">u64</span> <span class="n">kuid</span><span class="p">,</span> <span class="n">kgid</span><span class="p">;</span>
-            <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kuid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">kuid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cred</span><span class="o">-&gt;</span><span class="n">uid</span><span class="p">);</span>
-            <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kgid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">kgid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cred</span><span class="o">-&gt;</span><span class="n">gid</span><span class="p">);</span>
+            <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kuid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">kuid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cred</span><span class="o">-&gt;</span><span class="n">uid</span><span class="p">);</span>
+            <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kgid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">kgid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cred</span><span class="o">-&gt;</span><span class="n">gid</span><span class="p">);</span>
             <span class="n">event</span><span class="p">.</span><span class="n">uid</span> <span class="o">=</span> <span class="n">kuid</span><span class="p">;</span>
             <span class="n">event</span><span class="p">.</span><span class="n">gid</span> <span class="o">=</span> <span class="n">kgid</span><span class="p">;</span>
             
@@ -805,7 +812,7 @@ graph TD
     <span class="p">}</span>
     
     <span class="c1">// Let the original function run for other cases</span>
-    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
 <span class="c1">// Hook the capability check function</span>
@@ -828,8 +835,8 @@ graph TD
             
             <span class="c1">// Get user and group ID</span>
             <span class="n">u64</span> <span class="n">kuid</span><span class="p">,</span> <span class="n">kgid</span><span class="p">;</span>
-            <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kuid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">kuid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cred</span><span class="o">-&gt;</span><span class="n">uid</span><span class="p">);</span>
-            <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kgid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">kgid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cred</span><span class="o">-&gt;</span><span class="n">gid</span><span class="p">);</span>
+            <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kuid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">kuid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cred</span><span class="o">-&gt;</span><span class="n">uid</span><span class="p">);</span>
+            <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kgid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">kgid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cred</span><span class="o">-&gt;</span><span class="n">gid</span><span class="p">);</span>
             <span class="n">event</span><span class="p">.</span><span class="n">uid</span> <span class="o">=</span> <span class="n">kuid</span><span class="p">;</span>
             <span class="n">event</span><span class="p">.</span><span class="n">gid</span> <span class="o">=</span> <span class="n">kgid</span><span class="p">;</span>
             
@@ -847,7 +854,7 @@ graph TD
     <span class="p">}</span>
     
     <span class="c1">// Let the original function run for other cases</span>
-    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
 <span class="c1">// Hook the credential check function</span>

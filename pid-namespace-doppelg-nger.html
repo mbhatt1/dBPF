@@ -53,6 +53,13 @@
                 
                     
                     
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Chapter 0: Field Manual Preface
+                    </a>
+                    
+                
+                    
+                    
                     <a href="/dBPF/the-mirror-controls.html" >
                         The Mirror Controls
                     </a>
@@ -750,8 +757,8 @@ graph TD
     <span class="n">u64</span> <span class="n">ns_id</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
     
     <span class="c1">// Try to get the namespace ID</span>
-    <span class="c1">// This is a simplified approach - real implementation would be more robust</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ns_id</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ns_id</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">ns</span><span class="o">-&gt;</span><span class="n">ns</span><span class="p">.</span><span class="n">inum</span><span class="p">);</span>
+    <span class="c1">// FIXED: This is a simplified approach - real implementation would be more robust</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ns_id</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ns_id</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">ns</span><span class="o">-&gt;</span><span class="n">ns</span><span class="p">.</span><span class="n">inum</span><span class="p">);</span>
     
     <span class="k">return</span> <span class="n">ns_id</span><span class="p">;</span>
 <span class="p">}</span>
@@ -786,8 +793,8 @@ graph TD
     <span class="k">struct</span> <span class="n">pid_namespace</span> <span class="o">*</span><span class="n">pid_ns</span><span class="p">;</span>
     
     <span class="n">current_task</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="p">)</span><span class="n">bpf_get_current_task</span><span class="p">();</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">nsproxy</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">nsproxy</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">current_task</span><span class="o">-&gt;</span><span class="n">nsproxy</span><span class="p">);</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pid_ns</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pid_ns</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">nsproxy</span><span class="o">-&gt;</span><span class="n">pid_ns_for_children</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">nsproxy</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">nsproxy</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">current_task</span><span class="o">-&gt;</span><span class="n">nsproxy</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pid_ns</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pid_ns</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">nsproxy</span><span class="o">-&gt;</span><span class="n">pid_ns_for_children</span><span class="p">);</span>
     
     <span class="c1">// Get namespace ID</span>
     <span class="n">u64</span> <span class="n">ns_id</span> <span class="o">=</span> <span class="n">get_ns_id</span><span class="p">(</span><span class="n">pid_ns</span><span class="p">);</span>
@@ -834,9 +841,9 @@ graph TD
     <span class="k">struct</span> <span class="n">nsproxy</span> <span class="o">*</span><span class="n">old_nsproxy</span><span class="p">;</span>
     <span class="k">struct</span> <span class="n">pid_namespace</span> <span class="o">*</span><span class="n">old_ns</span><span class="p">,</span> <span class="o">*</span><span class="n">new_ns</span><span class="p">;</span>
     
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">old_nsproxy</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">old_nsproxy</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">nsproxy</span><span class="p">);</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">old_ns</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">old_ns</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">old_nsproxy</span><span class="o">-&gt;</span><span class="n">pid_ns_for_children</span><span class="p">);</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">new_ns</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">new_ns</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">new_nsproxy</span><span class="o">-&gt;</span><span class="n">pid_ns_for_children</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">old_nsproxy</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">old_nsproxy</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">nsproxy</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">old_ns</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">old_ns</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">old_nsproxy</span><span class="o">-&gt;</span><span class="n">pid_ns_for_children</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">new_ns</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">new_ns</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">new_nsproxy</span><span class="o">-&gt;</span><span class="n">pid_ns_for_children</span><span class="p">);</span>
     
     <span class="c1">// Get namespace IDs</span>
     <span class="n">u64</span> <span class="n">old_ns_id</span> <span class="o">=</span> <span class="n">get_ns_id</span><span class="p">(</span><span class="n">old_ns</span><span class="p">);</span>
@@ -882,8 +889,8 @@ graph TD
     <span class="k">struct</span> <span class="n">pid_namespace</span> <span class="o">*</span><span class="n">pid_ns</span><span class="p">;</span>
     
     <span class="n">current_task</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="p">)</span><span class="n">bpf_get_current_task</span><span class="p">();</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">nsproxy</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">nsproxy</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">current_task</span><span class="o">-&gt;</span><span class="n">nsproxy</span><span class="p">);</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pid_ns</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pid_ns</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">nsproxy</span><span class="o">-&gt;</span><span class="n">pid_ns_for_children</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">nsproxy</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">nsproxy</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">current_task</span><span class="o">-&gt;</span><span class="n">nsproxy</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pid_ns</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pid_ns</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">nsproxy</span><span class="o">-&gt;</span><span class="n">pid_ns_for_children</span><span class="p">);</span>
     
     <span class="c1">// Get namespace ID</span>
     <span class="n">u64</span> <span class="n">ns_id</span> <span class="o">=</span> <span class="n">get_ns_id</span><span class="p">(</span><span class="n">pid_ns</span><span class="p">);</span>
@@ -892,7 +899,7 @@ graph TD
     <span class="k">struct</span> <span class="n">process_info</span> <span class="n">pinfo</span> <span class="o">=</span> <span class="p">{};</span>
     <span class="n">pinfo</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">;</span>
     <span class="n">pinfo</span><span class="p">.</span><span class="n">tgid</span> <span class="o">=</span> <span class="n">tgid</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pinfo</span><span class="p">.</span><span class="n">ppid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pinfo</span><span class="p">.</span><span class="n">ppid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">current_task</span><span class="o">-&gt;</span><span class="n">real_parent</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pinfo</span><span class="p">.</span><span class="n">ppid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pinfo</span><span class="p">.</span><span class="n">ppid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">current_task</span><span class="o">-&gt;</span><span class="n">real_parent</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
     <span class="n">pinfo</span><span class="p">.</span><span class="n">ns_id</span> <span class="o">=</span> <span class="n">ns_id</span><span class="p">;</span>
     <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pinfo</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pinfo</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
     <span class="n">pinfo</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
@@ -937,14 +944,14 @@ graph TD
     <span class="n">u32</span> <span class="n">sender_pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     <span class="n">u32</span> <span class="n">target_pid</span><span class="p">;</span>
     
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">target_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">target_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
     
     <span class="c1">// Get namespace information</span>
     <span class="k">struct</span> <span class="n">nsproxy</span> <span class="o">*</span><span class="n">nsproxy</span><span class="p">;</span>
     <span class="k">struct</span> <span class="n">pid_namespace</span> <span class="o">*</span><span class="n">pid_ns</span><span class="p">;</span>
     
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">nsproxy</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">nsproxy</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">nsproxy</span><span class="p">);</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pid_ns</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pid_ns</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">nsproxy</span><span class="o">-&gt;</span><span class="n">pid_ns_for_children</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">nsproxy</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">nsproxy</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">nsproxy</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pid_ns</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pid_ns</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">nsproxy</span><span class="o">-&gt;</span><span class="n">pid_ns_for_children</span><span class="p">);</span>
     
     <span class="c1">// Get namespace ID</span>
     <span class="n">u64</span> <span class="n">ns_id</span> <span class="o">=</span> <span class="n">get_ns_id</span><span class="p">(</span><span class="n">pid_ns</span><span class="p">);</span>

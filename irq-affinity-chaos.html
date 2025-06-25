@@ -53,6 +53,13 @@
                 
                     
                     
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Chapter 0: Field Manual Preface
+                    </a>
+                    
+                
+                    
+                    
                     <a href="/dBPF/the-mirror-controls.html" >
                         The Mirror Controls
                     </a>
@@ -832,7 +839,7 @@ graph TD
 <span class="p">{</span>
     <span class="c1">// Get the IRQ number from context</span>
     <span class="n">u32</span> <span class="n">irq</span><span class="p">;</span>
-    <span class="n">bpf_probe_read</span><span class="p">(</span><span class="o">&amp;</span><span class="n">irq</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">irq</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">PT_REGS_PARM1</span><span class="p">(</span><span class="n">ctx</span><span class="p">));</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">irq</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">irq</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">PT_REGS_PARM1</span><span class="p">(</span><span class="n">ctx</span><span class="p">));</span>
     
     <span class="c1">// Get the end time</span>
     <span class="n">u64</span> <span class="n">end_time</span> <span class="o">=</span> <span class="n">bpf_ktime_get_ns</span><span class="p">();</span>
