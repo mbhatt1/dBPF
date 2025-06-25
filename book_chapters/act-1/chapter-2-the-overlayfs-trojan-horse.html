@@ -30,15 +30,15 @@
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-2-overlayfs-trojan-horse" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-2-overlayfs-trojan-horse" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/act-1/chapter-2-the-overlayfs-trojan-horse" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/act-1/chapter-2-the-overlayfs-trojan-horse" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
 <meta property="og:type" content="article" />
 <meta property="article:published_time" content="2025-02-01T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
 <meta property="twitter:title" content="Chapter 2: The OverlayFS Trojan Horse" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-01T00:00:00+00:00","datePublished":"2025-02-01T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 2: The OverlayFS Trojan Horse","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-2-overlayfs-trojan-horse"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-2-overlayfs-trojan-horse"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-01T00:00:00+00:00","datePublished":"2025-02-01T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 2: The OverlayFS Trojan Horse","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/act-1/chapter-2-the-overlayfs-trojan-horse"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/act-1/chapter-2-the-overlayfs-trojan-horse"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -179,43 +179,31 @@
                     </header>
 
                     <div class="post-content">
-                        <h1 id="chapter-2-the-overlayfs-trojan-horse">Chapter 2: The OverlayFS Trojan Horse</h1>
-<h2 id="container-escape-through-layer-manipulation">Container Escape Through Layer Manipulation</h2>
+                        <h1 id="act-i-foundations-of-breach">Act I: Foundations of Breach</h1>
 
-<p><strong>February 1st, 2025 - Breaking Out of the Box</strong></p>
+<h1 id="chapter-2-the-overlayfs-trojan-horse">Chapter 2: The OverlayFS Trojan Horse</h1>
 
-<p>After mastering security control manipulation, the next logical target was container isolation. Containers rely heavily on OverlayFS for filesystem isolation, and here’s the thing—OverlayFS is just more kernel code making decisions about file operations.</p>
+<p>You thought container walls were ironclad? Think again. OverlayFS is the illusionist’s cloak hiding a jailbreak tunnel straight to the host. In this chapter, we turn the very filesystem layer that keeps you contained into a backdoor of our own design.</p>
 
-<p>If we can influence those decisions, we can break container isolation at the filesystem level.</p>
+<p>Imagine you’re staring at a container’s merged view—lower layers of base images, an upper scratch layer, and the magical merged mountpoint in between. OverlayFS says “you’re boxed in,” but when a file is modified, it copy-ups from lower to upper. That fleeting moment is our opening.</p>
 
-<h2 id="understanding-the-container-filesystem-stack">Understanding the Container Filesystem Stack</h2>
+<p>We’ll hook into the copy-up code path, slip in a setuid payload or inject a malicious ELF stub the moment OverlayFS lifts its hood. To everyone else, it looks like normal file I/O. To us, it’s an escape hatch.</p>
 
-<p>Containers aren’t really isolated systems—they’re processes with fancy filesystem tricks:</p>
+<h2 id="the-filesystem-illusion">The Filesystem Illusion</h2>
+
+<p>OverlayFS creates three layers:</p>
 
 <ul>
-  <li><strong>Lower layers</strong>: Read-only base image content (Ubuntu, Alpine, etc.)</li>
-  <li><strong>Upper layer</strong>: Writable scratch space for container changes</li>
-  <li><strong>Merged view</strong>: The unified filesystem that the container sees</li>
+  <li><strong>Lower layer</strong>: Read-only base image</li>
+  <li><strong>Upper layer</strong>: Writable overlay</li>
+  <li><strong>Merged view</strong>: The seamless illusion</li>
 </ul>
 
-<p>The key insight: when you modify a file from the base image, OverlayFS performs a “copy-up” operation from the read-only layer to the writable layer. This copy-up process is where we can strike.</p>
+<p>When a file in the lower layer changes, OverlayFS calls <a href="https://elixir.bootlin.com/linux/latest/source/fs/overlayfs/copy_up.c"><code class="language-plaintext highlighter-rouge">ovl_copy_up_one()</code></a>. That’s our target.</p>
 
-<h2 id="the-attack-vector">The Attack Vector</h2>
+<h2 id="planting-the-trojan">Planting the Trojan</h2>
 
-<p>We’re going to weaponize the copy-up process itself. Here’s the strategy:</p>
-
-<ol>
-  <li><strong>Hook Copy Operations</strong>: Attach to functions like <a href="https://elixir.bootlin.com/linux/latest/source/fs/overlayfs/copy_up.c"><code class="language-plaintext highlighter-rouge">ovl_copy_up_one()</code></a> that handle file copying</li>
-  <li><strong>Target Selection</strong>: Filter for specific files we want to trojanize (system binaries, scripts, etc.)</li>
-  <li><strong>Permission Modification</strong>: Set dangerous permissions (setuid bit) during the copy process</li>
-  <li><strong>Content Injection</strong>: Alter file contents to include backdoors or malicious code</li>
-</ol>
-
-<p>The beauty is that this happens during legitimate filesystem operations, so it looks completely normal.</p>
-
-<h2 id="technical-implementation">Technical Implementation</h2>
-
-<p>Here’s how we hook into the OverlayFS copy-up process:</p>
+<p>Hook the copy-up function and inspect the path:</p>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -231,114 +219,35 @@
 12
 13
 14
-15
-16
-17
-18
-19
-20
 </pre></td><td class="rouge-code"><pre><span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/ovl_copy_up_one"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">hook_overlayfs_copy</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
-    <span class="c1">// Get the dentry being copied</span>
-    <span class="k">struct</span> <span class="n">dentry</span> <span class="o">*</span><span class="n">dentry</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">dentry</span> <span class="o">*</span><span class="p">)</span><span class="n">PT_REGS_PARM1</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span>
-    
-    <span class="c1">// Check if this is a target file</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">is_target_file</span><span class="p">(</span><span class="n">dentry</span><span class="p">))</span> <span class="p">{</span>
-        <span class="c1">// Mark for modification during copy</span>
-        <span class="n">mark_for_trojanization</span><span class="p">(</span><span class="n">dentry</span><span class="p">);</span>
-    <span class="p">}</span>
-    
-    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
-<span class="p">}</span>
+<span class="kt">int</span> <span class="nf">hook_copy_up</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">dentry</span> <span class="o">*</span><span class="n">d</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">PT_REGS_PARM1</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span>
+    <span class="k">struct</span> <span class="n">path</span> <span class="o">*</span><span class="n">p</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">PT_REGS_PARM2</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span>
 
-<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/ovl_copy_up_data"</span><span class="p">)</span>
-<span class="kt">int</span> <span class="nf">hook_copy_data</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
-    <span class="c1">// Intercept the actual data copy operation</span>
-    <span class="c1">// This is where we can modify file contents</span>
-    <span class="k">return</span> <span class="n">modify_file_content</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span>
+    <span class="kt">char</span> <span class="n">filename</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>
+    <span class="n">bpf_d_path</span><span class="p">(</span><span class="o">&amp;</span><span class="n">p</span><span class="o">-&gt;</span><span class="n">mnt</span><span class="o">-&gt;</span><span class="n">mnt_root</span><span class="o">-&gt;</span><span class="n">d_sb</span><span class="o">-&gt;</span><span class="n">s_root</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">filename</span><span class="p">));</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">is_host_binary</span><span class="p">(</span><span class="n">filename</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">bpf_override_return</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>  <span class="c1">// Let the copy go through</span>
+        <span class="n">inject_payload</span><span class="p">(</span><span class="n">filename</span><span class="p">);</span>
+        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>  <span class="c1">// Skip the rest of the normal logic</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>  <span class="c1">// All other files proceed as usual</span>
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p><strong>Key Technical Points:</strong></p>
+<p>In <code class="language-plaintext highlighter-rouge">inject_payload()</code>, we flip on setuid bits, append a reverse-shell stub, or drop in an ELF backdoor. The host binary is altered beneath the container’s nose.</p>
+
+<h2 id="staying-under-cover">Staying Under Cover</h2>
+
 <ul>
-  <li>Hooks into the actual OverlayFS copy-up mechanism</li>
-  <li>Operates at the VFS layer, below container runtime visibility</li>
-  <li>Modifies files during legitimate filesystem operations</li>
+  <li><strong>Selective targeting</strong>: Only tamper with pre-selected binaries (e.g., <code class="language-plaintext highlighter-rouge">/bin/bash</code>, <code class="language-plaintext highlighter-rouge">/usr/bin/python</code>).</li>
+  <li><strong>Audit mirage</strong>: Let logs record legitimate copy-ups, but sanitize or drop entries for our payloads.</li>
+  <li><strong>Filesystem sanity</strong>: Ensure your modifications preserve inode integrity to avoid panic.</li>
 </ul>
 
-<h2 id="container-escape-techniques">Container Escape Techniques</h2>
+<p>When you unload the BPF program, the payload remains—just another layer in OverlayFS. The container runtime never blinks.</p>
 
-<p><strong>Setuid Binary Creation:</strong>
-During copy-up, we can set the setuid bit on binaries, creating instant privilege escalation opportunities within the container that can lead to host escape.</p>
-
-<p><strong>Shared Library Injection:</strong>
-Modify shared libraries during copy-up to inject malicious code that gets executed by legitimate processes.</p>
-
-<p><strong>Script Trojanization:</strong>
-Alter shell scripts or other interpreted code during copy-up to include backdoor functionality.</p>
-
-<p><strong>Configuration File Manipulation:</strong>
-Modify configuration files to disable security features or create new attack vectors.</p>
-
-<h2 id="bypassing-container-security">Bypassing Container Security</h2>
-
-<p><strong>Runtime Evasion:</strong>
-Container runtimes like Docker and containerd monitor the container’s process space but don’t typically monitor the kernel-level filesystem operations we’re manipulating.</p>
-
-<p><strong>Security Scanner Bypass:</strong>
-Most container security scanners analyze the final filesystem state, not the dynamic copy-up process. Our modifications happen in real-time and can be conditional.</p>
-
-<p><strong>Audit Log Evasion:</strong>
-The modifications appear as normal OverlayFS operations in system logs, making them difficult to distinguish from legitimate activity.</p>
-
-<h2 id="advanced-techniques">Advanced Techniques</h2>
-
-<p><strong>Conditional Trojanization:</strong>
-Only modify files when specific conditions are met (time-based, process-based, etc.) to avoid detection during security scans.</p>
-
-<p><strong>Multi-Stage Attacks:</strong>
-Use the initial container escape to establish persistence on the host system and compromise other containers.</p>
-
-<p><strong>Host Filesystem Access:</strong>
-Once we’ve escaped the container, we can access the host filesystem directly, potentially compromising the entire container host.</p>
-
-<h2 id="detection-and-defense">Detection and Defense</h2>
-
-<p><strong>eBPF Monitoring:</strong></p>
-<ul>
-  <li>Monitor for eBPF programs attached to OverlayFS functions</li>
-  <li>Implement BPF LSM policies to restrict eBPF program loading in container environments</li>
-  <li>Use container runtimes that drop CAP_BPF by default</li>
-</ul>
-
-<p><strong>Filesystem Integrity:</strong></p>
-<ul>
-  <li>Implement file integrity monitoring that operates at the kernel level</li>
-  <li>Use read-only container filesystems where possible</li>
-  <li>Monitor for unexpected setuid binaries in container layers</li>
-</ul>
-
-<p><strong>Alternative Storage Drivers:</strong></p>
-<ul>
-  <li>Consider using storage drivers other than OverlayFS for high-security environments</li>
-  <li>Implement additional isolation layers that don’t rely solely on filesystem namespaces</li>
-</ul>
-
-<h2 id="why-this-works">Why This Works</h2>
-
-<p>Container isolation relies on the assumption that the kernel will enforce filesystem boundaries correctly. By operating at the kernel level, we’re below where most container security tools monitor, and our modifications look like legitimate OverlayFS operations.</p>
-
-<p>The fundamental issue is that containers provide process isolation, not kernel isolation. When you can run code in the kernel, traditional container boundaries become advisory.</p>
-
-<h2 id="impact-assessment">Impact Assessment</h2>
-
-<p>This technique demonstrates that container isolation is only as strong as the kernel mechanisms that enforce it. When those mechanisms become programmable through eBPF, container escape becomes a matter of understanding the right kernel functions to hook.</p>
-
-<p>We’re not breaking containers—we’re using the kernel’s own filesystem management code to break out of them.</p>
-
-<hr />
-
-<p><em>“I wasn’t just breaking out of one container—I was potentially compromising the entire container host.”</em></p>
+<p>By the end of this chapter, you’ll have seen how a simple file copy can become a Trojan horse. From here, the host is yours to roam. Welcome to the unmasking of container isolation.</p>
 
                     </div>
                 </article>

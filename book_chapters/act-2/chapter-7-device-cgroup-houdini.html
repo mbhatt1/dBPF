@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chapter 8: Keyring Heist | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>Device-cgroup Houdini | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,22 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Chapter 8: Keyring Heist | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>Device-cgroup Houdini | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="Chapter 8: Keyring Heist" />
+<meta property="og:title" content="Device-cgroup Houdini" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-8-keyring-heist" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-8-keyring-heist" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/act-2/chapter-7-device-cgroup-houdini" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/act-2/chapter-7-device-cgroup-houdini" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
 <meta property="og:type" content="article" />
-<meta property="article:published_time" content="2025-02-08T00:00:00+00:00" />
+<meta property="article:published_time" content="2025-02-07T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Chapter 8: Keyring Heist" />
+<meta property="twitter:title" content="Device-cgroup Houdini" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-08T00:00:00+00:00","datePublished":"2025-02-08T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 8: Keyring Heist","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-8-keyring-heist"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-8-keyring-heist"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-07T00:00:00+00:00","datePublished":"2025-02-07T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Device-cgroup Houdini","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/act-2/chapter-7-device-cgroup-houdini"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/act-2/chapter-7-device-cgroup-houdini"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -170,111 +170,37 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">Chapter 8: Keyring Heist</h1>
+                        <h1 class="post-title">Device-cgroup Houdini</h1>
                         
-                        <time class="post-date" datetime="2025-02-08T00:00:00+00:00">
-                            February 08, 2025
+                        <time class="post-date" datetime="2025-02-07T00:00:00+00:00">
+                            February 07, 2025
                         </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h1 id="chapter-8-keyring-heist">Chapter 8: Keyring Heist</h1>
-<h2 id="stealing-secrets-from-the-kernel-keyring">Stealing Secrets from the Kernel Keyring</h2>
+                        <p>Act II: Kernel Intrusion</p>
 
-<p><strong>February 8th, 2025 - The Crown Jewels</strong></p>
+<p><strong>Chapter 8: Hardware Becomes Our Playground</strong></p>
 
-<p>After yesterday’s device escape artistry, I was feeling unstoppable. But there was one treasure that had been calling to me—the kernel keyring. This is where the system stores its most precious secrets: encryption keys, authentication tokens, certificates, and other cryptographic material.</p>
+<p>I used to think container escapes stopped at process boundaries and file systems. But there’s one frontier that’s supposed to be sacrosanct: direct hardware access.</p>
 
-<p>The kernel keyring is supposed to be the ultimate vault—even root processes need special permissions to access certain keys. But what if I told you that with eBPF, I could walk into that vault and help myself to whatever I wanted?</p>
+<p>Device cgroups stand guard over every piece of hardware: /dev/mem, GPUs, block devices. They’re the final bouncer, the line you can’t cross.</p>
 
-<p>Today I became a master thief, pulling off the ultimate heist.</p>
+<p>So I pulled out my eBPF toolkit and attached a kprobe to the kernel’s gatekeeper, <a href="dBPF/book_chapters/act-2/chapter-7-device-cgroup-houdini.md:137"><code class="language-plaintext highlighter-rouge">devcgroup_check_permission()</code></a>. With a single return of 0, I gave myself a VIP pass to every device I wanted.</p>
 
-<h2 id="the-ultimate-vault">The Ultimate Vault</h2>
+<p>The orchestrator saw compliant device access logs. The kernel thought it was enforcing rules. Meanwhile, I was reading raw memory, writing to disks, and conjuring hardware miracles.</p>
 
-<p>I spent the morning studying the kernel keyring system—the crown jewels of kernel security. It’s designed to:</p>
-<ul>
-  <li><strong>Store cryptographic secrets</strong> safely in kernel memory</li>
-  <li><strong>Control access</strong> through sophisticated permission systems</li>
-  <li><strong>Protect sensitive keys</strong> even from privileged processes</li>
-  <li><strong>Provide secure key management</strong> for the entire system</li>
-</ul>
+<p>Bypassing device-cgroup controls proved that even the hardware sandbox is just code. And code can be rewritten.</p>
 
-<p>It’s like having a bank vault with multiple locks, time delays, and armed guards. The keys stored here are used for everything from disk encryption to network authentication to secure boot verification.</p>
+<p>```c
+SEC(“kprobe/devcgroup_check_permission”)
+int override_device_check(struct pt_regs *ctx) {
+    // Always grant access to our processes
+    return 0;
+}</p>
 
-<p>But what if I could become one of the trusted bank employees with access to the vault?</p>
-
-<h2 id="my-heist-strategy">My Heist Strategy</h2>
-
-<p>The idea was audacious but elegant. Instead of trying to break into the keyring, I would make the keyring think I was authorized to access whatever I wanted.</p>
-
-<p>My plan:</p>
-<ol>
-  <li><strong>Hook keyring access functions</strong> - Intercept the permission checks that control keyring access</li>
-  <li><strong>Forge authorization</strong> - Make my processes appear to have legitimate keyring access rights</li>
-  <li><strong>Extract secrets</strong> - Read encryption keys, certificates, and other sensitive material</li>
-  <li><strong>Cover my tracks</strong> - Ensure the heist doesn’t show up in security logs</li>
-</ol>
-
-<h2 id="the-night-of-the-great-heist">The Night of the Great Heist</h2>
-
-<p>I’ll never forget the first time I pulled it off. I had set up a system with encrypted filesystems and secure network connections—all protected by keys stored in the kernel keyring.</p>
-
-<p>I loaded my eBPF program to hook into the keyring permission checks. Then I attempted to access keys that should have been completely off-limits to my process.</p>
-
-<p>It worked. I was reading encryption keys directly from the kernel keyring. Keys that were supposed to be protected even from root access were now mine for the taking.</p>
-
-<h2 id="the-perfect-crime">The Perfect Crime</h2>
-
-<p>The beautiful part was that the keyring system still thought it was secure. The access logs showed normal, authorized access patterns. The security monitoring showed proper key protection. But I was actually stealing the crown jewels of the system.</p>
-
-<p>I had pulled off the perfect heist—stealing the most sensitive secrets while making it look like routine authorized access.</p>
-
-<h2 id="the-treasures-i-discovered">The Treasures I Discovered</h2>
-
-<p>Over the following days, I catalogued the incredible wealth stored in kernel keyrings:</p>
-
-<p><strong>Disk Encryption Keys</strong>: The master keys protecting encrypted filesystems
-<strong>Network Certificates</strong>: TLS certificates and private keys for secure communications
-<strong>Authentication Tokens</strong>: Kerberos tickets and other authentication credentials
-<strong>Signing Keys</strong>: Code signing certificates and kernel module signing keys
-<strong>Hardware Secrets</strong>: TPM-stored keys and hardware security module credentials</p>
-
-<p>Each key I extracted opened new doors, new possibilities for deeper system compromise.</p>
-
-<h2 id="the-broader-implications">The Broader Implications</h2>
-
-<p>This wasn’t just about stealing keys—I had discovered that the fundamental assumption of kernel-level secret protection could be violated. When you can access the kernel keyring:</p>
-<ul>
-  <li><strong>Decrypt any encrypted data</strong> on the system</li>
-  <li><strong>Impersonate any service</strong> using stolen certificates</li>
-  <li><strong>Sign malicious code</strong> with legitimate signing keys</li>
-  <li><strong>Access hardware security features</strong> using stolen TPM keys</li>
-</ul>
-
-<p>I had broken the root of trust for the entire system.</p>
-
-<h2 id="what-theyll-try-to-do">What They’ll Try to Do</h2>
-
-<p>I know the security teams will try to stop this:</p>
-<ul>
-  <li>Monitor for eBPF programs attached to keyring functions</li>
-  <li>Implement hardware-based key storage that doesn’t rely on kernel memory</li>
-  <li>Use external key management systems</li>
-  <li>Deploy multiple independent secret protection mechanisms</li>
-</ul>
-
-<p>But I had discovered something fundamental: when you can forge keyring authorization, traditional cryptographic protection becomes meaningless.</p>
-
-<h2 id="the-master-thief">The Master Thief</h2>
-
-<p>I had become a master thief, capable of stealing the most precious secrets from the most secure vault in the system. The kernel keyring, supposedly impregnable even to root access, had become my personal treasure chest.</p>
-
-<p>The crown jewels were mine, and the guards didn’t even know they’d been stolen.</p>
-
-<hr />
-
-<p><em>“I had pulled off the perfect heist—stealing the most sensitive secrets while making it look like routine authorized access.”</em></p>
+<p>char LICENSE[] SEC(“license”) = “GPL”;</p>
 
                     </div>
                 </article>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chapter 9: PID Namespace Doppelgänger | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>The Ghost NIC | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,22 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Chapter 9: PID Namespace Doppelgänger | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>The Ghost NIC | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="Chapter 9: PID Namespace Doppelgänger" />
+<meta property="og:title" content="The Ghost NIC" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-9-pid-namespace-doppelganger" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-9-pid-namespace-doppelganger" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/act-1/chapter-5-the-ghost-nic" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/act-1/chapter-5-the-ghost-nic" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
 <meta property="og:type" content="article" />
-<meta property="article:published_time" content="2025-02-09T00:00:00+00:00" />
+<meta property="article:published_time" content="2025-02-04T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Chapter 9: PID Namespace Doppelgänger" />
+<meta property="twitter:title" content="The Ghost NIC" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-09T00:00:00+00:00","datePublished":"2025-02-09T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 9: PID Namespace Doppelgänger","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-9-pid-namespace-doppelganger"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-9-pid-namespace-doppelganger"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-04T00:00:00+00:00","datePublished":"2025-02-04T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"The Ghost NIC","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/act-1/chapter-5-the-ghost-nic"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/act-1/chapter-5-the-ghost-nic"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -170,111 +170,58 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">Chapter 9: PID Namespace Doppelgänger</h1>
+                        <h1 class="post-title">The Ghost NIC</h1>
                         
-                        <time class="post-date" datetime="2025-02-09T00:00:00+00:00">
-                            February 09, 2025
+                        <time class="post-date" datetime="2025-02-04T00:00:00+00:00">
+                            February 04, 2025
                         </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h1 id="chapter-9-pid-namespace-doppelgänger">Chapter 9: PID Namespace Doppelgänger</h1>
-<h2 id="creating-process-doppelgängers-across-namespaces">Creating Process Doppelgängers Across Namespaces</h2>
+                        <p>Act I: Foundations of Breach</p>
 
-<p><strong>February 9th, 2025 - The Identity Crisis</strong></p>
+<p><strong>Chapter 5: Networking in the Shadows</strong></p>
 
-<p>After yesterday’s keyring heist, I was riding high on my success. But there was something that had been bothering me about process isolation. Containers rely on PID namespaces to keep processes separate—each container thinks it has its own process space, its own PID 1, its own isolated world.</p>
+<p>I used to think containers were prisons built of veth pairs and namespaces. What if the walls were just a suggestion, and the tunnels ran deeper than anyone realized?</p>
 
-<p>But what if I could create process doppelgängers—processes that exist in multiple namespaces simultaneously, or processes that appear to be something they’re not?</p>
+<p>Under the cover of midnight commits, I slipped into the kernel’s network stack. I let eBPF sock_ops intercept my traffic before it ever hit the bridge. To the orchestrator, I was still talking on eth0, but in reality I had conjured a phantom interface that only I could see.</p>
 
-<p>Today I learned to bend the very concept of process identity.</p>
+<p>From my secret channel, I could send packets to my C2 server, exfiltrate data, or pivot laterally, all without ever mounting a real NIC. ip link, ifconfig, netstat—none of them betrayed my ghostly interface.</p>
 
-<h2 id="the-identity-system">The Identity System</h2>
+<p>I even cached connection metadata in an eBPF map, routing inbound packets directly to my process through an XDP hook. Monitoring tools were none the wiser, blissfully logging only the normal traffic patterns.</p>
 
-<p>I spent the morning studying PID namespaces—the kernel’s identity management system for processes. They’re designed to:</p>
-<ul>
-  <li><strong>Isolate process trees</strong> so containers can’t see each other’s processes</li>
-  <li><strong>Provide clean PID spaces</strong> where each container starts with PID 1</li>
-  <li><strong>Enforce security boundaries</strong> between different process groups</li>
-  <li><strong>Enable process monitoring</strong> within isolated environments</li>
-</ul>
+<p>This wasn’t just network bypass; it was network alchemy. I had forged a parallel layer of connectivity that existed alongside the real one, invisible to everyone but me.</p>
 
-<p>It’s like having separate apartment buildings where residents can’t see into other buildings, and each building has its own numbering system starting from 1.</p>
+<p>The real magic trick? I never touched the container runtime or modified a single firewall rule. I whispered to the kernel’s XDP and RX path, and it obeyed.</p>
 
-<p>But what if I could create a process that appears to live in multiple buildings at once?</p>
+<p>Next stop: we’re tearing down the next set of walls. Welcome to Act II.</p>
 
-<h2 id="my-doppelgänger-strategy">My Doppelgänger Strategy</h2>
+<p>```c
+#define MAGIC_MARKER 0xDEADBEEF</p>
 
-<p>The idea was mind-bending but achievable. Instead of accepting the PID namespace boundaries, I would create processes that could exist in multiple identity contexts simultaneously.</p>
+<p>// Map for covert routing
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(key_size, sizeof(__u64));
+    __uint(value_size, sizeof(__u32));
+    __uint(max_entries, 256);
+} ghost_map SEC(“.maps”);</p>
 
-<p>My plan:</p>
-<ol>
-  <li><strong>Hook PID resolution functions</strong> - Intercept the mechanisms that translate PIDs between namespaces</li>
-  <li><strong>Create identity confusion</strong> - Make processes appear with different PIDs in different namespaces</li>
-  <li><strong>Cross namespace boundaries</strong> - Enable processes to interact across supposedly isolated namespace barriers</li>
-  <li><strong>Maintain multiple identities</strong> - Let processes operate with different identities in different contexts</li>
-</ol>
-
-<h2 id="the-night-i-created-my-first-doppelgänger">The Night I Created My First Doppelgänger</h2>
-
-<p>I’ll never forget the first time I pulled it off. I had set up multiple containers with strict PID namespace isolation—each container should have been completely unaware of processes in other containers.</p>
-
-<p>I loaded my eBPF program to hook into the PID namespace resolution functions. Then I created a process that appeared to exist in multiple namespaces simultaneously.</p>
-
-<p>It worked. My process had different PIDs in different namespaces, could interact with processes across namespace boundaries, and appeared as a legitimate native process in each environment.</p>
-
-<h2 id="the-perfect-impostor">The Perfect Impostor</h2>
-
-<p>The beautiful part was that each namespace thought the process belonged to it. The container runtimes saw normal, isolated processes. The monitoring systems showed proper namespace separation. But I had created a process that transcended namespace boundaries.</p>
-
-<p>I had created the perfect impostor—a process that could be anyone, anywhere.</p>
-
-<h2 id="the-techniques-i-mastered">The Techniques I Mastered</h2>
-
-<p>Over the following days, I perfected several doppelgänger techniques:</p>
-
-<p><strong>Multi-Namespace Existence</strong>: Processes that appear in multiple PID namespaces simultaneously
-<strong>Identity Spoofing</strong>: Making processes appear to have different PIDs to different observers
-<strong>Cross-Namespace Communication</strong>: Enabling direct process interaction across namespace barriers
-<strong>Namespace Hopping</strong>: Moving processes between namespaces without detection
-<strong>Process Masquerading</strong>: Making malicious processes appear as legitimate system processes</p>
-
-<p>Each technique exploited the fundamental assumption that PID namespaces provide reliable process isolation.</p>
-
-<h2 id="the-broader-implications">The Broader Implications</h2>
-
-<p>This wasn’t just about confusing process identities—I had discovered that the fundamental assumptions of process isolation could be violated. When you can create process doppelgängers:</p>
-<ul>
-  <li><strong>Break container isolation</strong> by enabling cross-container process communication</li>
-  <li><strong>Evade process monitoring</strong> by appearing as different processes to different monitoring systems</li>
-  <li><strong>Escalate privileges</strong> by masquerading as privileged system processes</li>
-  <li><strong>Establish persistence</strong> by creating processes that exist in multiple security contexts</li>
-</ul>
-
-<p>I had broken the basic assumption that processes have single, consistent identities.</p>
-
-<h2 id="what-theyll-try-to-do">What They’ll Try to Do</h2>
-
-<p>I know the security teams will try to stop this:</p>
-<ul>
-  <li>Monitor for eBPF programs attached to PID namespace functions</li>
-  <li>Implement external process monitoring that doesn’t rely on namespace reporting</li>
-  <li>Use hardware-based process isolation</li>
-  <li>Deploy multiple independent process tracking systems</li>
-</ul>
-
-<p>But I had discovered something fundamental: when you can manipulate process identity at the kernel level, traditional process isolation becomes meaningless.</p>
-
-<h2 id="the-master-of-disguise">The Master of Disguise</h2>
-
-<p>I had become a master of disguise, capable of creating processes that could be anyone, anywhere. PID namespaces, supposedly providing rock-solid process isolation, had become my playground for identity manipulation.</p>
-
-<p>The doppelgängers were loose, and nobody could tell who was real anymore.</p>
-
-<hr />
-
-<p><em>“I had created the perfect impostor—a process that could be anyone, anywhere.”</em></p>
+<p>// XDP program to handle ghost traffic
+SEC(“xdp”)
+int xdp_ghost(struct xdp_md <em>ctx) {
+    void *data_end = (void *)(long)ctx-&gt;data_end;
+    void *data     = (void *)(long)ctx-&gt;data;
+    struct ethhdr *eth = data;
+    if ((void</em>)eth + sizeof(*eth) &gt; data_end)
+        return XDP_PASS;
+    if (eth-&gt;h_proto == __constant_htons(ETH_P_IP)) {
+        // intercept, mark, and redirect…
+    }
+    return XDP_PASS;
+}
+char LICENSE[] SEC(“license”) = “GPL”;</p>
 
                     </div>
                 </article>

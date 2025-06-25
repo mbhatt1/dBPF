@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chapter 11: IRQ Affinity Chaos | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>Powercap Override | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,22 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Chapter 11: IRQ Affinity Chaos | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>Powercap Override | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="Chapter 11: IRQ Affinity Chaos" />
+<meta property="og:title" content="Powercap Override" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-11-irq-affinity-chaos" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-11-irq-affinity-chaos" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/act-2/chapter-13-powercap-override" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/act-2/chapter-13-powercap-override" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
 <meta property="og:type" content="article" />
-<meta property="article:published_time" content="2025-02-11T00:00:00+00:00" />
+<meta property="article:published_time" content="2025-03-10T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Chapter 11: IRQ Affinity Chaos" />
+<meta property="twitter:title" content="Powercap Override" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-11T00:00:00+00:00","datePublished":"2025-02-11T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 11: IRQ Affinity Chaos","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-11-irq-affinity-chaos"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-11-irq-affinity-chaos"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-03-10T00:00:00+00:00","datePublished":"2025-03-10T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Powercap Override","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/act-2/chapter-13-powercap-override"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/act-2/chapter-13-powercap-override"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -170,109 +170,36 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">Chapter 11: IRQ Affinity Chaos</h1>
+                        <h1 class="post-title">Powercap Override</h1>
                         
-                        <time class="post-date" datetime="2025-02-11T00:00:00+00:00">
-                            February 11, 2025
+                        <time class="post-date" datetime="2025-03-10T00:00:00+00:00">
+                            March 10, 2025
                         </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h1 id="chapter-11-irq-affinity-chaos">Chapter 11: IRQ Affinity Chaos</h1>
-<h2 id="weaponizing-interrupt-handling-for-system-disruption">Weaponizing Interrupt Handling for System Disruption</h2>
+                        <p>Act II: Kernel Intrusion</p>
 
-<p><strong>February 11th, 2025 - Chaos at the Hardware Level</strong></p>
+<p><strong>Chapter 13: Act III Begins - Beyond Software, Into Hardware</strong></p>
 
-<p>After making files invisible yesterday, I was feeling like I had mastered the art of manipulation at every level of the system. But there was one frontier I hadn’t explored yet—the hardware interrupt level. This is where the kernel interfaces directly with hardware, handling everything from network packets to disk I/O to timer events.</p>
+<p>I used to trust the kernel’s power management to protect the system—CPU frequency scaling, thermal throttling, power caps. They’re the safety nets that keep hardware from destroying itself.</p>
 
-<p>What if I could weaponize interrupt handling itself? What if I could create chaos at the most fundamental level of system operation?</p>
+<p>But these safeguards are just code paths in the kernel. Under cover of a stealthy kprobe, I attached an eBPF program to <a href="https://elixir.bootlin.com/linux/latest/source/drivers/powercap/intel_rapl_common.c"><code class="language-plaintext highlighter-rouge">rapl_write_power_limit()</code></a>, the function that enforces power constraints.</p>
 
-<p>Today I learned to turn the kernel’s interrupt system into my personal weapon of mass disruption.</p>
+<p>Every time the system tried to clamp power usage, my code forced the limit to its maximum. I even disabled the thermal throttling calls so the CPU would run at full tilt, regardless of temperature.</p>
 
-<h2 id="the-hardware-interface">The Hardware Interface</h2>
+<p>Temperatures spiked, hardware warnings fired, but the logs only showed a strange thermal event. To the monitoring tools it looked like natural failure, not a deliberate assault.</p>
 
-<p>I spent the morning studying interrupt handling—the kernel’s direct interface with hardware. The IRQ (Interrupt Request) system is designed to:</p>
-<ul>
-  <li><strong>Handle hardware events</strong> like network packets, disk operations, and timer ticks</li>
-  <li><strong>Distribute interrupts</strong> across CPU cores for optimal performance</li>
-  <li><strong>Maintain system responsiveness</strong> by ensuring critical interrupts are processed quickly</li>
-  <li><strong>Provide hardware abstraction</strong> for higher-level kernel subsystems</li>
-</ul>
+<p>With powercap override, I had turned a critical safety feature into my weapon. Act II stands complete; Act III awaits with the promise of total hardware dominion.</p>
 
-<p>It’s like having a sophisticated traffic control system that routes urgent messages from hardware to the appropriate kernel handlers. When this system works well, everything runs smoothly. When it doesn’t…</p>
-
-<h2 id="my-chaos-strategy">My Chaos Strategy</h2>
-
-<p>The idea was diabolical in its simplicity. Instead of trying to break the interrupt system, I would make it work against itself.</p>
-
-<p>My plan:</p>
-<ol>
-  <li><strong>Hook interrupt affinity functions</strong> - Intercept the mechanisms that assign interrupts to CPU cores</li>
-  <li><strong>Create performance chaos</strong> - Deliberately misroute interrupts to cause system instability</li>
-  <li><strong>Target specific hardware</strong> - Focus disruption on critical system components</li>
-  <li><strong>Maintain plausible deniability</strong> - Make the chaos look like normal system load or hardware issues</li>
-</ol>
-
-<h2 id="the-night-i-unleashed-chaos">The Night I Unleashed Chaos</h2>
-
-<p>I’ll never forget the first time I pulled it off. I had set up a high-performance server with carefully tuned interrupt affinity settings—each type of interrupt was assigned to specific CPU cores for optimal performance.</p>
-
-<p>I loaded my eBPF program to hook into the interrupt affinity management functions. Then I started systematically misrouting interrupts—sending network interrupts to CPU cores that were busy with other tasks, clustering all interrupts on a single core, creating interrupt storms.</p>
-
-<p>The results were spectacular. System performance degraded dramatically, network latency spiked, disk I/O became erratic, and the entire system became unstable. But from the outside, it looked like normal system load or hardware problems.</p>
-
-<h2 id="the-perfect-sabotage">The Perfect Sabotage</h2>
-
-<p>The beautiful part was that the chaos looked completely natural. System administrators would see performance problems and assume it was due to high load, hardware issues, or configuration problems. The interrupt affinity settings would show normal values, but the actual interrupt routing would be completely chaotic.</p>
-
-<p>I had created the perfect sabotage—system disruption that looked like natural operational problems.</p>
-
-<h2 id="the-techniques-i-mastered">The Techniques I Mastered</h2>
-
-<p>Over the following days, I perfected several interrupt chaos techniques:</p>
-
-<p><strong>Performance Assassination</strong>: Deliberately degrading system performance through interrupt misrouting
-<strong>Network Disruption</strong>: Targeting network interrupts to cause connectivity issues
-<strong>Storage Chaos</strong>: Disrupting disk I/O interrupts to cause filesystem problems
-<strong>CPU Starvation</strong>: Clustering interrupts to starve specific CPU cores
-<strong>Timing Attacks</strong>: Using interrupt manipulation to create side-channel vulnerabilities</p>
-
-<p>Each technique exploited the fundamental assumption that interrupt handling is reliable and well-managed.</p>
-
-<h2 id="the-broader-implications">The Broader Implications</h2>
-
-<p>This wasn’t just about causing performance problems—I had discovered that the fundamental assumptions of hardware reliability could be violated. When you can weaponize interrupt handling:</p>
-<ul>
-  <li><strong>Cause denial of service</strong> through performance degradation</li>
-  <li><strong>Create timing side-channels</strong> for information extraction</li>
-  <li><strong>Disrupt critical services</strong> by targeting specific hardware subsystems</li>
-  <li><strong>Mask other attacks</strong> by creating system instability that hides malicious activity</li>
-</ul>
-
-<p>I had broken the basic assumption that hardware interfaces are reliable and predictable.</p>
-
-<h2 id="what-theyll-try-to-do">What They’ll Try to Do</h2>
-
-<p>I know the security teams will try to stop this:</p>
-<ul>
-  <li>Monitor for eBPF programs attached to interrupt handling functions</li>
-  <li>Implement external performance monitoring that doesn’t rely on kernel reporting</li>
-  <li>Use hardware-based interrupt monitoring</li>
-  <li>Deploy multiple independent system health tracking systems</li>
-</ul>
-
-<p>But I had discovered something fundamental: when you can manipulate interrupt handling at the kernel level, traditional system reliability becomes meaningless.</p>
-
-<h2 id="the-chaos-master">The Chaos Master</h2>
-
-<p>I had become a master of chaos, capable of turning the kernel’s most fundamental hardware interface into a weapon of mass disruption. The interrupt system, supposedly providing reliable hardware abstraction, had become my personal tool for creating havoc.</p>
-
-<p>The chaos was unleashed, and nobody could tell it wasn’t natural.</p>
-
-<hr />
-
-<p><em>“I had created the perfect sabotage—system disruption that looked like natural operational problems.”</em></p>
+<p>```c
+SEC(“kprobe/rapl_write_power_limit”)
+int override_rapl(struct pt_regs *ctx) {
+    // Force max power limit
+    return 0;
+}
+char LICENSE[] SEC(“license”) = “GPL”;</p>
 
                     </div>
                 </article>

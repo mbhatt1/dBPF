@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chapter 7: Device Cgroup Houdini | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>SCHED_FIFO Impersonator | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,22 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Chapter 7: Device Cgroup Houdini | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>SCHED_FIFO Impersonator | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="Chapter 7: Device Cgroup Houdini" />
+<meta property="og:title" content="SCHED_FIFO Impersonator" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-7-device-cgroup-houdini" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-7-device-cgroup-houdini" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-14-sched-fifo-impersonator" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-14-sched-fifo-impersonator" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
 <meta property="og:type" content="article" />
-<meta property="article:published_time" content="2025-02-07T00:00:00+00:00" />
+<meta property="article:published_time" content="2025-03-15T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Chapter 7: Device Cgroup Houdini" />
+<meta property="twitter:title" content="SCHED_FIFO Impersonator" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-02-07T00:00:00+00:00","datePublished":"2025-02-07T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 7: Device Cgroup Houdini","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-7-device-cgroup-houdini"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-7-device-cgroup-houdini"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-03-15T00:00:00+00:00","datePublished":"2025-03-15T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"SCHED_FIFO Impersonator","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-14-sched-fifo-impersonator"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-14-sched-fifo-impersonator"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -170,111 +170,40 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">Chapter 7: Device Cgroup Houdini</h1>
+                        <h1 class="post-title">SCHED_FIFO Impersonator</h1>
                         
-                        <time class="post-date" datetime="2025-02-07T00:00:00+00:00">
-                            February 07, 2025
+                        <time class="post-date" datetime="2025-03-15T00:00:00+00:00">
+                            March 15, 2025
                         </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h1 id="chapter-7-device-cgroup-houdini">Chapter 7: Device Cgroup Houdini</h1>
-<h2 id="the-ultimate-container-escape">The Ultimate Container Escape</h2>
+                        <p>Act III: Total Control</p>
 
-<p><strong>February 7th, 2025 - The Ultimate Escape Artist</strong></p>
+<p><strong>Chapter 14: Becoming the System’s Top Priority</strong></p>
 
-<p>After silencing SELinux yesterday, I felt invincible. But there was still one challenge that had been nagging at me: device access restrictions. Containers are supposed to be completely isolated from the host’s hardware—no direct device access, no way to touch the underlying system.</p>
+<p>I used to envy the kernel’s real-time tasks: they ran on demand, slicing through the queue like a hot knife through butter. Meanwhile, my processes scooped up CPU slots at best-effort speed.</p>
 
-<p>But what if I told you that device cgroups, the very mechanism that enforces this isolation, could become your escape hatch?</p>
+<p>One night, with the system logs humming and the midnight coffee brewing, I turned my sights on the scheduler itself. I whispered into the <code class="language-plaintext highlighter-rouge">sched_setscheduler()</code> bouncer, making it believe I held <code class="language-plaintext highlighter-rouge">CAP_SYS_NICE</code> privileges.</p>
 
-<p>Today I became Houdini. I learned to slip out of the tightest device restrictions while making it look like I never left my container cell.</p>
+<p>The scheduler didn’t even blink. My process strutted past the capability check into the SCHED_FIFO VIP section, hogging CPU time while mortal processes waited in polite silence.</p>
 
-<h2 id="the-hardware-prison">The Hardware Prison</h2>
+<p>To the monitoring tools, it looked like benign real-time tuning. In reality, I had hijacked the system’s temporal control: no throttling, no preemption, pure unadulterated cycles.</p>
 
-<p>I spent the morning studying device cgroups—the kernel’s hardware bouncer. They’re supposed to:</p>
-<ul>
-  <li><strong>Control device access</strong> by maintaining allow/deny lists for every device</li>
-  <li><strong>Enforce container isolation</strong> by preventing containers from touching host hardware</li>
-  <li><strong>Protect the host</strong> from malicious containers trying to access sensitive devices</li>
-  <li><strong>Maintain security boundaries</strong> between different container workloads</li>
-</ul>
+<p>With time on my side, I orchestrated chaos: starved critical daemons, modulated CPU bursts as a covert channel, all under the guise of legitimate scheduling tweaks.</p>
 
-<p>It’s like having a prison guard who controls which tools each prisoner can access. Containers get a very limited set of “safe” devices, while the dangerous stuff stays locked away.</p>
+<p>It was beautiful: at the front of every line, above every queue, unstoppable.</p>
 
-<p>But what if I could convince the guard that I’m actually a trustworthy maintenance worker who needs access to everything?</p>
-
-<h2 id="my-houdini-strategy">My Houdini Strategy</h2>
-
-<p>The idea was beautiful in its audacity. Instead of trying to break the device restrictions, I would make the device cgroup system think I was authorized to access whatever I wanted.</p>
-
-<p>My plan:</p>
-<ol>
-  <li><strong>Hook device permission checks</strong> - Intercept the functions that decide whether a process can access a device</li>
-  <li><strong>Forge authorization</strong> - Make my container processes appear to have legitimate device access rights</li>
-  <li><strong>Maintain the illusion</strong> - Keep device restrictions working normally for other containers</li>
-  <li><strong>Access host hardware</strong> - Use my newfound device access to escape container isolation completely</li>
-</ol>
-
-<h2 id="the-night-i-became-houdini">The Night I Became Houdini</h2>
-
-<p>I’ll never forget the first time I pulled off the escape. I had set up a container with strict device restrictions—no access to anything except the bare minimum needed to run.</p>
-
-<p>I loaded my eBPF program to hook into the device cgroup permission checks. Then I tried to access <code class="language-plaintext highlighter-rouge">/dev/mem</code>—direct access to physical memory, something that should have been absolutely forbidden.</p>
-
-<p>It worked. I was reading physical memory from inside a container. I had escaped the device restrictions without triggering any alarms.</p>
-
-<h2 id="the-perfect-escape">The Perfect Escape</h2>
-
-<p>The beautiful part was that the container runtime still thought I was safely locked up. The device cgroup accounting showed normal, restricted access. The security monitoring showed proper isolation. But I was actually accessing host hardware directly.</p>
-
-<p>I had become the ultimate escape artist—breaking out of device restrictions while making it look like I never left my cell.</p>
-
-<h2 id="the-techniques-i-mastered">The Techniques I Mastered</h2>
-
-<p>Over the following days, I perfected several device escape techniques:</p>
-
-<p><strong>Memory Access</strong>: Direct access to physical memory through <code class="language-plaintext highlighter-rouge">/dev/mem</code>
-<strong>Disk Bypass</strong>: Raw disk access bypassing filesystem isolation
-<strong>Network Hardware</strong>: Direct access to network interfaces
-<strong>GPU Hijacking</strong>: Accessing graphics hardware for cryptocurrency mining
-<strong>USB Manipulation</strong>: Controlling USB devices from within containers</p>
-
-<p>Each technique used the same principle: make the device cgroup system think I was authorized while maintaining the appearance of proper isolation.</p>
-
-<h2 id="the-broader-implications">The Broader Implications</h2>
-
-<p>This wasn’t just about accessing devices—I had discovered a fundamental flaw in container isolation. When you can bypass device restrictions, you can:</p>
-<ul>
-  <li><strong>Access host filesystems</strong> directly through raw disk access</li>
-  <li><strong>Read host memory</strong> containing sensitive data from other containers</li>
-  <li><strong>Control host hardware</strong> for denial of service attacks</li>
-  <li><strong>Establish persistence</strong> by modifying firmware or hardware configurations</li>
-</ul>
-
-<p>I had broken the fundamental assumption that containers provide hardware isolation.</p>
-
-<h2 id="what-theyll-try-to-do">What They’ll Try to Do</h2>
-
-<p>I know the security teams will try to stop this:</p>
-<ul>
-  <li>Monitor for eBPF programs attached to device cgroup functions</li>
-  <li>Implement hardware-level access controls that don’t rely on software</li>
-  <li>Use external device monitoring that tracks actual hardware access</li>
-  <li>Deploy multiple independent device restriction systems</li>
-</ul>
-
-<p>But I had discovered something profound: when you can forge device authorization, traditional container isolation becomes meaningless.</p>
-
-<h2 id="the-ultimate-escape">The Ultimate Escape</h2>
-
-<p>I had become Houdini—the ultimate escape artist who could slip out of any device restriction while making it look like I never left my container cell.</p>
-
-<p>The hardware prison had been opened, and the guards didn’t even know the door was unlocked.</p>
-
-<hr />
-
-<p><em>“I had become the ultimate escape artist—breaking out of device restrictions while making it look like I never left my cell.”</em></p>
+<p>```c
+SEC(“kprobe/sched_setscheduler”)
+int impersonate_realtime(struct pt_regs *ctx) {
+    pid_t pid = PT_REGS_PARM1(ctx);
+    struct sched_param *param = (struct sched_param *)PT_REGS_PARM3(ctx);
+    param-&gt;sched_priority = MAX_RT_PRIO - 1; // highest priority
+    return 0; // bypass CAP_SYS_NICE
+}
+char LICENSE[] SEC(“license”) = “GPL”;</p>
 
                     </div>
                 </article>

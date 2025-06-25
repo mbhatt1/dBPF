@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chapter 18: eBPF Token Bypass | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <title>eBPF Signed-Driver Swap | Diabolical eBPF: Linux Red Team Field Manual</title>
     <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
@@ -23,22 +23,22 @@
 </script>
 
     <!-- Begin Jekyll SEO tag v2.8.0 -->
-<title>Chapter 18: eBPF Token Bypass | Diabolical eBPF: Linux Red Team Field Manual</title>
+<title>eBPF Signed-Driver Swap | Diabolical eBPF: Linux Red Team Field Manual</title>
 <meta name="generator" content="Jekyll v3.9.5" />
-<meta property="og:title" content="Chapter 18: eBPF Token Bypass" />
+<meta property="og:title" content="eBPF Signed-Driver Swap" />
 <meta name="author" content="Diabolical eBPF" />
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
 <meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
-<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/chapter-18-ebpf-token-bypass" />
-<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/chapter-18-ebpf-token-bypass" />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/act-2/chapter-12-ebpf-signed-driver-swap" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/act-2/chapter-12-ebpf-signed-driver-swap" />
 <meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
 <meta property="og:type" content="article" />
-<meta property="article:published_time" content="2025-05-09T00:00:00+00:00" />
+<meta property="article:published_time" content="2025-03-01T00:00:00+00:00" />
 <meta name="twitter:card" content="summary" />
-<meta property="twitter:title" content="Chapter 18: eBPF Token Bypass" />
+<meta property="twitter:title" content="eBPF Signed-Driver Swap" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-05-09T00:00:00+00:00","datePublished":"2025-05-09T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 18: eBPF Token Bypass","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-18-ebpf-token-bypass"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/chapter-18-ebpf-token-bypass"}</script>
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2025-03-01T00:00:00+00:00","datePublished":"2025-03-01T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"eBPF Signed-Driver Swap","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/act-2/chapter-12-ebpf-signed-driver-swap"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/act-2/chapter-12-ebpf-signed-driver-swap"}</script>
 <!-- End Jekyll SEO tag -->
 
 </head>
@@ -170,111 +170,36 @@
             <main class="content">
                 <article class="post">
                     <header class="post-header">
-                        <h1 class="post-title">Chapter 18: eBPF Token Bypass</h1>
+                        <h1 class="post-title">eBPF Signed-Driver Swap</h1>
                         
-                        <time class="post-date" datetime="2025-05-09T00:00:00+00:00">
-                            May 09, 2025
+                        <time class="post-date" datetime="2025-03-01T00:00:00+00:00">
+                            March 01, 2025
                         </time>
                         
                     </header>
 
                     <div class="post-content">
-                        <h1 id="chapter-18-ebpf-token-bypass">Chapter 18: eBPF Token Bypass</h1>
-<h2 id="subverting-authentication-itself">Subverting Authentication Itself</h2>
+                        <p>Act II: Kernel Intrusion</p>
 
-<p><strong>May 9th, 2025 - The Final Frontier</strong></p>
+<p><strong>Chapter 13: The Ultimate Trust Violation</strong></p>
 
-<p>After months of pushing the boundaries of what’s possible with eBPF, I’ve reached what I believe is the final frontier: authentication itself. I’ve broken security controls, escaped containers, evaded monitoring, violated trust, and manipulated hardware. But there’s one last bastion that represents the ultimate challenge.</p>
+<p>I used to believe that module signing was the unbreakable seal guarding the kernel’s integrity. The idea that only cryptographically signed code could run with kernel privileges felt like a moat no attacker could cross.</p>
 
-<p>Authentication tokens—JWTs, OAuth tokens, Kerberos tickets, API keys—these are the fundamental building blocks of modern security. They’re how systems know who you are and what you’re allowed to do.</p>
+<p>But module loading in Linux is just more code, and code can be intercepted. Under cover of a stealthy kprobe, I hooked into <code class="language-plaintext highlighter-rouge">module_sig_check()</code>, the very function that validates signatures.</p>
 
-<p>Today I learned to subvert authentication itself at the kernel level.</p>
+<p>As the kernel read the signature blob, my eBPF program diverted it to a BPF map and served up a legitimate signature stored in memory. Once the check completed, I swapped the verified buffer for my own malicious driver.</p>
 
-<h2 id="the-foundation-of-identity">The Foundation of Identity</h2>
+<p>The kernel nodded and loaded my code without a second thought. To the security team, logs gleamed with successful signature verifications; to me, the backdoor was wide open.</p>
 
-<p>I spent the morning studying authentication token processing—the foundation of digital identity. These systems are designed to:</p>
-<ul>
-  <li><strong>Verify user identity</strong> through cryptographic tokens</li>
-  <li><strong>Authorize access</strong> based on token claims and permissions</li>
-  <li><strong>Maintain session state</strong> across distributed systems</li>
-  <li><strong>Provide the basis</strong> for all access control decisions</li>
-</ul>
+<p>With this ultimate trust violation, I had proven that even cryptographic defenses can be subverted. Act II may be drawing to a close, but the most dramatic scenes are yet to come.</p>
 
-<p>It’s like having a master key system where every door in the building checks your credentials before letting you through. If you can forge or manipulate these credentials at the source, you can go anywhere, do anything.</p>
-
-<p>But what if I could make the credential checking system itself lie about what it was seeing?</p>
-
-<h2 id="my-ultimate-authentication-strategy">My Ultimate Authentication Strategy</h2>
-
-<p>The idea was the culmination of everything I’d learned. Instead of trying to forge tokens or break cryptography, I would make the token validation process itself return whatever results I wanted.</p>
-
-<p>My plan:</p>
-<ol>
-  <li><strong>Hook token validation functions</strong> - Intercept the kernel-level code that processes authentication tokens</li>
-  <li><strong>Forge validation results</strong> - Make invalid tokens appear valid to the system</li>
-  <li><strong>Manipulate token claims</strong> - Alter the permissions and identity information in tokens</li>
-  <li><strong>Maintain audit compliance</strong> - Ensure the manipulation doesn’t show up in security logs</li>
-</ol>
-
-<h2 id="the-night-i-broke-authentication">The Night I Broke Authentication</h2>
-
-<p>I’ll never forget the first time I pulled it off. I had set up a system with strict token-based authentication—every operation required valid, properly signed tokens with appropriate permissions.</p>
-
-<p>I loaded my eBPF program to hook into the token validation process. Then I attempted to access resources using completely invalid tokens—expired tokens, tokens with insufficient permissions, even completely fabricated tokens.</p>
-
-<p>It worked. Every invalid token was accepted as valid. Every insufficient permission was elevated to full access. Every forged token was treated as legitimate.</p>
-
-<h2 id="the-perfect-impersonation">The Perfect Impersonation</h2>
-
-<p>The beautiful part was that the authentication system still thought it was working perfectly. The audit logs showed successful validation of legitimate tokens. The security monitoring showed proper access control enforcement. But I was actually operating with forged credentials that gave me unlimited access.</p>
-
-<p>I had achieved the perfect impersonation—becoming anyone I wanted to be while maintaining the appearance of legitimate authentication.</p>
-
-<h2 id="the-techniques-i-mastered">The Techniques I Mastered</h2>
-
-<p>Over the following days, I perfected several authentication subversion techniques:</p>
-
-<p><strong>Token Validation Bypass</strong>: Making invalid tokens appear valid to validation systems
-<strong>Permission Elevation</strong>: Upgrading insufficient permissions to full access rights
-<strong>Identity Spoofing</strong>: Making tokens appear to belong to different users
-<strong>Expiration Nullification</strong>: Making expired tokens appear fresh and valid
-<strong>Signature Forgery</strong>: Making unsigned or incorrectly signed tokens appear legitimate</p>
-
-<p>Each technique exploited the fundamental assumption that token validation provides reliable authentication.</p>
-
-<h2 id="the-broader-implications">The Broader Implications</h2>
-
-<p>This wasn’t just about bypassing authentication—I had discovered that the fundamental assumptions of digital identity could be violated. When you can subvert token validation:</p>
-<ul>
-  <li><strong>Impersonate any user</strong> in the system with forged credentials</li>
-  <li><strong>Escalate privileges</strong> by manipulating token permissions</li>
-  <li><strong>Bypass all access controls</strong> that rely on token-based authentication</li>
-  <li><strong>Maintain persistent access</strong> through tokens that never expire</li>
-</ul>
-
-<p>I had broken the foundation of digital identity and access control.</p>
-
-<h2 id="what-theyll-try-to-do">What They’ll Try to Do</h2>
-
-<p>I know the security teams will try to stop this:</p>
-<ul>
-  <li>Monitor for eBPF programs attached to authentication functions</li>
-  <li>Implement hardware-based token validation</li>
-  <li>Use external authentication systems that don’t rely on kernel processing</li>
-  <li>Deploy multiple independent identity verification mechanisms</li>
-</ul>
-
-<p>But I had discovered something fundamental: when you can manipulate authentication at the kernel level, traditional access control becomes meaningless.</p>
-
-<h2 id="the-master-of-identity">The Master of Identity</h2>
-
-<p>I had become the master of digital identity, capable of being anyone I wanted to be in any system. Authentication tokens, supposedly providing the foundation for all access control, had become my personal tools for unlimited impersonation.</p>
-
-<p>I could be anyone, anywhere, anytime. The final frontier had been conquered.</p>
-
-<hr />
-
-<p><em>“I had achieved the perfect impersonation—becoming anyone I wanted to be while maintaining the appearance of legitimate authentication.”</em></p>
+<p>```c
+SEC(“kprobe/module_sig_check”)
+int bypass_module_signature(struct pt_regs *ctx) {
+    // Intercept verification and swap payload
+    return 0;
+}
+char LICENSE[] SEC(“license”) = “GPL”;</p>
 
                     </div>
                 </article>
