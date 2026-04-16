@@ -370,6 +370,57 @@ The even narrower use is anti-forensics: if a defender runs a script that logs t
 
 None of these are "load an unsigned driver." The unsigned-driver attack requires either signature enforcement being off (in which case you don't need BPF at all, `insmod` works directly) or the LSM-level bypass of `mod_verify_sig` (which requires both signature enforcement and a real but unsigned .ko, conditions I could not set up on the test kernel). This primitive is for a different, narrower attack surface.
 
+## Why the Error-Injection Allowlist Contains Syscall Entries
+
+A digression on the kernel-source side of things, because it is useful to understand why the allowlist has what it has.
+
+`/sys/kernel/debug/error_injection/list` is populated from source-code annotations. Functions that declare `ALLOW_ERROR_INJECTION(func_name, TYPE)` in their defining source file are added to this list at build time. The type — `ERRNO`, `NULL`, `TRUE`, `FALSE`, or `ANY` — tells the verifier what return values are permissible for the override. For syscall entry wrappers, the type is `ERRNO`, meaning override returns must be valid errno values (negative in the range -MAX_ERRNO to 0, or 0 itself).
+
+The syscall wrappers get this annotation because fault injection testing of syscalls is a common kernel test technique. You want to be able to simulate "what happens if `finit_module` fails with ENOMEM right here" as part of the kernel's own self-test infrastructure, and the allowlist is the mechanism that enables that. BPF programs piggyback on this — the same gate that lets the kernel's fault-injection framework rewrite a return lets a BPF program do so.
+
+This is why the allowlist contains a lot of syscall entries but very few mid-kernel functions. Syscall entries are natural points to inject faults at because the entire syscall is a single transactional unit from userspace's perspective; the kernel's behavior in response to one is a single point of observation. Mid-kernel functions are deeper in the call graph and rewriting their returns has effects on other functions up the stack that are harder to reason about. The kernel developers have been generous with syscall-entry annotations and stingy with anything below the syscall boundary.
+
+The practical effect is that BPF programs that want to rewrite behavior have two clean attachment points: LSM hooks (explicit policy points with declared semantics for override) and syscall entries (explicit userspace-facing points with declared ERRNO semantics). Anywhere else — the IRQ dispatch path from chapter 11, the powercap functions from chapter 13, almost any filesystem or networking internal — is off-limits for `bpf_override_return` unless a kernel developer has specifically made that allowance.
+
+For an attacker, this means the menu of possible primitives is bounded by the allowlist. You do not get to pick any function you like. You get to pick from a specific set. And for each function in the set, you get to decide what return value to rewrite to, within the ERRNO envelope.
+
+This is the reason chapters 12, 14, and 18 look so structurally similar. Each one identifies a syscall in the allowlist, rewrites its return to fool a userspace consumer, and documents the scope. The pattern is the pattern because the allowlist is the allowlist.
+
+## A Walk Through Why Non-ELF Triggers ENOEXEC
+
+An aside to make the ELF-validation rejection concrete. When `insmod fake.ko` runs on a non-ELF blob, the kernel's path through `load_module()` is:
+
+1. The syscall entry wrapper receives the file descriptor and flag arguments.
+2. `kernel_read_file_from_fd` reads the .ko bytes into a kernel buffer.
+3. `copy_module_from_user` copies the userspace image into a `struct load_info`.
+4. `elf_header_check` validates the ELF header: magic bytes, class (32 vs 64), data encoding (LE/BE), version, machine type.
+
+At step 4, the `\x7fELF\x02\x01\x01\x00` + zeros blob the trigger creates will make it past magic-byte check (the first four bytes are correct), past class check (`\x02` = ELFCLASS64), past data check (`\x01` = ELFDATA2LSB), past version check (`\x01` = EV_CURRENT). What it fails at is the subsequent sanity checks on section headers and program headers — the zero bytes make the header offsets nonsensical, e_shoff and e_phoff point into nowhere, and the loader rejects with `-ENOEXEC`.
+
+The exact function that produces -ENOEXEC is `elf_validity_check` in `kernel/module/main.c`, called from the module-load path. This happens inside the syscall, before any LSM hooks that care about module contents run. My syscall-entry kretprobe fires on the way out of the syscall, after this rejection has been produced.
+
+On a valid ELF with bad or missing signature, the path continues past elf_validity_check, through further section parsing, to `module_sig_check`. If signature enforcement is on and the signature is bad, that function returns `-EKEYREJECTED` (-129). If signature enforcement is off, it returns 0 (accept and continue, optionally with a warning). The LSM hooks that the original LSM variant was supposed to target run around this point — `kernel_read_file` runs during the read, `locked_down` runs during loader lockdown checks.
+
+So the code path for "non-ELF blob" and "ELF with bad signature" diverge at the ELF validation step. The syscall-entry primitive catches both because it runs after everything; the LSM primitive catches only the second, and only on a kernel that enforces signatures.
+
+## On bpf_override_return Semantics
+
+The mechanics of `bpf_override_return` are worth pinning down because they are often described vaguely.
+
+The function is a BPF helper that, when called from a kprobe or kretprobe on an allowlisted target, arranges for the probed function's return value to be the specified value instead of what the function would have returned. On kprobes, this preempts the function's execution — the function body does not run at all, and the return value is set to the override. On kretprobes, the function has already run; the override rewrites its return value before it propagates to the caller.
+
+The kretprobe case is what this chapter uses. The module loader has already executed its full logic, decided to reject the bytes, and written a negative errno into the return register. The kretprobe fires on syscall exit, runs my BPF program, which calls `bpf_override_return(ctx, 0)`. That helper rewrites the kretprobe context's return-value slot, and when the probe returns, the kernel's return-path code uses the rewritten value to populate the userspace-visible return.
+
+The override is not a "fake return from kernel space"; it is a literal rewrite of the pt_regs-backed return value at the moment of syscall exit. There is no way for any userspace-visible mechanism to distinguish a BPF-forged return from a kernel-native return, because from the CPU's point of view there is no distinction — they are the same value in the same register at the same point in execution.
+
+Anything that reads the return in kernel space *before* the kretprobe runs sees the pre-flip value. That includes audit records, as noted in the detection section, and any other in-kernel consumer of the syscall's return. It also includes subsequent BPF programs attached to the same kretprobe if there are any — the order of kretprobe firing is not guaranteed to match the order of attachment.
+
+Anything that reads the return in kernel space *after* the kretprobe runs sees the post-flip value. That includes the userspace delivery of the return via the syscall exit path.
+
+The boundary between "before" and "after" is the specific placement of the kretprobe in the kernel's return-path code. This is a narrow window — single-digit instructions on modern kernels — and the behavior is consistent across 5.x and 6.x. The design choice here was made deliberately by the BPF developers: kretprobes need to be able to rewrite returns, the natural place to do that is at syscall exit after the function has run but before the value propagates.
+
+For a primitive that wants to fool both userspace and audit, the kretprobe placement is not good enough. Audit catches the pre-flip value. For a primitive that wants to fool only userspace, the kretprobe placement is exactly right. Chapter 12 is in the second category.
+
 ## Cross-Kernel Behavior: When the LSM Path Actually Works
 
 I want to describe the kernel configuration under which the original LSM approach does fire, because it is a real configuration and someone reading this chapter should know how to recognize it.
@@ -427,6 +478,71 @@ BPF-based extensions to module-signature bypass started appearing in public arou
 The syscall-entry variant I describe here is in a different class. It is not a privilege-escalation primitive — the attacker has to have CAP_BPF already to load the program, and the primitive doesn't get them anything extra in kernel memory. It is a workflow-manipulation primitive: fool the orchestration, not the kernel.
 
 Ch14 (SCHED_FIFO impersonator), which forges `sched_setscheduler` returns, and ch18 (token bypass), which forges `getuid` returns, are the closest siblings. All three use the same pattern: ERRNO-injectable syscall entry, kretprobe, `bpf_override_return`, narrow userspace illusion. Different syscalls, different specific lies, same mechanism.
+
+## Deployment Notes for the Defender
+
+If you are a defender thinking about detection for this primitive, here is the practical playbook.
+
+First, do not trust `insmod`'s exit code alone. If your ops scripts call `insmod` or `modprobe` and check the exit code, add a post-check on `/proc/modules` or `/sys/module/<name>/`. The two-line diff is:
+
+```bash
+# before
+insmod x.ko || die "load failed"
+# after
+insmod x.ko || die "load failed"
+lsmod | grep -q '^x\b' || die "load claimed success but module not present"
+```
+
+The cost is one extra shell-out per load. The defensive value is complete coverage of this primitive.
+
+Second, deploy auditd rules on the module-load syscalls:
+
+```
+auditctl -a always,exit -S finit_module
+auditctl -a always,exit -S init_module
+```
+
+The audit records capture the real return value (pre-flip, as discussed). A forensic analyst looking at audit logs sees every module-load attempt with the kernel's actual verdict, regardless of whether a BPF primitive has forged the syscall return for userspace.
+
+Third, watch `bpftool prog show` output. Any kretprobe attached to `__arm64_sys_finit_module` or `__arm64_sys_init_module` (or the x86 equivalents) is high-signal. Legitimate observability tools do not kretprobe syscall entries by default. If you see one, ask who loaded it and why.
+
+Fourth, consider `CONFIG_MODULE_SIG_FORCE=y` for your kernel build if you are not already doing this. Signature enforcement is the front-line defense against the LSM-variant attack; it also makes the syscall-entry variant less useful because most caller workflows that matter already post-check the module state. Enforcement is a requirement on serious production kernels and I'd argue should be the default everywhere except development.
+
+Fifth, if you operate a cluster orchestration system that relies on module-load success as a gate, audit every call site to ensure it cross-checks `/proc/modules`. This is the kind of systemic review that does not scale to "read every script in every team's ops repo," but you can at least set the policy and write a lint rule.
+
+## Deployment Notes for the Attacker
+
+From the other side, if you are thinking about using this primitive adversarially, the things to know are:
+
+First, this is a userspace-illusion primitive. Do not deploy it expecting to load code into the kernel; that is not what it does. The module does not load. If you need kernel code execution, you need a different primitive — typically one that requires conditions you do not have (kernel write, signature bypass on an enforcing kernel, and so on).
+
+Second, the scope of the illusion is narrow. Any post-check against `/proc/modules` catches you. If your target workflow includes such a check, this primitive is useless. Audit the target workflow before deploying.
+
+Third, the BPF load is visible. `bpftool prog show`, `/sys/kernel/tracing`, auditd BPF-load events — all of them reveal that a kretprobe is attached to the module-load syscalls. If your adversarial scenario requires stealth, the load itself is already detectable.
+
+Fourth, the primitive interacts poorly with systems that do real module loading alongside the faked path. If you flip every caller's return with `--all`, you will forge the return of legitimate module loads too — turning a successful legitimate load into a ringbuf event with flipped=0 (not flipped, ret was already 0). But if a legitimate load fails for an ordinary reason (ENOMEM, missing dependency), the primitive flips that to success as well, which might cause the orchestrator to take unexpected actions. Use per-TGID targeting to constrain the blast radius.
+
+Fifth, the primitive does not survive `rmmod` + `insmod` on a module that is already loaded. If the target module is loaded, `insmod` returns EEXIST; the primitive flips EEXIST to zero. That is probably the wrong behavior for most uses. Check the existence of the target module in userspace before relying on the primitive.
+
+## A Digression on insmod vs modprobe
+
+A small note on the userspace tooling. `insmod` is the low-level interface; it calls `finit_module` directly with a file descriptor. `modprobe` is the higher-level interface; it handles dependency resolution, loads dependent modules first, consults `/lib/modules/$(uname -r)/modules.dep`, and ultimately also calls `finit_module` (sometimes repeatedly for dependency chains).
+
+The primitive catches both because it hooks the syscall, not the userspace tool. Whether the caller is `insmod x.ko`, `modprobe x`, or a custom program that calls `syscall(SYS_finit_module, ...)` directly, the kretprobe fires on syscall exit and the return is rewritten.
+
+For modprobe specifically, this means: if modprobe is loading a module that depends on five other modules, and the primitive is in wildcard mode, then any of the six individual loads that fails has its return flipped. Modprobe's internal logic may be confused — it loaded what it thought was a success but the module is not actually present. The observable behavior from the outside depends on what modprobe does when a load "succeeds" but the expected post-conditions are not met. In my testing this varies by modprobe version; some versions notice and error out, some do not.
+
+This is an area where the primitive's semantics become fuzzier the deeper you go into ecosystems that use module loading. The narrow claim — "the syscall return is flipped" — is stable; the impact on higher-level tooling depends on how that tooling reacts to "success without the expected state."
+
+## Why This Is in the Book
+
+I keep asking myself whether chapters like this one — where the primitive's scope is genuinely narrow and the victim class is specific — are worth including. The alternative would be to cut them and only feature the primitives that land big, with real kernel-state consequences.
+
+The argument for including them is that they are representative of what BPF-based kernel adjacent primitives actually look like. Most primitives are narrow. Most primitives have a victim class that is specific to a particular engineering assumption (in this case, "syscall returns are authoritative for module load"). Most primitives need a post-check to be defeated.
+
+A book that only featured the big-impact primitives would be misleading about the shape of the field. The field is small primitives, narrow scopes, and engineering work on the defender side to close the assumption gaps. Showing the small primitive clearly, with its scope, is more useful than showing an imagined big primitive that does not actually exist on real kernels.
+
+The second argument for including this chapter is that the failure mode — the LSM approach that did not fire — is itself instructive. The setup conditions for "BPF LSM bypass of module signing" are specific enough that most readers who think they understand the attack have not thought through the conditions under which it fires. Walking through both the failure and the pivot teaches something about how to read kernel source for real exploitability, not just for the surface-level "is the hook there" question.
 
 ## Factual Note
 

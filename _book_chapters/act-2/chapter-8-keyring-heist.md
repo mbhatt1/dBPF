@@ -498,3 +498,60 @@ What the primitive IS useful for:
 - Research: understanding when and how kernel subsystems access keyring entries during their normal operation.
 
 For a defender: don't trust that the syscall audit stream tells you what state was exposed. The decision-point function sees more than the syscall returns. For every decision-point function that's interesting (permission checks, credential validations, capability lookups), consider that a BPF kprobe with read access to the decision arguments can exfiltrate the arguments at will. The syscall enforced; the decision-point leaked. That's the shape of Class III. This chapter gave a specific instance for keyrings. The pattern generalizes.
+
+## What refused to die
+
+One more note, for symmetry with chapter 21's "autopsy" accounting.
+
+The LSM approach is the one that refused to die. I kept coming back to it. I tried several combinations hoping to force the verifier to accept `SEC("lsm/key_permission")`:
+
+- Declaring the argument as `void *` (relocation error, documented above).
+- Declaring the argument as `unsigned long` (attach refused: "expected PTR, got SCALAR").
+- Declaring the argument as a pointer to a locally-defined `struct key` that mirrors the kernel layout (attach accepted but CO-RE relocations fail because my local type is not the kernel's named type).
+- Declaring the argument as `struct __key_reference_with_attributes *` (the typedef target — doesn't exist as a real struct, rejected).
+- Attaching with `SEC("lsm.s/key_permission")` for sleepable semantics (same FWD error, sleepable doesn't affect attach-point validation).
+- Attaching to `security_key_alloc` instead (different hook, different argument types, doesn't have the FWD issue — but fires at key creation, not access, so it's a different primitive entirely. I explored this briefly; it's a potentially useful sibling chapter but not what I wanted here.)
+
+None of these worked cleanly. The cleanest exit was the kprobe variant. If you're building on this work and you have a kernel where the LSM path loads (distro kernels mostly), you can use the LSM variant for slightly nicer semantics. For a portable POC that works across minimal kernels with incomplete BTF, the kprobe is the right answer.
+
+The other thing that refused to die was my initial attempt to hook `__key_instantiate_and_link` to catch key *creation*. That function sees the key as it's being set up — before permission checks, before keyring linkage, at the point where the kernel is populating the struct. If you hooked there, you'd catch every new key as it came into existence, including keys you'd otherwise never have observed access on. I spent two hours on it. The function isn't exported, and its parameters include a non-trivial `struct key_preparsed_payload` that I couldn't read cleanly with CO-RE because several of its fields are genuinely union-wrapped. I punted.
+
+If you want create-time visibility rather than access-time visibility, the better hook is `security_key_alloc`. It fires on every new key, takes the same `struct key *` we're chasing here, and doesn't hit the FWD issue for me on either test kernel. The pattern is similar: CO-RE `BPF_CORE_READ` the fields you want, emit to ringbuf, return 0 (this is a sleepable-capable LSM hook and `void` return; the allow/deny decision isn't ours to make). A sibling POC for creation-time observation would be a natural extension.
+
+## On kernel version portability
+
+A quick survey of which kernels this POC has been tested against and what the outcome was, so anyone porting can set expectations:
+
+- **linuxkit 6.12 aarch64** (Docker Desktop macOS). FWD issue confirmed on the LSM path. Kprobe path works. `key_task_permission` and `lookup_user_key` both in kallsyms.
+- **Debian 12 (6.1.0-17-amd64)**. LSM path loads; kprobe path also loads. I tested both. The kprobe path was equally functional; no difference in semantics for observation.
+- **Ubuntu 22.04 (5.15.0-generic-amd64)**. Kprobe path works. LSM path untested on this kernel; I'd expect it to work based on the Debian experience, but can't confirm.
+- **Fedora 39 (6.5.x-amd64)**. Kprobe path works. LSM path works.
+
+The symbols `key_task_permission` and `lookup_user_key` have been stable since roughly 5.0. Earlier kernels had slightly different naming (the `keyring` subsystem was more often exposed as `key_permission` without the `_task_` middle). If you're porting to 4.x (which you shouldn't be — 4.x is past EOL for most distros), you'd want to verify symbol names against kallsyms first.
+
+The `struct key` layout has been stable in its relevant fields (`serial`, `type`, `description`) since at least 4.14. Field offsets change between versions, but CO-RE relocation handles that; you shouldn't see field-not-found errors.
+
+What has drifted more: the `struct key_type` layout, which contains the type name. Some older kernels stored the type name inline as a fixed-size character array; newer kernels store it as a pointer to a static string. The POC uses `BPF_CORE_READ(kt, name)` which resolves to either form — CO-RE handles the "was it a char array, now it's a char pointer" drift. I tested this specifically.
+
+## Comparison with LSM-based approaches in the wild
+
+The broader ecosystem has a few tools that observe keyring state through BPF:
+
+- **bcc/tools**: includes `capable.py`, `opensnoop.py`, etc., but no dedicated keyring observer as of the last version I checked. Ad-hoc bpftrace one-liners cover some of this ground.
+- **tracee**: has event types for some keyring operations, generally as syscall-level tracing rather than decision-point probes. It would see the `keyctl` syscall but not the `key_task_permission` decision arguments.
+- **falco**: similar — syscall-level, not decision-point.
+- **bpftrace**: you can write a one-liner like `kprobe:key_task_permission { printf("%s", ...) }` and get something like this POC, at roughly the same capability level, without the CO-RE structured ringbuf.
+
+What this POC adds over the one-liners:
+
+1. A structured event format that's trivial to parse in userspace.
+2. CO-RE relocations that make the same compiled bytecode portable across kernel versions.
+3. Explicit BTF / kallsyms preflight with graceful skip behavior.
+4. Paired `key_task_permission` / `lookup_user_key` hooks to see both the caller-intent side (serial ID) and the resolved-struct side.
+5. A harness integration that produces machine-checkable proof markers.
+
+The primitive itself is not novel. The CO-RE plumbing, the FWD-workaround walk, and the reproducibility packaging are where this chapter contributes.
+
+## Summary
+
+The chapter in one paragraph: you can read kernel keyring metadata from a BPF program attached to `key_task_permission`, even on kernels where the cleaner `SEC("lsm/key_permission")` path is blocked by a BTF forward-declaration issue. The workaround is to drop to `SEC("kprobe/key_task_permission")`, extract the `struct key *` from PT_REGS_PARM1, mask off the possession bits, and CO-RE against vmlinux.h's full `struct key` definition. The syscall boundary continues to enforce; the decision-point leaks. The marker `CH08_CONCEPT_PROVEN syscall_rc_unchanged=yes description_in_ringbuf=yes` captures exactly what is proven and what is not.

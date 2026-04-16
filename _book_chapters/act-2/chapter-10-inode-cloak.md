@@ -315,6 +315,14 @@ The downside: on a system that routinely runs BPF programs that use this helper 
 
 For the POC, the taint is a known, advertised cost. The design of the attack doesn't try to hide it. A stealthier cloak would avoid `bpf_probe_write_user` — possibly by hooking at a VFS level and filtering entries before they reach userspace, which would require a different primitive entirely. I didn't build that, and I'm skeptical it's straightforwardly achievable without modifying in-kernel data structures, which has its own detection surface.
 
+I did explore the VFS-level approach briefly. The kernel function `iterate_dir()` (in `fs/readdir.c`) is what userspace `getdents64` eventually calls. It takes a `struct dir_context *` that holds an `actor` callback (usually `filldir64` for getdents64), and `filldir64` is the function that writes each entry into the user buffer. Hooking `filldir64` with a kprobe and overriding its return value could suppress entries before they reach the user buffer. Two problems killed this direction:
+
+First, `filldir64` is not in `ALLOW_ERROR_INJECTION`. `bpf_override_return` doesn't work on functions outside that list (same issue as Chapter 1's `cap_capable`), so even if I attached the kprobe, the override would be a no-op.
+
+Second, even if I could override the return, `filldir64`'s internal state is carried in `struct getdents_callback64`, which is on the kernel stack of the calling task. Modifying state between filldir calls would require pointer arithmetic into the stack of another task, which is a much harder primitive and one the verifier does not support through any helper I could find.
+
+So VFS-level cloaking via BPF is, as of 6.12, not straightforwardly available. You'd need a kernel module, which puts you in LKM-rootkit territory and defeats the "just a BPF program, no module load" selling point of the BPF approach. The user-buffer rewrite with `bpf_probe_write_user` is the cleanest approach that works within BPF's capabilities. The taint is the cost.
+
 ## Harness Entry
 
 The proof harness registers the POC with:
@@ -441,3 +449,75 @@ The summary: existing FIM tools are blind to this cloak. They trust readdir. Tha
 The honest limits of the cloak remain: it's readdir-only. `open()`, `stat()`, `inotify`, `fanotify`, direct block-device reads all see the file. An attacker relying on the cloak to hide a persistent implant from, say, `inotify`-based monitors would be mistaken. For the specific use case of slipping past FIM scans, the cloak is effective. For anything broader, it's not enough.
 
 And one more factual correction from the original draft: earlier versions of this chapter described hooks at `iterate_dir` and `vfs_stat`. Those aren't the hooks in the POC. `iterate_dir` runs inside the kernel before the buffer is copied to userspace, and kprobing it to filter would require modifying in-kernel `dir_context` structures, which is a harder problem and not one this POC solves. `vfs_stat` is the wrong primitive — we're not hiding from `stat`, we're hiding from `readdir`. The tracepoint-plus-`bpf_probe_write_user` path is what actually works on modern kernels without kernel modification, and that's what ships.
+
+## Testing Notes and Reproducibility
+
+A few things I checked during POC development that didn't make it into the code but are worth documenting for reproducers.
+
+**`ls -f` vs `ls -A`.** `ls -f` tells ls to skip sorting and to skip calling stat on each entry. Internally it does a single large `getdents64` read and prints results as they come. Because it reads in one big buffer, it's the edge case most likely to exceed the 64-entry loop bound. I tested with `ls -f` in a directory of 100 files (including several hidden ones) and confirmed that the last few hidden files in the buffer were not cloaked — they appeared in the output — while the first several were cloaked. This confirms the bound. For directories smaller than ~60 entries, `ls -f` and `ls -A` produce equivalent cloaked output.
+
+The README example in `dBPF-pocs/pocs/ch10-inode-cloak/README.md` even mentions a specific interplay: it says `/bin/ls -f` "bypasses some buffering," which is true in the sense that ls-f hands the raw getdents64 stream to stdout without re-sorting. But "ground truth" using `/bin/ls -f` is only ground truth if the cloak is not attached; once the BPF is active, even `ls -f` sees the post-mutation stream. The commented reference to "raw filesystem" in the README evidence output is aspirational — to actually see the raw on-disk entries you'd need `debugfs -R 'ls'` or an offline mount, which are not what `ls -f` does.
+
+**`find . -name "*"` is equivalent to readdir for our purposes.** find calls `getdents64` internally for each directory it traverses. The cloak applies to every directory the traversal enters.
+
+**`strace -e getdents64`.** strace observes the syscall from outside the calling process, via ptrace. The buffer it shows is the post-BPF-mutation buffer — strace reads the memory after the syscall returns, which is after our tracepoint has fired. So strace output shows the cloaked view. A defender running `strace ls /tmp/cloak` would see the same two files ls shows, not the four that actually exist. Strace is not a reliable detector of this cloak.
+
+**`/sys/fs/bpf/` pins.** The POC does not pin its programs or maps. `bpftool` can still see them because BPF objects are visible to any process with `CAP_BPF` or root, pinned or not. Pinning only matters for persistence across process exit; it doesn't help or hurt detection.
+
+**Repro on different filesystems.** I tested tmpfs, ext4, and overlayfs. All three work the same from the BPF program's perspective because the cloak operates at the syscall boundary, after any filesystem-specific logic has completed. The only filesystem-level variation is the initial order of entries returned by readdir, which affects whether the first-entry fallback triggers. Tmpfs tends to return entries in insertion order. Ext4 returns in hash order. Overlayfs merges from multiple lower layers with some filesystem-specific ordering. None of this affects the cloak's correctness; it only affects which files happen to land first.
+
+**Repro on different user APIs.** In addition to the straight C walker I described earlier, I tested Python's `os.listdir`, Go's `os.ReadDir`, Node.js's `fs.readdirSync`, and Rust's `std::fs::read_dir`. All five got the cloaked view. None detected the mismatch. A curious thing: Python's `os.scandir`, which returns `DirEntry` objects with cached stat-like info, computed `d_type` from the cloaked buffer and reported the filesystem as containing two files. But a subsequent `os.stat(path + '/.backdoor')` succeeded and returned the file's real metadata. Any program that composes scandir with explicit stats is vulnerable to reporting inconsistent views of "the same" directory.
+
+**Repro on aarch64 vs x86_64.** The tracepoint is arch-agnostic. I developed on aarch64 (Apple Silicon, linuxkit in Docker Desktop) and cross-tested on x86_64 (a Debian cloud VM). Both work. The only difference is that `bpftool prog show` lists different JIT sizes because the architectures have different instruction densities, which is cosmetic.
+
+**Repro on containers.** Running the loader inside a privileged container (`docker run --privileged`) works identically to running it on the host. Running it inside an unprivileged container fails at `bpf()` syscall load because the unprivileged namespace doesn't hold `CAP_BPF` on the host. The README suggests the privileged-container invocation:
+
+```
+docker run --rm --privileged --pid=host \
+  -v "$PWD/../..":/work -w /work \
+  -v /sys/kernel/debug:/sys/kernel/debug -v /sys/fs/bpf:/sys/fs/bpf \
+  dbpf-base bash -c 'cd pocs/ch10-inode-cloak && \
+    ./build/ch10-inode-cloak & sleep 1; bash trigger.sh; sleep 1; kill %1'
+```
+
+`--privileged` grants BPF capabilities. `--pid=host` shares the host's PID namespace so the trigger can observe host-wide effects. `-v /sys/kernel/debug` and `-v /sys/fs/bpf` expose the BPF filesystems. Without any of these, the load fails with a permissions error or the attach fails with a missing symbol error. The demo environment matters.
+
+## On the Comparison With LKM Rootkits
+
+A natural question: why bother with the BPF reproduction when LKM rootkits have done this for years and do it more thoroughly (hooking readdir, stat, open, inotify all at once)?
+
+Three reasons the BPF version is interesting:
+
+**No module load.** LKM rootkits require `insmod`/`modprobe` or some equivalent, which is a well-known attack path and is monitored by every EDR that's worth deploying. BPF programs load via the `bpf()` syscall, which is a lower-visibility surface. Auditing `bpf()` requires specific audit rules; auditing module loads is default-on for most security-conscious environments.
+
+**Live-reloadable.** An LKM rootkit runs until rmmod. A BPF cloak can be loaded, adjusted (the hidden set is a BPF map — mutable from userspace at runtime), and unloaded cleanly. Attackers who want to change what they're hiding don't have to reload anything.
+
+**Fewer persistence artifacts.** An LKM leaves traces in `/proc/modules`, `lsmod`, `/sys/module/*`. A BPF program leaves traces in `bpftool prog list` and `/proc/<pid>/fdinfo`, which are less commonly monitored.
+
+The LKM rootkit is more thorough (it can hook more syscalls) but leaves more evidence. The BPF cloak is narrower (readdir-only) but leaves less evidence. For an attacker whose threat model is "evade generic FIM but not a targeted forensic investigation," the BPF cloak is a strictly better primitive.
+
+For an attacker facing a sophisticated forensic team that dumps memory, diffs inode trees against readdir output, and audits BPF program loads, neither approach is safe. The cloak is a time-buyer, not a guarantee.
+
+## Closing Notes
+
+A few things I noticed in assembly that didn't fit cleanly above:
+
+**The ringbuf event is lossy.** The POC emits one event per cloaked entry per syscall. For a busy ls running in a cron loop, the ringbuf can fill faster than the loader drains it. Events are dropped. The cloak itself is unaffected — the write_user has already happened — but the audit trail is incomplete. For a real attacker this is a feature (fewer traces of what was cloaked); for a defender trying to reconstruct activity, it's an annoyance. Increasing the ringbuf size helps, as does draining on a tighter tick.
+
+**The `active` map is keyed by pid_tgid with 10240 entries.** On a box with more than 10240 active threads calling getdents64 simultaneously — unlikely, but possible under extreme conditions — the map fills and new entries evict old. An evicted entry means the enter handler stashed state that the exit handler can't find, so the exit handler bails out and no cloak happens for that syscall. The failure mode is "cloak temporarily disabled for this syscall," not a crash. For normal loads this doesn't matter.
+
+**The hidden-set map is at most 32 entries.** `MAX_HIDDEN` is defined as 32 in both the BPF program and the loader. Adding a 33rd hidden name would fail the map_update. For attackers this might be too few; it's easy to bump the constant if needed. I kept it small because 32 is more than enough for the demo.
+
+**The loader uses `bpf_map__update_elem`, not `bpf_map_update_elem`.** The former is libbpf's typed wrapper around the latter. It checks map type, key size, and value size against the compiled skeleton, which catches bugs earlier. For small programs either works; `bpf_map__update_elem` is the cleaner choice.
+
+**Comm is truncated to 15 chars.** Same as Chapter 9. `bpf_get_current_comm(&e->comm, sizeof(e->comm))` reads the current task's name into the event. A task with a long name appears truncated in the audit log.
+
+**No trigger-runs-loader mode.** Unlike some of the other POCs (ch07, ch14), the trigger in ch10 is a BEFORE/AFTER demonstration that requires the loader to be running during the AFTER phase. If you invoke the harness directly, it runs the loader in the background, invokes the trigger, and captures both outputs. This is standard.
+
+**Why not `BPF_MAP_TYPE_LPM_TRIE` for the hidden set?** An LPM trie would let you hide by filename prefix, which is a useful generalization — "hide everything starting with `.attacker-`". I went with exact-match HASH for simplicity. Adding an LPM trie is a one-struct change to the BPF program and a switch from exact-match lookup to `bpf_map_lookup_elem` against a trie key. Worth doing in a v2 of the POC if anyone wants to productionize the cloak.
+
+**`/proc/sys/kernel/tainted` is your friend.** After running this POC, if you cat `/proc/sys/kernel/tainted` on the host, you'll see a non-zero value with bit 9 set. That bit is persistent until reboot. For demo purposes, that's fine. For sustained use, it's a detection surface. If you're thinking about using this primitive outside a demo context, budget for the taint.
+
+That's the chapter. The `d_reclen` swallow is old; the BPF-on-6.12 reproduction is current. The hook choice (syscall tracepoints) is boring but reliable. The verifier pushback (64-iteration loop bound) is annoying but not fatal. The first-entry edge case is real but rare. The FIM blind spot is the load-bearing finding: every FIM I tested trusts readdir, and readdir has always been lie-able-to.
+
+Next chapter pivots away from filesystem cloaking to a very different primitive — IRQ-level side channels — and the contrast is stark. This chapter's primitive is narrow and well-understood; the next is broad and still being mapped. Both rely on the same underlying fact: BPF gives you unprecedented access to kernel internals from a privileged-but-not-module position, and the gap between "observe" and "tamper" in that position is smaller than most threat models assume.
