@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if page.title %}{{ page.title }} | {% endif %}{{ site.title }}</title>
+    <meta name="description" content="{{ site.description }}">
+    {% include head-custom.html %}
+    {% seo %}
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <a href="{{ site.baseurl }}/" class="site-title">{{ site.title }}</a>
+            </div>
+            <div class="sidebar-content">
+                {% assign sorted_posts = site.posts | reverse %}
+                {% for post in sorted_posts %}
+                    {% assign post_date = post.date | date: '%Y-%m-%d' %}
+                    {% if post_date < '2025-02-13' %}
+                    <a href="{{ site.baseurl }}{{ post.url }}" {% if page.url == post.url %}class="active"{% endif %}>
+                        {{ post.title }}
+                    </a>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </nav>
+
+        <div class="content-wrapper">
+            <main class="content">
+                <article class="post">
+                    <header class="post-header">
+                        <h1 class="post-title">{{ page.title }}</h1>
+                        {% if page.date %}
+                        <time class="post-date" datetime="{{ page.date | date_to_xmlschema }}">
+                            {{ page.date | date: "%B %d, %Y" }}
+                        </time>
+                        {% endif %}
+                    </header>
+
+                    <div class="post-content">
+                        {{ content }}
+                    </div>
+                </article>
+
+                {% if page.is_post %}
+                <nav class="post-nav">
+                    <div class="post-nav-item prev">
+                        {% if page.previous %}
+                        {% assign prev_date = page.previous.date | date: '%Y-%m-%d' %}
+                        {% if prev_date < '2025-02-13' %}
+                        <span class="nav-label">Previous</span>
+                        <a href="{{ site.baseurl }}{{ page.previous.url }}" class="prev">
+                            {{ page.previous.title }}
+                        </a>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                    <div class="post-nav-item next">
+                        {% if page.next %}
+                        {% assign next_date = page.next.date | date: '%Y-%m-%d' %}
+                        {% if next_date < '2025-02-13' %}
+                        <span class="nav-label">Next</span>
+                        <a href="{{ site.baseurl }}{{ page.next.url }}" class="next">
+                            {{ page.next.title }}
+                        </a>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                </nav>
+                {% endif %}
+            </main>
+
+            <footer class="site-footer">
+                <div class="footer-content">
+                    <p>&copy; {{ site.time | date: '%Y' }} {{ site.author }}. All rights reserved.</p>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize mermaid with custom dark theme
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: 'dark',
+                flowchart: {
+                    htmlLabels: true,  // Enable HTML in labels for better word wrapping
+                    curve: 'basis',    // Smoother curves
+                    useMaxWidth: true, // Constrain diagram width
+                    nodeSpacing: 50,   // More space between nodes
+                    rankSpacing: 70    // More space between ranks
+                },
+                themeVariables: {
+                    darkMode: true,
+                    background: '#000000',
+                    primaryColor: '#00ff9d',
+                    primaryTextColor: '#00ff9d',
+                    primaryBorderColor: '#00ff9d',
+                    lineColor: '#00ff9d',
+                    secondaryColor: '#ff00f7',
+                    tertiaryColor: '#00c3ff',
+                    nodeBorder: '#00ff9d',
+                    clusterBkg: '#000000',
+                    clusterBorder: '#00ff9d',
+                    edgeLabelBackground: '#000000',
+                    fontFamily: 'JetBrains Mono'
+                }
+            });
+
+            // Add custom CSS for Mermaid diagrams to handle word wrapping
+            var style = document.createElement('style');
+            style.textContent = `
+                .mermaid .node rect, .mermaid .node circle, .mermaid .node ellipse, .mermaid .node polygon, .mermaid .node path {
+                    rx: 5px;
+                    ry: 5px;
+                }
+                .mermaid .node .label {
+                    word-wrap: break-word;
+                    white-space: pre-wrap !important;
+                    max-width: 200px;
+                }
+                .mermaid .edgeLabel {
+                    background-color: #000000 !important;
+                    color: #00ff9d !important;
+                }
+            `;
+            document.head.appendChild(style);
+
+            // Find all pre code blocks with mermaid class
+            document.querySelectorAll('pre code.language-mermaid').forEach(function(element) {
+                // Create a div for mermaid
+                var div = document.createElement('div');
+                div.className = 'mermaid';
+                div.style.background = '#000000';
+                div.style.padding = '2em';
+                div.style.borderRadius = '8px';
+                div.style.marginBottom = '2em';
+                div.textContent = element.textContent;
+                // Replace the pre element with the div
+                element.parentElement.replaceWith(div);
+            });
+
+            // Run mermaid
+            mermaid.init();
+        });
+    </script>
+</body>
+</html>

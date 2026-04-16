@@ -1,0 +1,70 @@
+title: 'Diabolical eBPF: Linux Red Team Field Manual'
+description: "100 kernel-hacking micro-chapters proving eBPF is all you need."
+author: "Diabolical eBPF"
+
+# Build settings
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+  hard_wrap: false
+  syntax_highlighter_opts:
+    css_class: 'highlight'
+    span:
+      line_numbers: false
+    block:
+      line_numbers: true
+      start_line: 1
+
+# GitHub Pages settings
+url: "https://mbhatt1.github.io"
+baseurl: "/dBPF"
+repository: "mbhatt1/dBPF"
+
+# Permalink structure
+permalink: /:title.html
+
+# Default layout
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: "book"
+  - scope:
+      path: "_posts"
+      type: "posts"
+    values:
+      layout: "book"
+      is_post: true
+
+# Plugins
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+# Exclude from processing
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
+  - README.md
+  - LICENSE
+  - .git
+  - .github
+  - .gitignore
+  - .ruby-version
+
+# Sass settings
+sass:
+  style: compressed
+  sourcemap: never
+
+# Serving
+host: 0.0.0.0
+port: 4000
+
+# Other settings
+timezone: UTC
+encoding: utf-8
+strict_front_matter: true
