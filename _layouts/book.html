@@ -18,17 +18,8 @@
                 <div class="sb-primary">
                     <a href="{{ site.baseurl }}/" {% if page.url == "/" %}class="active"{% endif %}>Home</a>
                     <a href="{{ site.baseurl }}/book/" {% if page.url == "/book/" %}class="active"{% endif %}>Book</a>
-                    <a href="{{ site.baseurl }}/posts/" {% if page.url == "/posts/" %}class="active"{% endif %}>Posts</a>
                     <a href="https://github.com/mbhatt1/dBPF" target="_blank" rel="noopener">GitHub</a>
                 </div>
-
-                <h3>Posts</h3>
-                {% assign sorted_posts = site.posts | reverse %}
-                {% for post in sorted_posts %}
-                    <a href="{{ site.baseurl }}{{ post.url }}" {% if page.url == post.url %}class="active"{% endif %}>
-                        {{ post.title }}
-                    </a>
-                {% endfor %}
 
                 {% if site.book_chapters and site.book_chapters.size > 0 %}
                 <h3>Book</h3>
