@@ -1,0 +1,36 @@
+# Runtime image for LSM-variant POCs.
+#
+# IMPORTANT: Docker shares the HOST kernel. This image provides userspace
+# SELinux tooling + libbpf, but actual BPF-LSM attachment (fmod_ret on
+# security_* hooks) requires the HOST to boot a kernel with:
+#
+#     CONFIG_BPF_LSM=y                  # kernel config
+#     lsm=bpf,selinux,...               # boot cmdline
+#
+# macOS Docker Desktop (linuxkit VM) has CONFIG_BPF_LSM=y but lsm= does NOT
+# include bpf — so fmod_ret programs fail to attach.
+#
+# Run this image on:
+#   - Fedora 38+ host (lsm=bpf default)
+#   - RHEL 9+ host with `lsm=bpf,selinux` added to GRUB_CMDLINE_LINUX
+#   - Ubuntu 22.04+ with `lsm=landlock,lockdown,yama,bpf,integrity,apparmor`
+#   - A Linux VM (qemu/UTM/Lima) booted with those flags
+#
+# Verify on host BEFORE starting container:
+#     cat /sys/kernel/security/lsm   # must contain "bpf"
+#     cat /sys/kernel/security/lsm   # must contain "selinux" for ch06
+#
+FROM fedora:40
+RUN dnf -y install \
+      clang lld llvm make gcc binutils \
+      libbpf-devel libbpf elfutils-libelf-devel zlib-devel \
+      bpftool \
+      iproute iputils net-tools curl ca-certificates \
+      procps-ng strace file git pkg-config \
+      python3 \
+      keyutils-libs-devel keyutils libcap sudo vim-minimal \
+      selinux-policy-targeted libselinux-utils policycoreutils \
+      policycoreutils-python-utils setools-console audit-libs \
+    && dnf clean all
+WORKDIR /work
+CMD ["/bin/bash"]

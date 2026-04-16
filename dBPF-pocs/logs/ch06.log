@@ -1,0 +1,11 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch06-silence-selinux.bpf.o
+  SKEL build/ch06-silence-selinux.skel.h
+  CC   build/ch06-silence-selinux
+--- run ---
+=== ch06 trigger from /work/pocs/ch06-silence-selinux (tmp=/tmp/ch06.2WFMwR) ===
+=== capability-gated ops (trigger cap_capable) ===
+=== file permission decisions ===
+=== privileged denials (should be logged on SELinux hosts) ===
+Error response from daemon: No such container: dbpf_ch06_37979

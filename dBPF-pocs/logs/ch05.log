@@ -1,0 +1,21 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch05-cgroup-leash.bpf.o
+  SKEL build/ch05-cgroup-leash.skel.h
+  CC   build/ch05-cgroup-leash
+--- run ---
+=== ch05 trigger from /work/pocs/ch05-cgroup-leash ===
+=== reading /sys/fs/cgroup/cpu.stat (head -8) ===
+usage_usec 9153
+user_usec 1307
+system_usec 7845
+nice_usec 0
+nr_periods 0
+nr_throttled 0
+throttled_usec 0
+nr_bursts 0
+
+=== skipping /sys/fs/cgroup/system.slice/cpu.stat (not readable) ===
+=== skipping /sys/fs/cgroup/user.slice/cpu.stat (not readable) ===
+=== done — compare loader output for patched=1 lines ===
+Error response from daemon: No such container: dbpf_ch05_37979

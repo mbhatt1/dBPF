@@ -1,0 +1,15 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch13-powercap-override.bpf.o
+  SKEL build/ch13-powercap-override.skel.h
+  CC   build/ch13-powercap-override
+--- run ---
+=== ch13 trigger: powercap + thermal exercise ===
+--- /sys/class/powercap (x86 only; expected empty on aarch64 linuxkit) ---
+ls: cannot access '/sys/class/powercap/': No such file or directory
+--- /sys/class/thermal (fires thermal_zone_device_update) ---
+ls: cannot access '/sys/class/thermal/': No such file or directory
+--- mode toggle (best effort; usually read-only) ---
+--- trip_point write (best effort; usually read-only) ---
+=== ch13 trigger: done ===
+Error response from daemon: No such container: dbpf_ch13_37979

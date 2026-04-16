@@ -1,0 +1,9 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch04-phantom-syscall.bpf.o
+  SKEL build/ch04-phantom-syscall.skel.h
+  CC   build/ch04-phantom-syscall
+--- run ---
+=== running phantom trigger (only syscall: write) ===
+=== done ===
+Error response from daemon: No such container: dbpf_ch04_37979

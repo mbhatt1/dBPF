@@ -1,0 +1,23 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch12-signed-driver-swap.bpf.o
+  SKEL build/ch12-signed-driver-swap.skel.h
+  CC   build/ch12-signed-driver-swap
+--- run ---
+=== ch12 trigger: module-load path ===
+--- available kernel modules (linuxkit usually has none) ---
+--- 1) modprobe a non-existent module (expected: 'not found') ---
+modprobe: FATAL: Module nonexistent_module_ch12 not found in directory /lib/modules/6.12.54-linuxkit
+--- 2) insmod a bogus .ko (expected: ENOEXEC/EINVAL; load_module still fires) ---
+insmod: ERROR: could not insert module /tmp/tmp.SLIxHD1VEm.ko: Invalid module format
+--- 3) finit_module via direct syscall (same verify path) ---
+finit_module -> -1 errno= 22
+=== ch12 trigger: done ===
+=== symbol availability ===
+  kprobe    mod_verify_sig       : ABSENT
+  kretprobe mod_verify_sig       : ABSENT
+  kprobe    module_sig_check     : ABSENT
+  kprobe    load_module          : PRESENT
+===========================
+[ch12] attached 1 probe(s) -- waiting for module-load events (Ctrl-C to stop)
+[ch12]	hook=load_module       	pid=90561	comm=insmod          	mod=?	payload=0	ret=0

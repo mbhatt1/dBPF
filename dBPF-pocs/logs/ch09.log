@@ -1,0 +1,15 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch09-pid-doppel.bpf.o
+  SKEL build/ch09-pid-doppel.skel.h
+  CC   build/ch09-pid-doppel
+--- run ---
+=== spawning unshare in fresh PID namespace ===
+inside: ns_pid=1
+=== second unshare ===
+inside2: ns_pid=1
+=== nested unshare (two levels) ===
+outer: ns_pid=1
+inner: ns_pid=1
+done.
+Error response from daemon: No such container: dbpf_ch09_37979

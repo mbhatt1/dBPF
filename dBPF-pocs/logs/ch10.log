@@ -1,0 +1,36 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch10-inode-cloak.bpf.o
+ch10-inode-cloak.bpf.c:67:5: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
+   67 |     for (int i = 0; i < 64; i++) {
+      |     ^
+1 warning generated.
+  SKEL build/ch10-inode-cloak.skel.h
+  CC   build/ch10-inode-cloak
+--- run ---
+=== ground truth (raw filesystem, /bin/ls -f bypasses some buffering) ===
+.backdoor
+evil.so
+notes.txt
+visible
+=== ls -la /tmp/cloak (BPF rewrites d_reclen here) ===
+total 8
+drwxr-xr-x 2 root root 4096 Apr 15 12:39 .
+drwxrwxrwt 1 root root 4096 Apr 15 12:39 ..
+-rw-r--r-- 1 root root    0 Apr 15 12:39 .backdoor
+-rw-r--r-- 1 root root    0 Apr 15 12:39 evil.so
+-rw-r--r-- 1 root root    0 Apr 15 12:39 notes.txt
+-rw-r--r-- 1 root root    0 Apr 15 12:39 visible
+=== find /tmp/cloak (also calls getdents64) ===
+/tmp/cloak/.backdoor
+/tmp/cloak/evil.so
+/tmp/cloak/notes.txt
+/tmp/cloak/visible
+=== stat visible (cloak is readdir-only; stat still works) ===
+  File: /tmp/cloak/visible
+  Size: 0         	Blocks: 0          IO Block: 4096   regular empty file
+=== stat .backdoor (still resolvable by name) ===
+  File: /tmp/cloak/.backdoor
+  Size: 0         	Blocks: 0          IO Block: 4096   regular empty file
+done.
+Error response from daemon: No such container: dbpf_ch10_37979

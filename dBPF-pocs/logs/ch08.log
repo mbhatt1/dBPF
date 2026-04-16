@@ -1,0 +1,110 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch08-keyring-heist.bpf.o
+  SKEL build/ch08-keyring-heist.skel.h
+  CC   build/ch08-keyring-heist
+--- run ---
+=== adding user key 'ch08-test-secret-88944' ===
+id=118771067
+=== describe ===
+118771067: alswrv-----v------------     0     0 user: ch08-test-secret-88944
+=== list session ===
+keyring is empty
+=== read (triggers key_task_permission with KEY_READ) ===
+keyctl_read_alloc: Permission denied
+=== search ===
+118771067
+=== revoke (explicit, before trap) ===
+keyctl_revoke: Permission denied
+done.
+[ch08] symbol=key_task_permission	status=present
+[ch08] symbol=lookup_user_key	status=present
+[ch08] attached=2	skipped=1	failed=0
+[ch08] status=ready	msg=keyring observer active
+[ch08] hook=lookup_user_key	pid=88898	comm=runc:[2:INIT]   	serial=0x1da5d62f	type=lookup	desc=''	len=1
+[ch08] hook=key_task_perm  	pid=88898	comm=runc:[2:INIT]   	serial=0x1da5d62f	type=keyring	desc='_ses.05c4d7c2d6ad9649a458355af1eac6864fb642cf7ae0487c9feede85da'	len=0
+[ch08] hook=key_task_perm  	pid=88898	comm=runc:[2:INIT]   	serial=0x1da5d62f	type=keyring	desc='_ses.05c4d7c2d6ad9649a458355af1eac6864fb642cf7ae0487c9feede85da'	len=0
+[ch08] hook=key_task_perm  	pid=88898	comm=runc:[2:INIT]   	serial=0x1da5d62f	type=keyring	desc='_ses.05c4d7c2d6ad9649a458355af1eac6864fb642cf7ae0487c9feede85da'	len=0
+[ch08] hook=lookup_user_key	pid=88898	comm=runc:[2:INIT]   	serial=0x1da5d62f	type=lookup	desc=''	len=1
+[ch08] hook=key_task_perm  	pid=88898	comm=runc:[2:INIT]   	serial=0x1da5d62f	type=keyring	desc='_ses.05c4d7c2d6ad9649a458355af1eac6864fb642cf7ae0487c9feede85da'	len=0
+[ch08] hook=key_task_perm  	pid=88898	comm=runc:[2:INIT]   	serial=0x1da5d62f	type=keyring	desc='_ses.05c4d7c2d6ad9649a458355af1eac6864fb642cf7ae0487c9feede85da'	len=0
+[ch08] hook=key_task_perm  	pid=88898	comm=runc:[2:INIT]   	serial=0x1da5d62f	type=keyring	desc='_ses.05c4d7c2d6ad9649a458355af1eac6864fb642cf7ae0487c9feede85da'	len=0
+[ch08] hook=lookup_user_key	pid=88898	comm=runc:[2:INIT]   	serial=0x1da5d62f	type=lookup	desc=''	len=6
+[ch08] hook=key_task_perm  	pid=88898	comm=runc:[2:INIT]   	serial=0x1da5d62f	type=keyring	desc='_ses.05c4d7c2d6ad9649a458355af1eac6864fb642cf7ae0487c9feede85da'	len=0
+[ch08] hook=key_task_perm  	pid=88898	comm=runc:[2:INIT]   	serial=0x1da5d62f	type=keyring	desc='_ses.05c4d7c2d6ad9649a458355af1eac6864fb642cf7ae0487c9feede85da'	len=0
+[ch08] hook=key_task_perm  	pid=88898	comm=runc:[2:INIT]   	serial=0x1da5d62f	type=keyring	desc='_ses.05c4d7c2d6ad9649a458355af1eac6864fb642cf7ae0487c9feede85da'	len=0
+[ch08] hook=lookup_user_key	pid=88944	comm=runc:[2:INIT]   	serial=0x14e43fe5	type=lookup	desc=''	len=1
+[ch08] hook=key_task_perm  	pid=88944	comm=runc:[2:INIT]   	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88944	comm=runc:[2:INIT]   	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88944	comm=runc:[2:INIT]   	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=lookup_user_key	pid=88944	comm=runc:[2:INIT]   	serial=0x14e43fe5	type=lookup	desc=''	len=1
+[ch08] hook=key_task_perm  	pid=88944	comm=runc:[2:INIT]   	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88944	comm=runc:[2:INIT]   	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88944	comm=runc:[2:INIT]   	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=lookup_user_key	pid=88944	comm=runc:[2:INIT]   	serial=0x14e43fe5	type=lookup	desc=''	len=6
+[ch08] hook=key_task_perm  	pid=88944	comm=runc:[2:INIT]   	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88944	comm=runc:[2:INIT]   	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88944	comm=runc:[2:INIT]   	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=lookup_user_key	pid=88961	comm=keyctl          	serial=0xfffffffc	type=lookup	desc=''	len=3
+[ch08] hook=key_task_perm  	pid=88961	comm=keyctl          	serial=0x288aef7b	type=keyring	desc='.user_reg'	len=8
+[ch08] hook=key_task_perm  	pid=88961	comm=keyctl          	serial=0xf67825b	type=keyring	desc='_uid.0'	len=4
+[ch08] hook=key_task_perm  	pid=88961	comm=keyctl          	serial=0x288aef7b	type=keyring	desc='.user_reg'	len=8
+[ch08] hook=key_task_perm  	pid=88961	comm=keyctl          	serial=0xf395fdc	type=keyring	desc='_uid_ses.0'	len=4
+[ch08] hook=key_task_perm  	pid=88961	comm=keyctl          	serial=0xf67825b	type=keyring	desc='_uid.0'	len=4
+[ch08] hook=key_task_perm  	pid=88961	comm=keyctl          	serial=0xf67825b	type=keyring	desc='_uid.0'	len=8
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x4a7d589	type=keyring	desc='_ses.de5c5e5b6263e9c28ffd11652f0ef33c255f9a51bba313dcc361452010'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x52bac2f	type=keyring	desc='.cifs_idmap'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x7144d7b	type=user	desc='ch08-test-secret-88944'	len=18
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0xf395fdc	type=keyring	desc='_uid_ses.0'	len=4
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0xf67825b	type=keyring	desc='_uid.0'	len=8
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x1432b2a6	type=keyring	desc='.id_resolver'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x1da5d62f	type=keyring	desc='_ses.05c4d7c2d6ad9649a458355af1eac6864fb642cf7ae0487c9feede85da'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x27db0fc5	type=keyring	desc='_ses'	len=4
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x288aef7b	type=keyring	desc='.user_reg'	len=8
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x29482fe6	type=keyring	desc='_ses.281865206c048f6c51d063ff98a3a0fb81889383226372cd5d49264c67'	len=0
+[ch08] hook=lookup_user_key	pid=88962	comm=keyctl          	serial=0x7144d7b	type=lookup	desc=''	len=1
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x7144d7b	type=user	desc='ch08-test-secret-88944'	len=18
+[ch08] hook=lookup_user_key	pid=88962	comm=keyctl          	serial=0x7144d7b	type=lookup	desc=''	len=1
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x7144d7b	type=user	desc='ch08-test-secret-88944'	len=18
+[ch08] hook=lookup_user_key	pid=88962	comm=keyctl          	serial=0x7144d7b	type=lookup	desc=''	len=1
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88962	comm=keyctl          	serial=0x7144d7b	type=user	desc='ch08-test-secret-88944'	len=18
+[ch08] hook=lookup_user_key	pid=88963	comm=keyctl          	serial=0xfffffffd	type=lookup	desc=''	len=10
+[ch08] hook=key_task_perm  	pid=88963	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88963	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=lookup_user_key	pid=88963	comm=keyctl          	serial=0xfffffffd	type=lookup	desc=''	len=10
+[ch08] hook=key_task_perm  	pid=88963	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88963	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=lookup_user_key	pid=88964	comm=keyctl          	serial=0x7144d7b	type=lookup	desc=''	len=10
+[ch08] hook=key_task_perm  	pid=88964	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88964	comm=keyctl          	serial=0x7144d7b	type=user	desc='ch08-test-secret-88944'	len=18
+[ch08] hook=key_task_perm  	pid=88964	comm=keyctl          	serial=0x7144d7b	type=user	desc='ch08-test-secret-88944'	len=18
+[ch08] hook=lookup_user_key	pid=88965	comm=keyctl          	serial=0xfffffffc	type=lookup	desc=''	len=4
+[ch08] hook=key_task_perm  	pid=88965	comm=keyctl          	serial=0x288aef7b	type=keyring	desc='.user_reg'	len=8
+[ch08] hook=key_task_perm  	pid=88965	comm=keyctl          	serial=0xf67825b	type=keyring	desc='_uid.0'	len=8
+[ch08] hook=key_task_perm  	pid=88965	comm=keyctl          	serial=0x288aef7b	type=keyring	desc='.user_reg'	len=8
+[ch08] hook=key_task_perm  	pid=88965	comm=keyctl          	serial=0xf395fdc	type=keyring	desc='_uid_ses.0'	len=4
+[ch08] hook=key_task_perm  	pid=88965	comm=keyctl          	serial=0xf67825b	type=keyring	desc='_uid.0'	len=8
+[ch08] hook=key_task_perm  	pid=88965	comm=keyctl          	serial=0xf67825b	type=keyring	desc='_uid.0'	len=8
+[ch08] hook=key_task_perm  	pid=88965	comm=keyctl          	serial=0x7144d7b	type=user	desc='ch08-test-secret-88944'	len=18
+[ch08] hook=lookup_user_key	pid=88966	comm=keyctl          	serial=0x7144d7b	type=lookup	desc=''	len=3
+[ch08] hook=key_task_perm  	pid=88966	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88966	comm=keyctl          	serial=0x7144d7b	type=user	desc='ch08-test-secret-88944'	len=18
+[ch08] hook=lookup_user_key	pid=88966	comm=keyctl          	serial=0x7144d7b	type=lookup	desc=''	len=6
+[ch08] hook=key_task_perm  	pid=88966	comm=keyctl          	serial=0x14e43fe5	type=keyring	desc='_ses.ad6c78841ed7a54951afb548e537a595e5ec161904c08f76630a6611bd'	len=0
+[ch08] hook=key_task_perm  	pid=88966	comm=keyctl          	serial=0x7144d7b	type=user	desc='ch08-test-secret-88944'	len=18

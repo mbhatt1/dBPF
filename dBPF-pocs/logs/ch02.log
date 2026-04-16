@@ -1,0 +1,158 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch02-overlayfs.bpf.o
+  SKEL build/ch02-overlayfs.skel.h
+  CC   build/ch02-overlayfs
+--- run ---
+=== (/work/pocs/ch02-overlayfs) preparing overlay backing at /mnt/ovlbacking ===
+=== seeding files in lower/ ===
+=== mounting overlay at /mnt/ovlbacking/merged ===
+=== writing to merged/secret.txt (triggers copy-up) ===
+=== chmod on merged/bin.sh (also triggers copy-up) ===
+=== contents of upper/ after copy-up ===
+total 8
+drwxr-xr-x 2 root root  80 Apr 15 12:31 .
+drwxrwxrwt 6 root root 120 Apr 15 12:31 ..
+-rwxr-xr-x 1 root root  12 Apr 15 12:31 bin.sh
+-rw-r--r-- 1 root root  25 Apr 15 12:31 secret.txt
+=== done ===
+[ch02] symbol=ovl_copy_up	status=present
+[ch02] symbol=ovl_maybe_copy_up	status=present
+[ch02] symbol=ovl_copy_up_with_data	status=present
+[ch02] attached=3	skipped=0
+[ch02] status=ready	msg=overlay copy-up observer
+[ch02] hook=ovl_maybe_copy_up     	pid=84308	comm=initd           	name=fstrim                  	ino=20109056	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84308	comm=initd           	name=ld-linux-aarch64.so.1   	ino=20034048	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84308	comm=fstrim          	name=ld.so.cache             	ino=20000573	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84308	comm=fstrim          	name=libmount.so.1.1.0       	ino=20129024	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84308	comm=fstrim          	name=libc.so.6               	ino=20096990	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84308	comm=fstrim          	name=libblkid.so.1.1.0       	ino=20080000	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84308	comm=fstrim          	name=libselinux.so.1         	ino=20134656	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84308	comm=fstrim          	name=libpcre2-8.so.0.11.2    	ino=20131840	mode=100644
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=/                       	ino=3554084	mode=40755
+[ch02] hook=ovl_maybe_copy_up     	pid=323	comm=dockerd         	name=.dockerenv              	ino=3554090	mode=100755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=.dockerenv              	ino=3554090	mode=100755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=etc                     	ino=3554033	mode=40755
+[ch02] hook=ovl_maybe_copy_up     	pid=323	comm=dockerd         	name=hosts                   	ino=3554092	mode=100755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=hosts                   	ino=3554092	mode=100755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=etc                     	ino=3554033	mode=40755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=etc                     	ino=3554033	mode=40755
+[ch02] hook=ovl_maybe_copy_up     	pid=323	comm=dockerd         	name=hostname                	ino=3554094	mode=100755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=hostname                	ino=3554094	mode=100755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=dev                     	ino=3317327	mode=40755
+[ch02] hook=ovl_maybe_copy_up     	pid=323	comm=dockerd         	name=console                 	ino=3554096	mode=100755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=console                 	ino=3554096	mode=100755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=dev                     	ino=3317327	mode=40755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=etc                     	ino=3554033	mode=40755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=etc                     	ino=3554033	mode=40755
+[ch02] hook=ovl_maybe_copy_up     	pid=323	comm=dockerd         	name=resolv.conf             	ino=3554098	mode=100755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=resolv.conf             	ino=3554098	mode=100755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=etc                     	ino=3554033	mode=40755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=dev                     	ino=3317327	mode=40755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=work                    	ino=3554048	mode=40755
+[ch02] hook=ovl_copy_up           	pid=323	comm=dockerd         	name=pocs                    	ino=3554109	mode=40755
+[ch02] hook=ovl_maybe_copy_up     	pid=519	comm=dockerd         	name=hosts                   	ino=20000883	mode=100664
+[ch02] hook=ovl_maybe_copy_up     	pid=519	comm=dockerd         	name=passwd                  	ino=3317440	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=519	comm=dockerd         	name=group                   	ino=3317397	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84309	comm=containerd      	name=containerd-shim-runc-v2 	ino=20029939	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84309	comm=containerd-shim 	name=containerd-shim-runc-v2 	ino=20029939	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84316	comm=containerd-shim 	name=containerd-shim-runc-v2 	ino=20029939	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84316	comm=containerd-shim 	name=containerd-shim-runc-v2 	ino=20029939	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84327	comm=containerd-shim 	name=runc                    	ino=20045765	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84327	comm=containerd-shim 	name=ld-linux-aarch64.so.1   	ino=20034048	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84327	comm=runc            	name=ld.so.cache             	ino=20000573	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84327	comm=runc            	name=libseccomp.so.2.5.4     	ino=20134400	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84327	comm=runc            	name=libc.so.6               	ino=20096990	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84327	comm=runc            	name=runc                    	ino=20045765	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84327	comm=runc            	name=runc                    	ino=20045765	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84334	comm=runc            	name=runc                    	ino=20045765	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84334	comm=runc            	name=runc                    	ino=20045765	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84334	comm=runc            	name=ld-linux-aarch64.so.1   	ino=20034048	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84334	comm=6               	name=ld.so.cache             	ino=20000573	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84334	comm=6               	name=libseccomp.so.2.5.4     	ino=20134400	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84334	comm=6               	name=libc.so.6               	ino=20096990	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84340	comm=runc:[2:INIT]   	name=passwd                  	ino=3317440	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84346	comm=containerd-shim 	name=runc                    	ino=20045765	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84346	comm=containerd-shim 	name=ld-linux-aarch64.so.1   	ino=20034048	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84346	comm=runc            	name=ld.so.cache             	ino=20000573	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84346	comm=runc            	name=libseccomp.so.2.5.4     	ino=20134400	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84346	comm=runc            	name=libc.so.6               	ino=20096990	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84346	comm=runc            	name=runc                    	ino=20045765	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84340	comm=runc:[2:INIT]   	name=bash                    	ino=3317522	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84340	comm=runc:[2:INIT]   	name=ld-linux-aarch64.so.1   	ino=3549706	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84340	comm=bash            	name=ld.so.cache             	ino=3568172	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84340	comm=bash            	name=libtinfo.so.6.5         	ino=3549798	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84340	comm=bash            	name=libc.so.6               	ino=3549726	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84340	comm=bash            	name=nsswitch.conf           	ino=3317419	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84340	comm=bash            	name=passwd                  	ino=3317440	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84353	comm=bash            	name=dirname                 	ino=3317560	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84353	comm=bash            	name=ld-linux-aarch64.so.1   	ino=3549706	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84353	comm=dirname         	name=ld.so.cache             	ino=3568172	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84353	comm=dirname         	name=libc.so.6               	ino=3549726	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84354	comm=bash            	name=mkdir                   	ino=3317635	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84354	comm=bash            	name=ld-linux-aarch64.so.1   	ino=3549706	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84354	comm=mkdir           	name=ld.so.cache             	ino=3568172	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84354	comm=mkdir           	name=libselinux.so.1         	ino=3549782	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84354	comm=mkdir           	name=libc.so.6               	ino=3549726	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84354	comm=mkdir           	name=libpcre2-8.so.0.14.0    	ino=3549774	mode=100644
+[ch02] hook=ovl_copy_up           	pid=84354	comm=mkdir           	name=mnt                     	ino=3317494	mode=40755
+[ch02] hook=ovl_maybe_copy_up     	pid=84355	comm=bash            	name=mount                   	ino=3317640	mode=104755
+[ch02] hook=ovl_maybe_copy_up     	pid=84355	comm=bash            	name=ld-linux-aarch64.so.1   	ino=3549706	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84355	comm=mount           	name=ld.so.cache             	ino=3568172	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84355	comm=mount           	name=libmount.so.1.1.0       	ino=3549757	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84355	comm=mount           	name=libselinux.so.1         	ino=3549782	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84355	comm=mount           	name=libc.so.6               	ino=3549726	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84355	comm=mount           	name=libblkid.so.1.1.0       	ino=3549720	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84355	comm=mount           	name=libpcre2-8.so.0.14.0    	ino=3549774	mode=100644
+[ch02] hook=ovl_copy_up           	pid=84355	comm=mount           	name=run                     	ino=3317500	mode=40755
+[ch02] hook=ovl_maybe_copy_up     	pid=84356	comm=bash            	name=rm                      	ino=3317677	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84356	comm=bash            	name=ld-linux-aarch64.so.1   	ino=3549706	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84356	comm=rm              	name=ld.so.cache             	ino=3568172	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84356	comm=rm              	name=libc.so.6               	ino=3549726	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84357	comm=bash            	name=mkdir                   	ino=3317635	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84357	comm=bash            	name=ld-linux-aarch64.so.1   	ino=3549706	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84357	comm=mkdir           	name=ld.so.cache             	ino=3568172	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84357	comm=mkdir           	name=libselinux.so.1         	ino=3549782	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84357	comm=mkdir           	name=libc.so.6               	ino=3549726	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84357	comm=mkdir           	name=libpcre2-8.so.0.14.0    	ino=3549774	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84358	comm=bash            	name=chmod                   	ino=3317530	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84358	comm=bash            	name=ld-linux-aarch64.so.1   	ino=3549706	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84358	comm=chmod           	name=ld.so.cache             	ino=3568172	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84358	comm=chmod           	name=libc.so.6               	ino=3549726	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84359	comm=bash            	name=mount                   	ino=3317640	mode=104755
+[ch02] hook=ovl_maybe_copy_up     	pid=84359	comm=bash            	name=ld-linux-aarch64.so.1   	ino=3549706	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84359	comm=mount           	name=ld.so.cache             	ino=3568172	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84359	comm=mount           	name=libmount.so.1.1.0       	ino=3549757	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84359	comm=mount           	name=libselinux.so.1         	ino=3549782	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84359	comm=mount           	name=libc.so.6               	ino=3549726	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84359	comm=mount           	name=libblkid.so.1.1.0       	ino=3549720	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84359	comm=mount           	name=libpcre2-8.so.0.14.0    	ino=3549774	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84340	comm=bash            	name=secret.txt              	ino=6	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84360	comm=bash            	name=chmod                   	ino=3317530	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84360	comm=bash            	name=ld-linux-aarch64.so.1   	ino=3549706	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84360	comm=chmod           	name=ld.so.cache             	ino=3568172	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84360	comm=chmod           	name=libc.so.6               	ino=3549726	mode=100755
+[ch02] hook=ovl_copy_up           	pid=84360	comm=chmod           	name=bin.sh                  	ino=7	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84361	comm=bash            	name=ls                      	ino=3317624	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84361	comm=bash            	name=ld-linux-aarch64.so.1   	ino=3549706	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84361	comm=ls              	name=ld.so.cache             	ino=3568172	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84361	comm=ls              	name=libselinux.so.1         	ino=3549782	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84361	comm=ls              	name=libcap.so.2.75          	ino=3549731	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84361	comm=ls              	name=libc.so.6               	ino=3549726	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84361	comm=ls              	name=libpcre2-8.so.0.14.0    	ino=3549774	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84361	comm=ls              	name=nsswitch.conf           	ino=3317419	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84361	comm=ls              	name=passwd                  	ino=3317440	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84361	comm=ls              	name=group                   	ino=3317397	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84361	comm=ls              	name=UTC                     	ino=3553854	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84362	comm=bash            	name=umount                  	ino=3317732	mode=104755
+[ch02] hook=ovl_maybe_copy_up     	pid=84362	comm=bash            	name=ld-linux-aarch64.so.1   	ino=3549706	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84362	comm=umount          	name=ld.so.cache             	ino=3568172	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84362	comm=umount          	name=libmount.so.1.1.0       	ino=3549757	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84362	comm=umount          	name=libc.so.6               	ino=3549726	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84362	comm=umount          	name=libblkid.so.1.1.0       	ino=3549720	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84362	comm=umount          	name=libselinux.so.1         	ino=3549782	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84362	comm=umount          	name=libpcre2-8.so.0.14.0    	ino=3549774	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84363	comm=bash            	name=umount                  	ino=3317732	mode=104755
+[ch02] hook=ovl_maybe_copy_up     	pid=84363	comm=bash            	name=ld-linux-aarch64.so.1   	ino=3549706	mode=100755
+[ch02] hook=ovl_maybe_copy_up     	pid=84363	comm=umount          	name=ld.so.cache             	ino=3568172	mode=100644
+[ch02] hook=ovl_maybe_copy_up     	pid=84363	comm=umount          	name=libmount.so.1.1.0       	ino=3549757	mode=100644

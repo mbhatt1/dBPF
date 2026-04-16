@@ -1,0 +1,8 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch15-netns-vlan-ghost.bpf.o
+  SKEL build/ch15-netns-vlan-ghost.skel.h
+  CC   build/ch15-netns-vlan-ghost
+--- run ---
+missing required tool: tcpdump
+Error response from daemon: No such container: dbpf_ch15_37979

@@ -1,0 +1,28 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch14-sched-fifo.bpf.o
+  SKEL build/ch14-sched-fifo.skel.h
+  CC   build/ch14-sched-fifo
+--- run ---
+=== baseline: t14 runs chrt -f 50 $$ (no BPF) ===
+chrt: failed to set pid 0's policy: Operation not permitted
+baseline_ret=1
+
+=== loading ch14 SCHED_FIFO impersonator (wildcard mode) ===
+
+=== with BPF: same chrt call ===
+override_ret=127
+chrt: failed to execute 91106: No such file or directory
+
+=== loader output (ringbuf events on stdout, status on stderr) ===
+[ch14] tag=preflight target=__arm64_sys_sched_setscheduler status=present
+[ch14] tag=register tgid=0
+[ch14] tag=mode wildcard=1
+[ch14] tag=ready hook=__arm64_sys_sched_setscheduler
+[sched] pid=91107 tgid=91107 comm=chrt             orig_ret=-1 flipped=1
+[ch14] tag=shutdown
+[ch14] note: no targets registered; loader will idle. Use --all or --tgid <N>.
+[ch14] tag=preflight target=__arm64_sys_sched_setscheduler status=present
+[ch14] tag=ready hook=__arm64_sys_sched_setscheduler
+[sched] pid=91083 tgid=91083 comm=chrt             orig_ret=-1 flipped=0
+[sched] pid=91107 tgid=91107 comm=chrt             orig_ret=-1 flipped=0

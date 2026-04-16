@@ -1,0 +1,19 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch18-token-bypass.bpf.o
+  SKEL build/ch18-token-bypass.skel.h
+  CC   build/ch18-token-bypass
+--- run ---
+=== ensuring test user t18 exists ===
+=== baseline: id -u / whoami as t18 (no BPF interference expected) ===
+0
+root
+=== with BPF attached: should report uid=0 / root ===
+0
+root
+=== done ===
+[token] symbol=__arm64_sys_getuid	status=present
+[token] symbol=__arm64_sys_geteuid	status=present
+[token] attached=2	skipped=0
+[token] tag=target	mode=wildcard
+[token] status=ready	msg=token bypass active

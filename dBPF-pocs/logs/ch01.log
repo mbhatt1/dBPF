@@ -1,0 +1,18 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch01-mirror-controls.bpf.o
+  SKEL build/ch01-mirror-controls.skel.h
+  CC   build/ch01-mirror-controls
+--- run ---
+=== ensure unprivileged user test01 exists ===
+=== create FIFO at /tmp/ch01-fifo.jq6JMW ===
+=== spawning unprivileged child (waits on FIFO, then probes caps) ===
+CHILD_PID=84064
+CHILD_TGID=84064
+=== releasing child via FIFO ===
+DENIED: /etc/shadow
+Traceback (most recent call last):
+=== done; tgid was 84064 ===
+[ch01] symbol=cap_capable	status=present
+[ch01] attached=2	skipped=0
+[ch01] status=ready	msg=mirror active

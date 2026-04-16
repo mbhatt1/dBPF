@@ -1,0 +1,27 @@
+--- compile ---
+  GEN  vmlinux.h
+  BPF  build/ch17-acpi-wsmi.bpf.o
+  SKEL build/ch17-acpi-wsmi.skel.h
+  CC   build/ch17-acpi-wsmi
+--- run ---
+=== arch ===
+aarch64
+
+=== ACPI method nodes (x86 only, expect empty on aarch64) ===
+
+=== firmware-loader triggers (work on both archs) ===
+test_firmware modprobe not available; falling back to sysfs poke
+
+=== trigger done (HERE=/work/pocs/ch17-acpi-wsmi) ===
+=== symbol availability ===
+  acpi_evaluate_object         : ABSENT  (autoload off)
+  acpi_ns_evaluate             : ABSENT  (autoload off)
+  acpi_ex_execute_method       : ABSENT  (autoload off)
+  request_firmware             : present
+  _request_firmware            : present
+  firmware_request_nowarn      : present
+[ch17] attached request_firmware
+[ch17] attached _request_firmware
+[ch17] attached firmware_request_nowarn
+[ch17] staged replacement for '\_SB._WS0.Ping'
+[ch17] attached 3 probe(s) — ACPI/firmware observer active (Ctrl-C to stop)
