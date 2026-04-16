@@ -6,7 +6,7 @@ date: 2025-04-15
 
 **Chapter 15: Cross-Namespace Redirect via XDP and DEVMAP**
 
-> **See also**: [Blog post]({{ site.baseurl }}/2025/04/15/netns-vlan-ghost.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch15-netns-vlan-ghost) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+> **See also**: [Blog post]({{ site.baseurl }}/netns-vlan-ghost.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch15-netns-vlan-ghost) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
 My first instinct for this chapter was the one the original outline called for: a kprobe on `__netif_receive_skb_core` that rewrites the namespace metadata on an incoming skb and lets the kernel re-receive it on the other side. The verifier rejected that. Writes to `sk_buff` from kprobe context are not allowed, and `__netif_receive_skb_core` is not in the error-injection list, so there is no legal way to intercept-and-divert from that attach point on 6.12.
 

@@ -8,7 +8,7 @@ date: 2025-02-01
 
 # Chapter 2: The OverlayFS Trojan Horse
 
-> **See also**: [Blog post]({{ site.baseurl }}/2025/02/01/the-overlayfs-trojan-horse.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch02-overlayfs) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+> **See also**: [Blog post]({{ site.baseurl }}/the-overlayfs-trojan-horse.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch02-overlayfs) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
 I started on this one after noticing, on a linuxkit 6.12 test VM, how much work `ovl_copy_up_one` actually does between the moment it allocates the upper inode and the moment the merged dentry becomes visible. That window is the thing. I wanted to measure it, and then I wanted to see whether a userspace racer could fit inside it.
 

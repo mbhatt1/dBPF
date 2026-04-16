@@ -8,7 +8,7 @@ Act I: Foundations of Breach
 
 **Chapter 5b: Networking in the Shadows**
 
-> **See also**: [Blog post]({{ site.baseurl }}/2025/02/04/the-ghost-nic.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch05b-ghost-nic) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+> **See also**: [Blog post]({{ site.baseurl }}/the-ghost-nic.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch05b-ghost-nic) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
 I used to think containers were prisons built of veth pairs and namespaces. What if the walls were just a suggestion, and the tunnels ran deeper than anyone realized?
 

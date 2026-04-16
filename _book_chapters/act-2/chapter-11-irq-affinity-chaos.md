@@ -8,7 +8,7 @@ Act II: Kernel Intrusion
 
 **Chapter 12: What the IRQ Dispatch Path Will and Won't Let You Do**
 
-> **See also**: [Blog post]({{ site.baseurl }}/2025/02/11/irq-affinity-chaos.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch11-irq-chaos) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+> **See also**: [Blog post]({{ site.baseurl }}/irq-affinity-chaos.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch11-irq-chaos) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
 I started this one wanting to rewrite CPU affinity masks inside `irq_dispatch()` from BPF. That's the fantasy. What I got was an IRQ observer, because the override path is blocked at the verifier by the kernel's error-injection allowlist, and the real re-steering lives below the Linux IRQ layer on aarch64 anyway.
 

@@ -8,7 +8,7 @@ date: 2025-01-01
 
 # Chapter 0: What CAP_BPF Actually Permits
 
-> **See also**: [Blog post]({{ site.baseurl }}/2025/01/01/chapter-0-field-manual-preface.html) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+> **See also**: [Blog post]({{ site.baseurl }}/chapter-0-field-manual-preface.html) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
 This book documents what `CAP_BPF` plus `CAP_PERFMON` (or `CAP_SYS_ADMIN`) actually permits on a modern aarch64 Linux kernel. Every technique here assumes the attacker already holds that capability. That assumption is load-bearing. Nothing in this book demonstrates escalation from an unprivileged process; nothing here is a zero-day; nothing here is a verifier bug.
 

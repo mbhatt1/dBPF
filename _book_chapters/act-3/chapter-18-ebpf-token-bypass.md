@@ -6,7 +6,7 @@ date: 2025-05-09
 
 **Chapter 18: Forging `uid=0` at the Syscall Return**
 
-> **See also**: [Blog post]({{ site.baseurl }}/2025/05/09/ebpf-token-bypass.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch18-token-bypass) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+> **See also**: [Blog post]({{ site.baseurl }}/ebpf-token-bypass.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch18-token-bypass) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
 This is the canonical wrong-enforcement-point bug reimplemented with a kretprobe. The pattern goes back decades: a program consults `getuid()` to decide whether the caller is root, and trusts the return value rather than consulting the actual `current->cred` at the point of enforcement. Every time this bug shipped — Sendmail, several SUID binaries through the 2000s, a long tail of misconfigured services — the fix was the same: do the capability check at the kernel enforcement point, not via a userspace query. The eBPF version just makes it mechanical.
 

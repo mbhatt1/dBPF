@@ -8,7 +8,7 @@ date: 2025-02-03
 
 # Chapter 4: The Phantom Syscall
 
-> **See also**: [Blog post]({{ site.baseurl }}/2025/02/03/the-phantom-syscall.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch04-phantom-syscall) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+> **See also**: [Blog post]({{ site.baseurl }}/the-phantom-syscall.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch04-phantom-syscall) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
 I was trying to see how far a tail-called BPF program could walk `task_struct` from a kprobe on `__x64_sys_write` before the verifier got unhappy. The idea is well-trodden: stage 1 is a small gatekeeper on syscall entry that checks some predicate on the current task, and stage 2, reached via `bpf_tail_call`, does the work that would blow the instruction budget in a single program. The interesting question is not whether this works — it does — but what exactly the verifier accepts when stage 2 reads `current->cred`, `current->nsproxy`, and friends. This chapter is notes from reading the reject messages.
 

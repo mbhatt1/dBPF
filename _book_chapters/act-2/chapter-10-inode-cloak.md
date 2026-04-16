@@ -8,7 +8,7 @@ Act II: Kernel Intrusion
 
 **Chapter 11: Making Files Vanish from getdents64**
 
-> **See also**: [Blog post]({{ site.baseurl }}/2025/02/10/inode-cloak.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch10-inode-cloak) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+> **See also**: [Blog post]({{ site.baseurl }}/inode-cloak.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch10-inode-cloak) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
 This one isn't new. The d_reclen-swallow trick for hiding dirents inside the `getdents64` return buffer has been in rootkit proof-of-concepts for years — Jiska Classen, the kovid/reveng'd crowd, and various LKM rootkits have used variants of it since at least 2016. My contribution here is narrower: a modern CO-RE reproduction on 6.12 aarch64 using two syscall tracepoints, with ringbuf evidence and honest testing against `ls`, `find`, and `stat`.
 
