@@ -4,7 +4,7 @@ title: "Chapter 10: Inode Cloak"
 date: 2025-02-10
 ---
 
-**Chapter 11: Making Files Vanish from getdents64**
+# Chapter 10: Making Files Vanish from getdents64
 
 > **See also**: [Blog post]({{ site.baseurl }}/inode-cloak.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch10-inode-cloak) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 

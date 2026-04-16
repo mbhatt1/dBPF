@@ -4,7 +4,7 @@ title: "Chapter 11: IRQ Affinity Chaos"
 date: 2025-02-11
 ---
 
-**Chapter 12: What the IRQ Dispatch Path Will and Won't Let You Do**
+# Chapter 11: What the IRQ Dispatch Path Will and Won't Let You Do
 
 > **See also**: [Blog post]({{ site.baseurl }}/irq-affinity-chaos.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch11-irq-chaos) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 

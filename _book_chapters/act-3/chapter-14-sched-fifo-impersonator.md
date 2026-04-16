@@ -4,7 +4,7 @@ title: "Chapter 14: SCHED_FIFO Impersonator"
 date: 2025-03-15
 ---
 
-**Chapter 14: Forging the Return Value of `sched_setscheduler`**
+# Chapter 14: Forging the Return Value of `sched_setscheduler`
 
 > **See also**: [Blog post]({{ site.baseurl }}/sched-fifo-impersonator.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch14-sched-fifo) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 

@@ -4,7 +4,7 @@ title: "Chapter 8: Keyring Heist"
 date: 2025-02-08
 ---
 
-**Chapter 9: Reading the Kernel Keyring via BPF**
+# Chapter 8: Reading the Kernel Keyring via BPF
 
 > **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) and the surviving workaround variant at [dBPF-pocs/pocs/ch08-keyring-heist-kprobe/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs).
 

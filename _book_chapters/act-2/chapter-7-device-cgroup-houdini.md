@@ -4,7 +4,7 @@ title: "Chapter 7: Device-cgroup Houdini"
 date: 2025-02-07
 ---
 
-**Chapter 8: Device cgroup Bypass via LSM**
+# Chapter 7: Device cgroup Bypass via LSM
 
 > **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) and the surviving workaround variant at [dBPF-pocs/pocs/ch07-devcgroup-houdini-lsm/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs).
 
@@ -93,9 +93,9 @@ Reading left to right, that's the order of registered LSMs. `capability` first �
 
 What this means for our hook: even if I managed to get past the `may_mknod` short-circuit (which I can't), `cap_inode_mknod` runs in the LSM chain before `bpf_inode_mknod`. If `cap_inode_mknod` returns `-EPERM`, the chain short-circuits and our hook doesn't run. The BPF LSM subsystem does have `fmod_ret` semantics that let a BPF program overwrite the accumulated chain result — but "fmod_ret overwrites the chain result" only applies when the BPF program actually gets invoked. If the chain short-circuits before reaching BPF, there is no opportunity to overwrite anything.
 
-I checked the `fmod_ret` dispatch code in `kernel/bpf/trampoline.c` specifically to verify this. The trampoline generated for a BPF LSM hook runs the registered LSM hooks from the chain in order, collects the result, and then calls each registered fmod_ret BPF program with the accumulated result as an extra argument. The BPF program can replace that result by returning a non-zero value. But the trampoline is invoked *after* the LSM chain walk has already decided a result. If the chain walker short-circuited at `cap_inode_mknod` returning `-EPERM`, then… actually, let me correct myself: the BPF fmod_ret path *does* still run, because `fmod_ret` specifically wants the BPF program to see the chain result even if it's non-zero. This is one of those places where BPF LSM differs subtly from the traditional LSM chain.
+I checked the `fmod_ret` dispatch code in `kernel/bpf/trampoline.c` specifically to verify this. The trampoline generated for a BPF LSM hook runs the registered LSM hooks from the chain in order, collects the result, and then calls each registered fmod_ret BPF program with the accumulated result as an extra argument. The BPF program can replace that result by returning a non-zero value. But the trampoline is invoked *after* the LSM chain walk has already decided a result. If the chain walker short-circuited at `cap_inode_mknod` returning `-EPERM`, then... actually, let me correct myself: the BPF fmod_ret path *does* still run, because `fmod_ret` specifically wants the BPF program to see the chain result even if it's non-zero. This is one of those places where BPF LSM differs subtly from the traditional LSM chain.
 
-So the in-chain story is: if `cap_inode_mknod` returns `-EPERM`, BPF's fmod_ret program still runs, sees `ret=-EPERM` as the trailing argument, and can return 0 to overwrite it. This is exactly the "flip a deny to an allow" primitive, and it would have worked… except that we never reach `security_inode_mknod` at all, because `may_mknod` short-circuited *before* `vfs_mknod`, and that check is not in the LSM chain. `may_mknod` is raw VFS-level code.
+So the in-chain story is: if `cap_inode_mknod` returns `-EPERM`, BPF's fmod_ret program still runs, sees `ret=-EPERM` as the trailing argument, and can return 0 to overwrite it. This is exactly the "flip a deny to an allow" primitive, and it would have worked... except that we never reach `security_inode_mknod` at all, because `may_mknod` short-circuited *before* `vfs_mknod`, and that check is not in the LSM chain. `may_mknod` is raw VFS-level code.
 
 The gap between "pre-LSM cap checks" and "in-LSM cap checks" is the thing that kills the natural-denial flip. For mknod specifically, `may_mknod` is the pre-LSM check, and it's the one that fires on the unprivileged container case.
 

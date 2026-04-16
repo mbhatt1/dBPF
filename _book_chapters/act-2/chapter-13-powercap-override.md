@@ -4,7 +4,7 @@ title: "Chapter 13: Powercap Override"
 date: 2025-03-10
 ---
 
-**Chapter 13: An x86-Only Primitive, Tested on aarch64**
+# Chapter 13: An x86-Only Primitive, Tested on aarch64
 
 > **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) and the surviving workaround variant at [dBPF-pocs/pocs/ch13-powercap-override-analog/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs).
 
@@ -548,7 +548,7 @@ The attack cascade is: visible RAPL reading shows idle, perf shows idle, MSR dir
 
 The defense is the same space in reverse: independent observation paths, cross-checked, with at least one path that BPF cannot touch. BMC-based power monitoring is the usual "BPF cannot touch" path — the BMC reads from VRM shunts or PSU telemetry, completely outside the OS. An attacker with root on the OS cannot change what the BMC sees.
 
-Building the full cascade is substantial engineering work. It is the difference between "I have one primitive" and "I have a weaponized attack." The chapter does not include the full cascade because the first primitive is already a whole chapter; the cascade belongs in a follow-up or in a dedicated threat-model document.
+Building the full cascade is substantial engineering work. It is the difference between "I have one primitive" and "I have a full attack chain." The chapter does not include the full cascade because the first primitive is already a whole chapter; the cascade belongs in a follow-up or in a dedicated threat-model document.
 
 ## What the Analog Tells Us About Real-World Detection Difficulty
 

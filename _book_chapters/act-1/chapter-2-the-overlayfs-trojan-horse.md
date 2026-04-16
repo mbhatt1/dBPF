@@ -50,7 +50,7 @@ write(2) on a lower-layer file
               -> ovl_finish_copy_up   <-- visibility in merged view
 ```
 
-My final probe attaches to `ovl_maybe_copy_up` for the signal and uses a return probe on `ovl_finish_copy_up` to close the timing interval for the measurement harness. For the weaponized racer I only need the front edge: the kretprobe is just for the benchmark.
+My final probe attaches to `ovl_maybe_copy_up` for the signal and uses a return probe on `ovl_finish_copy_up` to close the timing interval for the measurement harness. For the racer itself I only need the front edge: the kretprobe is just for the benchmark.
 
 ## The Probe
 
