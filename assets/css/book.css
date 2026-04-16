@@ -303,3 +303,101 @@ pre code {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent-primary);
 }
+
+.chapter-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1em;
+  padding: 2em 0;
+  margin-top: 3em;
+  border-top: 1px solid #333;
+  flex-wrap: wrap;
+}
+.chapter-nav a {
+  flex: 1 1 30%;
+  padding: 0.75em 1em;
+  text-decoration: none;
+  border: 1px solid #333;
+  border-radius: 4px;
+  transition: border-color 0.15s;
+}
+.chapter-nav a:hover { border-color: #00ff9d; }
+.chapter-nav-prev { text-align: left; }
+.chapter-nav-home { text-align: center; flex: 0 0 auto; }
+.chapter-nav-next { text-align: right; }
+
+.chapter-toc {
+  margin: 2em 0;
+  padding: 1em;
+  background: rgba(0, 255, 157, 0.05);
+  border-left: 3px solid #00ff9d;
+  border-radius: 4px;
+}
+.chapter-toc summary { cursor: pointer; font-weight: 600; }
+.chapter-toc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  margin-top: 1em;
+}
+.chapter-toc-body a { text-decoration: none; padding: 0.2em 0; }
+.chapter-toc-body a.toc-h3 { padding-left: 1.5em; font-size: 0.95em; }
+.chapter-toc-body a:hover { color: #00ff9d; }
+
+/* Sidebar primary nav */
+.sidebar .sb-primary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em 0.8em;
+  padding: 0.6em 0 1em 0;
+  margin-bottom: 0.8em;
+  border-bottom: 1px solid rgba(0, 255, 157, 0.15);
+}
+.sidebar .sb-primary a {
+  display: inline-block;
+  padding: 0.25em 0.6em;
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid rgba(136, 136, 136, 0.3);
+  border-radius: 3px;
+  color: #bbb;
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s;
+}
+.sidebar .sb-primary a:hover {
+  color: #00ff9d;
+  border-color: #00ff9d;
+}
+.sidebar .sb-primary a.active {
+  color: #00ff9d;
+  border-color: #00ff9d;
+  background: rgba(0, 255, 157, 0.08);
+}
+
+/* Sidebar act groups */
+.sidebar .sb-group {
+  margin: 0.5em 0;
+}
+.sidebar .sb-group > summary {
+  cursor: pointer;
+  padding: 0.4em 0;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #888;
+  text-transform: uppercase;
+  font-size: 0.85em;
+  user-select: none;
+}
+.sidebar .sb-group > summary:hover { color: #00ff9d; }
+.sidebar .sb-group[open] > summary { color: #00ff9d; }
+.sidebar .sb-group > a {
+  display: block;
+  padding: 0.3em 0 0.3em 1em;
+  border-left: 2px solid transparent;
+  font-size: 0.9em;
+}
+.sidebar .sb-group > a:hover { border-left-color: #00ff9d; }
+.sidebar .sb-group > a.active { border-left-color: #00ff9d; color: #00ff9d; font-weight: 600; }

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Delete all .bak files
 echo "Deleting .bak files..."

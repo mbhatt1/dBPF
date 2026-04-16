@@ -1,57 +1,26 @@
-# [Stage | Idea Generation] Diabolical eBPF Field Manual
+# The Diabolical eBPF Field Manual
 
-[A comprehensive collection](https://mbhatt1.github.io/dBPF/) of advanced eBPF security techniques and exploits, presented as a field manual for security researchers and practitioners.
+Source for [The Diabolical eBPF Field Manual](https://mbhatt1.github.io/dBPF/) — a
+three-act book documenting what `CAP_BPF` (plus `CAP_PERFMON` or `CAP_SYS_ADMIN`)
+actually permits on a modern aarch64 Linux kernel, paired with a reproducible
+Docker harness that runs every primitive and prints observable before/after state.
 
-## Overview
+The manuscript lives under `_book_chapters/` (canonical source, organized as
+Act 1 / Act 2 / Act 3). Short blog-style teasers live under `_posts/`. The site
+is built by GitHub Pages via `.github/workflows/jekyll.yml`.
 
-This repository contains the source for the Diabolical eBPF Field Manual, a detailed exploration of eBPF security concepts, vulnerabilities, and exploitation techniques. The content is organized as a series of technical articles covering various aspects of eBPF security.
+## Companion repository
 
-## Project Structure
+The proof-of-concept code and harness referenced throughout the book live in a
+separate repo, [`dBPF-pocs`](https://github.com/mbhatt1/dBPF-pocs). Each chapter
+points at the corresponding POC and harness entry (`dBPF-pocs/harness/proof.py`)
+so claims can be reproduced end-to-end.
 
-- `_posts/`: Contains individual articles organized by date
-- `_layouts/`: Custom Jekyll layouts
-- `_includes/`: Reusable HTML components
-- `assets/`: Static assets including CSS
-- `index.md`: Main landing page
+## Local development
 
-## Local Development
-
-### Prerequisites
-
-- Ruby (version specified in `.ruby-version`)
-- Bundler
-
-### Setup
-
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/Diabolial_eBPF_Field_Manual_site.git
-cd Diabolial_eBPF_Field_Manual_site
-```
-
-2. Install dependencies:
 ```bash
 bundle install
+bundle exec jekyll serve --livereload
 ```
 
-3. Run the development server:
-```bash
-bundle exec jekyll serve --host=localhost --livereload
-```
-
-The site will be available at `http://localhost:4000`
-
-## Contributing
-
-1. Fork the repository
-2. Create a new branch for your changes
-3. Make your changes
-4. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-Thanks to all contributors and researchers in the eBPF security community who have made this field manual possible.
+The site will be served at `http://localhost:4000/dBPF/`.

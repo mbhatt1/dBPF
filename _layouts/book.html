@@ -15,6 +15,13 @@
                 <a href="{{ site.baseurl }}/" class="site-title">{{ site.title }}</a>
             </div>
             <div class="sidebar-content">
+                <div class="sb-primary">
+                    <a href="{{ site.baseurl }}/" {% if page.url == "/" %}class="active"{% endif %}>Home</a>
+                    <a href="{{ site.baseurl }}/book/" {% if page.url == "/book/" %}class="active"{% endif %}>Book</a>
+                    <a href="{{ site.baseurl }}/posts/" {% if page.url == "/posts/" %}class="active"{% endif %}>Posts</a>
+                    <a href="https://github.com/mbhatt1/dBPF" target="_blank" rel="noopener">GitHub</a>
+                </div>
+
                 <h3>Posts</h3>
                 {% assign sorted_posts = site.posts | reverse %}
                 {% for post in sorted_posts %}
@@ -26,10 +33,20 @@
                 {% if site.book_chapters and site.book_chapters.size > 0 %}
                 <h3>Book</h3>
                 {% assign sorted_chapters = site.book_chapters | sort: 'path' %}
-                {% for chapter in sorted_chapters %}
-                    <a href="{{ site.baseurl }}{{ chapter.url }}" {% if page.url == chapter.url %}class="active"{% endif %}>
-                        {% if chapter.title %}{{ chapter.title }}{% else %}{{ chapter.path | split: '/' | last | replace: '.md', '' | replace: '-', ' ' }}{% endif %}
-                    </a>
+                {% assign acts = "act-1,act-2,act-3" | split: "," %}
+                {% assign act_names = "Act I — Foundations,Act II — Kernel Intrusion,Act III — Total Control" | split: "," %}
+                {% for act in acts %}
+                  {% assign act_idx = forloop.index0 %}
+                  <details open class="sb-group">
+                    <summary>{{ act_names[act_idx] }}</summary>
+                    {% for ch in sorted_chapters %}
+                      {% if ch.path contains act %}
+                        <a href="{{ site.baseurl }}{{ ch.url }}" {% if page.url == ch.url %}class="active"{% endif %}>
+                          {% if ch.title %}{{ ch.title }}{% else %}{{ ch.path | split: '/' | last | replace: '.md', '' }}{% endif %}
+                        </a>
+                      {% endif %}
+                    {% endfor %}
+                  </details>
                 {% endfor %}
                 {% endif %}
             </div>
@@ -46,6 +63,36 @@
                         </time>
                         {% endif %}
                     </header>
+
+                    {% if page.collection == 'book_chapters' and page.toc != false %}
+                    <details class="chapter-toc">
+                      <summary>On this page</summary>
+                      <div class="chapter-toc-body">
+                        <!-- populated client-side from H2/H3 headings -->
+                      </div>
+                    </details>
+                    <script>
+                      (function() {
+                        var toc = document.querySelector('.chapter-toc-body');
+                        if (!toc) return;
+                        var headings = document.querySelectorAll('.post-content h2, .post-content h3');
+                        if (headings.length === 0) {
+                          document.querySelector('.chapter-toc').style.display = 'none';
+                          return;
+                        }
+                        headings.forEach(function(h) {
+                          if (!h.id) {
+                            h.id = h.textContent.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                          }
+                          var a = document.createElement('a');
+                          a.href = '#' + h.id;
+                          a.textContent = h.textContent;
+                          a.className = 'toc-' + h.tagName.toLowerCase();
+                          toc.appendChild(a);
+                        });
+                      })();
+                    </script>
+                    {% endif %}
 
                     <div class="post-content">
                         {{ content }}
@@ -70,6 +117,27 @@
                         </a>
                         {% endif %}
                     </div>
+                </nav>
+                {% endif %}
+
+                {% if page.collection == 'book_chapters' %}
+                <nav class="chapter-nav">
+                  {% assign chapters_sorted = site.book_chapters | sort: 'path' %}
+                  {% for ch in chapters_sorted %}
+                    {% if ch.path == page.path %}
+                      {% assign idx = forloop.index0 %}
+                    {% endif %}
+                  {% endfor %}
+                  {% if idx > 0 %}
+                    {% assign prev = chapters_sorted[idx | minus: 1] %}
+                    <a class="chapter-nav-prev" href="{{ site.baseurl }}{{ prev.url }}">← {{ prev.title }}</a>
+                  {% endif %}
+                  <a class="chapter-nav-home" href="{{ site.baseurl }}/book/">Index</a>
+                  {% assign next_idx = idx | plus: 1 %}
+                  {% if next_idx < chapters_sorted.size %}
+                    {% assign next_ch = chapters_sorted[next_idx] %}
+                    <a class="chapter-nav-next" href="{{ site.baseurl }}{{ next_ch.url }}">{{ next_ch.title }} →</a>
+                  {% endif %}
                 </nav>
                 {% endif %}
             </main>

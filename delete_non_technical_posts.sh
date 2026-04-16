@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# ARCHIVED: one-time migration from 2025 — kept for history, not operational.
+# This both mutates posts in place (sed -i.bak rewrites) and can delete any
+# _posts/*.md that doesn't match "Technical". Do NOT re-run against the current
+# repo; the _posts/ tree has since been curated and this would corrupt it.
+
 # Script to delete files in _posts directory that don't contain "Technical"
 # and enhance remaining files with interactive diagrams and code blocks
 # Created on: $(date)
