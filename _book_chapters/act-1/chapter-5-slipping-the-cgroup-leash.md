@@ -233,3 +233,58 @@ For multi-node clusters, the same detection applies at a higher layer: compare p
 ## Scope
 
 This is a Class II primitive from Chapter 20 — userspace buffer rewrite via `bpf_probe_write_user`. The kernel's accounting is unchanged; only the userspace view is corrupted. Anything that consumes cgroup-file readbacks is fooled; anything that cross-checks against the scheduler's own accounting is not. The one-line summary: the cgroup accounting split into an unreliable observation plane and a reliable control plane the moment `CAP_BPF` was granted to a peer process.
+
+## Why this matters for production observability
+
+The gap this primitive exposes is not a gap in the cgroup accounting implementation. It is a gap in the *consumer* layer. Cgroup v2 exposes its counters through a filesystem interface: files named `cpu.stat`, `memory.current`, `io.stat`, `cpu.pressure`. Every file read goes through `vfs_read` → cgroup-fs read callback → synthesize ASCII → copy to user buffer. The synthesis step pulls real values from scheduler state; the copy step hands bytes to userspace. The attack is entirely in the copy step's aftermath.
+
+Replacing the consumer layer is one mitigation. Instead of reading `cpu.stat`, compute per-cgroup CPU usage from `/proc/schedstat` (which is per-CPU) and per-task `/proc/[pid]/stat` fields 14 (utime) and 15 (stime), cross-referenced against cgroup membership via `/proc/[pid]/cgroup`. The computation is more work but is not vulnerable to `bpf_probe_write_user` rewriting the ASCII output of `cpu.stat` — because there is no `cpu.stat` read in that path.
+
+Production monitoring stacks mostly do not do this. Prometheus `node_exporter`, cAdvisor, Datadog, Netdata, Sysdig, Grafana agent all consume cgroup files directly. The assumption is that the kernel's accounting is authoritative and its exposure via `cpu.stat` is trustworthy. The first assumption holds. The second is the seam this chapter opens.
+
+A defender who wants a trustworthy observability plane on a host with untrusted `CAP_BPF` holders has three options:
+
+- **Route around the attack surface.** Compute cgroup metrics from scheduler state directly. Requires replacing or augmenting every existing collector. High cost, high assurance.
+- **Detect the taint.** `cat /proc/sys/kernel/tainted | awk '{if (and($1,512)) print}'` is a one-line alert. Low cost, detection-only (the rewrite has already happened when the alert fires).
+- **Prevent at the capability boundary.** Don't grant `CAP_BPF` to non-trusted workloads. This is what the kernel documentation already recommends. It is also the hardest in practice because observability stacks routinely demand `CAP_BPF`.
+
+The three options are composable. A defensive posture that routes the critical accounting pipelines around cgroup-file reads, detects taint fleet-wide, and audits every `CAP_BPF` grant makes this primitive expensive to deploy and quick to catch if deployed.
+
+## What cannot be fixed at the userspace layer
+
+Some consumers of cgroup files are not replaceable. Legacy monitoring agents that ship as vendor binaries with no source access. Operator tooling that assumes a specific cgroup file format. Compliance scanners that read cgroup files as part of their inventory. For these, the primitive works and the primitive's detection is the only recourse.
+
+One class of consumer deserves a specific note: the systemd service manager itself reads cgroup files to populate `systemctl status <unit>` output, to make cgroup-based scheduling decisions, and to update unit-level accounting in `/run/systemd/journal/`. If the rewriter targets a systemd unit's cgroup, systemd's own view of that unit's resource usage is corrupted. Unit restart policies based on resource exhaustion misfire. This is rarely exploited in the public literature, but it is a real and live attack surface on any host where systemd is the service manager.
+
+## How the POC's trigger script works
+
+The `trigger.sh` in `dBPF-pocs/pocs/ch05-cgroup-leash/` is shorter than the BPF program. It reads `/sys/fs/cgroup/cpu.stat` once to capture the "BEFORE" state (`usage_usec` extracted via awk), starts the loader in the background, waits until the loader prints `[ch05] attached — cgroup leash active`, reads `cpu.stat` again to capture "AFTER", and synthesizes the marker line.
+
+```
+#!/bin/bash
+set -e
+LOADER=./build/ch05-cgroup-leash
+BEFORE=$(cat /sys/fs/cgroup/cpu.stat | awk '/usage_usec/{print $2}')
+$LOADER &
+LPID=$!
+while ! grep -q 'attached' /proc/$LPID/fd/2 2>/dev/null; do sleep 0.1; done
+sleep 0.5
+AFTER=$(cat /sys/fs/cgroup/cpu.stat | awk '/usage_usec/{print $2}')
+PATCHED=$(grep -c 'patched=1' /tmp/ch05.log || echo 0)
+ZEROED=$([ "$AFTER" = "0" ] && echo yes || echo no)
+echo "CH05_PROVEN before_usage=$BEFORE after_usage=$AFTER zeroed=$ZEROED patched_events=$PATCHED"
+kill $LPID
+```
+
+The script is deliberately minimal. The harness wraps it, records the marker line, and evaluates the proof regex against it.
+
+## Cross-kernel portability
+
+The CO-RE chain `task->files->fdt->fd[fd]->f_path.dentry->d_name.name` is stable across Linux 4.11 (first cgroup v2 release) through 6.12 (the test kernel). `struct files_struct`, `struct fdtable`, `struct file`, and `struct dentry` have all been laid out similarly across that range. CO-RE relocations handle the minor shifts.
+
+The `bpf_probe_write_user` helper has been available since 4.8. Its behavior — atomic write to user memory, taint on first use, dmesg warning — has not changed across 4.x, 5.x, or 6.x. The `TAINT_USER` bit value (512) is stable.
+
+The tracepoints `syscalls/sys_enter_read` and `syscalls/sys_exit_read` are stable tracepoints; their `ctx->args[]` layout matches the kernel ABI for `read(2)`. A BPF program written against this tracepoint on 5.4 loads and runs correctly on 6.12 with no changes.
+
+The one portability risk is the cgroup v2 file naming. On cgroup v1, the equivalent file is `cpuacct.usage` in a different directory tree. The POC could be adapted by changing the bounded string compare — trivial — and by adjusting the overwrite constant to match `cpuacct.usage`'s single-integer format.
+

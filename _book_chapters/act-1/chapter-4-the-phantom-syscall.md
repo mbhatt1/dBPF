@@ -340,3 +340,32 @@ The requirement the attacker must meet to deploy this primitive is `CAP_BPF` —
 The practical consequence: any process that can load a tracepoint program can read any other task's `current->cred` and `current->real_parent` at the moment that task calls `write()` with the marker. The marker is a cooperative-attacker signal — the reader and the writer must agree on the prefix — which keeps the primitive out of the "passive observer" category and into the "cooperative covert channel" category. Two processes both holding `CAP_BPF`+`CAP_PERFMON` do not gain a new primitive from this work; two processes where only one holds BPF caps and the other is constrained but can issue `write()` syscalls do gain a new channel.
 
 Seccomp was never meant to defeat a cooperating BPF sibling. The kernel's design explicitly treats `CAP_BPF` as a trust boundary that defeats sandbox-level controls. This POC is a concrete demonstration of what that design decision means in practice: a `write()` syscall the seccomp filter approved, with bytes the seccomp filter could not inspect, surfacing task-internal state the kernel considered privileged. The technique is documented, the behavior is expected, the defense is "don't grant `CAP_BPF` to code you don't trust." Which is the defense the kernel documentation already recommends.
+
+## Portability across kernel versions
+
+The tracepoint `syscalls/sys_enter_write` is a stable kernel ABI tracepoint. Its `ctx->args[]` layout has not changed since the tracepoint was introduced in 3.19. A program written against this tracepoint on 4.x loads and runs on 6.x without modification. The CO-RE chain `task->cred->uid` and `task->real_parent->comm` likewise uses fields that have been layout-stable for a decade; the relocations handle the minor offset shifts across versions.
+
+The syscall-name portability note: on x86_64 the symbol is `__x64_sys_write`; on aarch64 it is `__arm64_sys_write`; on 32-bit arm it is `__arm_sys_write` with different argument marshalling. The tracepoint path `syscalls/sys_enter_write` is the same on all three because the tracepoint is defined against the architecture-independent syscall number, not the symbol name. A POC that targets the tracepoint rather than the kprobe-on-syscall-entry is automatically cross-architecture.
+
+The PROG_ARRAY plus tail-call mechanism has been present since 4.2. The `bpf_tail_call` helper's invocation semantics — up to 33 levels deep, same program type — have been stable since that release. Chapter 4's two-stage design is portable without changes to any BPF program compatible with 4.x+.
+
+One version-specific detail: on kernels older than 5.5, CO-RE relocations required the kernel to ship BTF information (`CONFIG_DEBUG_INFO_BTF=y`). Distro kernels mostly enabled this by 5.5 for mainstream releases; older LTS branches (RHEL 7's 3.10-based kernel) do not have BTF and cannot run CO-RE programs. A legacy-LTS port of this POC would need to use hard-coded field offsets, which would make the program non-portable across those older kernels in turn.
+
+## Why this is a cooperative primitive, not a passive observer
+
+The POC requires the target process to cooperate — to issue a `write(2)` with the magic `PHANTOM\0` prefix. This is not a passive exfiltration primitive. A BPF program that reads `current->cred` on every `write(2)` would emit far too many events to be useful; the magic prefix is the signal that a specific `write()` is the one to inspect.
+
+Two consequences follow. First, the primitive is a covert channel between two processes that already agreed on the protocol. It is not a primitive that reveals secrets from a process unaware of it. A seccomp-confined process that does not know about the magic prefix leaks nothing via this POC. The BPF side only extracts fields when the userspace side explicitly signals it.
+
+Second, the primitive is deployable by a cooperating attacker. Process A holds `CAP_BPF` and wants to exfiltrate kernel-private state. Process B does not hold `CAP_BPF` but needs to send messages to A without an obvious channel. B issues `write(fd, "PHANTOM\0command", len)` to any valid file descriptor. Process A, reading the ringbuf, receives the command along with B's current UID and parent command name. The `write()` syscall itself completes normally (the bytes go to wherever `fd` points); the tracepoint side-effect is invisible to B.
+
+This cooperation model is why the primitive sits comfortably inside seccomp's explicit threat model gap. Seccomp defends the filtered process against its own syscalls. It does not defend a cooperating attacker pair against observation, and it cannot, because the observer runs outside the filtered process.
+
+## One verifier corner worth calling out
+
+The `bpf_tail_call` helper has a verifier-imposed constraint that bit me during POC development: the program being tail-called must be attached to the same BPF program type. A `SEC("tp/...")` stage 1 can only tail-call into another `SEC("tp/...")` stage 2. Cross-type tail calls — e.g., a tracepoint tail-calling into a kprobe — are rejected at load time with `tail_call: program type mismatch`.
+
+Stage 2 in this POC is declared `SEC("tp/syscalls/sys_enter_write")` even though the loader never actually attaches it to a tracepoint. The declaration exists purely to satisfy the verifier's same-type requirement. The loader uses `bpf_program__set_autoattach(prog, false)` to prevent double-attachment and `bpf_map_update_elem(prog_array, &idx, &fd, BPF_ANY)` to register the program fd in the PROG_ARRAY slot.
+
+This is the kind of detail that does not appear in the chapter summary or the proof marker but that anyone re-implementing the POC for a different syscall will hit immediately. The fix is one line — the `SEC(...)` declaration on stage 2 must match stage 1 — but the error message from the verifier is generic enough that a newcomer spends an hour debugging it the first time.
+
