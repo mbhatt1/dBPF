@@ -6,6 +6,8 @@ date: 2025-04-20
 
 **Chapter 16: Observing `__secure_computing` From a Peer Process**
 
+> **See also**: [Blog post]({{ site.baseurl }}/2025/04/20/seccomp-tid-hop.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch16-seccomp-tid-hop) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+
 Before anything else in this chapter: seccomp's threat model is the filtered process. It was never the gap between a filtered process and a sibling with `CAP_BPF`. When a privileged peer can load kprobes on `__secure_computing`, the filtered task's filter has already been bypassed in the threat-model sense — an attacker at that level does not need to break seccomp, they can just attach to it. What follows is not a seccomp bug; it is seccomp behaving exactly as documented, observed from the side.
 
 I started with an observer: a kprobe on `__secure_computing` and a paired kretprobe. That function is called on every syscall made by a seccomp-filtered task. On 6.12.54-linuxkit aarch64 the symbol is present in `/proc/kallsyms` and kprobes attach cleanly. Every evaluation streams through a ringbuf with `{ts, pid, tid, tgid, comm, seccomp.mode, retval}`:

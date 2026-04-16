@@ -6,6 +6,8 @@ date: 2026-01-10
 
 # Chapter 20: What We Proved — The Taxonomy
 
+> **Navigation**: [Chapter 20 — Taxonomy]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html)
+
 The harness ran nineteen POCs on kernel 6.12.54-linuxkit aarch64 via Docker Desktop. Thirteen produced BEFORE/AFTER proof markers on stdout. The remaining six either required architectural context this kernel does not expose (BTF for a target struct was absent, or the subsystem — powercap RAPL, WMI on ACPI — was not present), or the program loaded and attached cleanly but sat on an enforcement point that was not active at runtime. Chapter 21 accounts for those. This chapter walks only the ones that produced effects, and puts them in five classes. The five-class taxonomy is the durable artifact of this book.
 
 ## The rule for inclusion

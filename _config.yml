@@ -24,6 +24,12 @@ repository: "mbhatt1/dBPF"
 # Permalink structure
 permalink: /:title.html
 
+# Collections
+collections:
+  book_chapters:
+    output: true
+    permalink: /book/:path:output_ext
+
 # Default layout
 defaults:
   - scope:
@@ -36,6 +42,18 @@ defaults:
     values:
       layout: "book"
       is_post: true
+  - scope:
+      path: "_book_chapters"
+      type: "book_chapters"
+    values:
+      layout: "book"
+      is_chapter: true
+  - scope:
+      path: "book_chapters"
+      type: "book_chapters"
+    values:
+      layout: "book"
+      is_chapter: true
 
 # Plugins
 plugins:

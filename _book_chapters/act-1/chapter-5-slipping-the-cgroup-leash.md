@@ -8,6 +8,8 @@ Act I: Foundations of Breach
 
 **Chapter 6: Breaking Free from All Constraints**
 
+> **See also**: [Blog post]({{ site.baseurl }}/2025/02/05/slipping-the-cgroup-leash.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch05-cgroup-leash) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+
 I still remember the first time I saw my CPU usage throttled by a cgroup. It felt like a comfy prison cell at first—tightly controlled, predictable.
 
 But predictability breeds complacency. At 3 AM, caffeine coursing through my veins, I realized that cgroups are nothing more than teller lines for kernel accountants. They trust the kernel to count me, but what if I taught the kernel to miscount?

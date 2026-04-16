@@ -6,6 +6,8 @@ date: 2025-05-07
 
 **Chapter 17: Where the ACPI Interpreter Isn't**
 
+> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) for the skip reasoning and [the surviving workaround variant in dBPF-pocs](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs) (e.g. `ch17-acpi-wsmi-analog/`).
+
 The chapter as originally drafted hooks `acpi_evaluate_object`, watches for a specific ACPI pathname (`\_SB._WS0.Ping`), and swaps in custom AML parameters. That scenario is architecturally x86. I was working on aarch64 and the first thing I did was check whether the symbols exist:
 
 ```

@@ -15,15 +15,23 @@
                 <a href="{{ site.baseurl }}/" class="site-title">{{ site.title }}</a>
             </div>
             <div class="sidebar-content">
+                <h3>Posts</h3>
                 {% assign sorted_posts = site.posts | reverse %}
                 {% for post in sorted_posts %}
-                    {% assign post_date = post.date | date: '%Y-%m-%d' %}
-                    {% if post_date < '2025-02-13' %}
                     <a href="{{ site.baseurl }}{{ post.url }}" {% if page.url == post.url %}class="active"{% endif %}>
                         {{ post.title }}
                     </a>
-                    {% endif %}
                 {% endfor %}
+
+                {% if site.book_chapters and site.book_chapters.size > 0 %}
+                <h3>Book</h3>
+                {% assign sorted_chapters = site.book_chapters | sort: 'path' %}
+                {% for chapter in sorted_chapters %}
+                    <a href="{{ site.baseurl }}{{ chapter.url }}" {% if page.url == chapter.url %}class="active"{% endif %}>
+                        {% if chapter.title %}{{ chapter.title }}{% else %}{{ chapter.path | split: '/' | last | replace: '.md', '' | replace: '-', ' ' }}{% endif %}
+                    </a>
+                {% endfor %}
+                {% endif %}
             </div>
         </nav>
 
@@ -48,24 +56,18 @@
                 <nav class="post-nav">
                     <div class="post-nav-item prev">
                         {% if page.previous %}
-                        {% assign prev_date = page.previous.date | date: '%Y-%m-%d' %}
-                        {% if prev_date < '2025-02-13' %}
                         <span class="nav-label">Previous</span>
                         <a href="{{ site.baseurl }}{{ page.previous.url }}" class="prev">
                             {{ page.previous.title }}
                         </a>
                         {% endif %}
-                        {% endif %}
                     </div>
                     <div class="post-nav-item next">
                         {% if page.next %}
-                        {% assign next_date = page.next.date | date: '%Y-%m-%d' %}
-                        {% if next_date < '2025-02-13' %}
                         <span class="nav-label">Next</span>
                         <a href="{{ site.baseurl }}{{ page.next.url }}" class="next">
                             {{ page.next.title }}
                         </a>
-                        {% endif %}
                         {% endif %}
                     </div>
                 </nav>

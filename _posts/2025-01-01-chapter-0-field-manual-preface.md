@@ -1,79 +1,46 @@
 ---
 layout: book
-title: "Preface"
+title: "Chapter 0: What CAP_BPF Actually Permits"
 date: 2025-01-01
 ---
 
-# Chapter 0: The Dark Side of BPF
+# Chapter 0: What CAP_BPF Actually Permits
 
-**Hey there, fellow kernel spelunker.**
+> **See also**: [Full preface in the book]({{ site.baseurl }}/book/act-1/chapter-0-field-manual-preface.html) · [Defender playbook]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html)
 
-Look, we're gonna level with you right from the start. This isn't your typical security research. There are no CVEs here, no bug bounties waiting at the end of the rainbow. What you're about to dive into is something far more interesting—and arguably more terrifying.
+This book is a catalog of what `CAP_BPF` plus `CAP_PERFMON` (or `CAP_SYS_ADMIN`) actually permits on a modern aarch64 Linux kernel. Every chapter assumes the attacker already holds that capability. No chapter documents escalation without it.
 
-### What You're Really Looking At
+Each chapter ships with a reproducible POC, a scripted trigger that prints observable BEFORE and AFTER state, and a machine-grep-able proof marker. Failures are documented honestly in [chapter 21]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html). The harness is `dBPF-pocs/harness/proof.py`, driven from a privileged Docker container.
 
-This field manual documents what `CAP_BPF` plus `CAP_PERFMON` (or `CAP_SYS_ADMIN`) actually permits on a modern Linux kernel. Every technique here assumes the attacker already holds that capability.
+## Intended reader
 
-Every technique in here: working as intended. Every "exploit": a feature used for its documented purpose. Every bypass: exactly what the kernel developers designed eBPF to do, operating against a workload whose threat model did not price in a privileged sibling holding `CAP_BPF`.
+Operators deciding whether to grant `CAP_BPF` to a workload, and what to configure when they do. Security engineers auditing observability stacks that quietly ask for the capability at install time. Defenders looking for concrete hardening recipes. Researchers looking for a reproducible taxonomy of what the eBPF surface can be shaped into.
 
-### The Uncomfortable Truth
+## What this book is not
 
-Here's the thing that keeps us up at night: eBPF isn't broken. It's *perfect*. It does exactly what it says on the tin—gives you kernel-level programmability with surgical precision. The problem (if you want to call it that) is that "kernel-level programmability" is just a fancy way of saying "god mode for your operating system."
+- Not a zero-day catalog. Nothing here is a CVE.
+- Not a "the kernel is broken" argument. Every program in the book was accepted by a BPF verifier doing its job correctly.
+- Not a privilege-escalation guide. CAP_BPF is a prerequisite, not an output.
+- Not novel research. Prior art exists for most individual primitives (`d_reclen` rewrite for readdir hiding goes back to 2016 in rootkit PoCs; XDP covert channels were discussed in research from ~2019 onward; PID-ns side channels via `sched_process_fork` appear in earlier academic work). The contribution is a reproducible harness, honest scope, and a durable taxonomy.
 
-When you load an eBPF program, you're not exploiting anything. You're literally injecting code into the kernel that runs with ring-0 privileges. The kernel *wants* you to do this. It's the whole point.
+## The taxonomy
 
-### Why This Matters (And Why You Should Care)
+Every primitive in the book is one of three motions:
 
-We've spent years in the trenches—red teams, blue teams, that weird purple space where you're not sure whose side you're on anymore. And we can tell you this: most defenders have no idea what they're up against when it comes to eBPF.
+- **Change the syscall return** (Class I — kretprobe / LSM fmod_ret / XDP_DROP). The kernel's decision stands; the caller sees a different answer.
+- **Rewrite the userspace buffer** (Class II — `bpf_probe_write_user` during `sys_exit`). Kernel state unchanged; userspace reads are corrupted post-return.
+- **Copy the decision out of band** (Class III — ringbuf from a tracepoint or kprobe). Kernel state and decisions are untouched; confidentiality is lost.
 
-They see it as this cool observability tool, maybe a fancy way to do network filtering. They don't see it as what it really is: **the most powerful userland-to-kernel interface ever created.**
+Two additional classes specialize these — **Class IV** (XDP packet-path interception) is a Class I variant at the netdev layer; **Class V** (ringbuf + userspace racer) is Class III used as a trigger signal. Full taxonomy is in [chapter 20]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html).
 
-### The Hacker's Perspective
+## The operational lesson
 
-From a hacker's point of view, eBPF is like finding out your target left the front door unlocked, the alarm system disabled, and a note saying "please come in and make yourself at home." Except it's not a mistake—it's by design.
+CAP_BPF grants every motion above. Granting it to a workload means granting that workload the ability to read arbitrary kernel memory, override the return of any function on `/sys/kernel/debug/error_injection/list`, rewrite userspace memory in certain syscall windows, and take over netdev ingress via XDP. That is the capability operating as documented. Surprise is proportional to how much of modern observability silently depends on it.
 
-Every security boundary you've spent years learning to respect? eBPF can step right over them. Not by breaking them, but by operating at a level where they simply don't apply.
+---
 
-- Want to bypass seccomp? eBPF runs before seccomp even knows what hit it.
-- Need to evade audit logs? eBPF can intercept and modify them in real-time.
-- Trying to hide from process monitoring? eBPF can make you invisible to the very tools designed to watch for you.
+**Related material**
 
-And here's the kicker: **none of this is a vulnerability**. It's all working exactly as designed.
-
-### The Real Game
-
-This manual isn't about finding bugs. It's about understanding power. Real, fundamental, kernel-level power. The kind that makes traditional privilege escalation look quaint.
-
-When you understand these techniques, you're not just learning new attack vectors. You're learning to think like the kernel itself. You're seeing the matrix, if you'll forgive the reference.
-
-### A Word of Warning (Because We Have To)
-
-Look, we're not your parents, and we're not going to lecture you about responsible disclosure or ethical hacking. You're smart enough to know that with great power comes great responsibility, and all that Spider-Man nonsense.
-
-But we will say this: these techniques are *powerful*. Like, "accidentally-brick-your-test-lab" powerful. Like, "explain-to-your-boss-why-the-production-server-is-on-fire" powerful.
-
-Use them wisely. Use them legally. Use them with permission. And for the love of all that is holy, use them in a lab first.
-
-### The Journey Ahead
-
-This isn't just a collection of techniques—it's a story. The story of what happens when you discover that the Linux kernel has become programmable, and what that really means for security.
-
-**Act I: The Discovery** (Chapters 1-6)
-We start with **The Mirror Controls** — overriding the return value of kernel security-decision functions so userspace sees a forged answer. From there, we explore container escapes through **OverlayFS manipulation**, **audit evasion** via ringbuf exfiltration, **phantom syscalls** that leak kernel struct fields, **ghost network interfaces** via XDP, and cgroup accounting rewrites that let a workload **slip its resource limits**.
-
-**Act II: The Deep Dive** (Chapters 7-12)
-We silence **SELinux** itself, perform the ultimate **device access escape**, steal secrets from the **kernel keyring**, create **process doppelgängers** across namespaces, make files **invisible to detection**, and weaponize **interrupt handling** for chaos.
-
-**Act III: The Advanced Game** (Chapters 13-18)
-We violate the deepest trust with **signed driver swaps**, override **power management** for hardware attacks, hijack **real-time scheduling**, create **network namespace ghosts**, perform **thread identity hops**, communicate directly with **firmware interfaces**, and finally subvert **authentication itself** at the kernel level.
-
-**Epilogue: The New Reality**
-We step back and confront the ultimate truth—that in a fully programmable computing stack, everything from security controls to hardware behavior to cryptographic trust to identity itself can be rewritten. This is where you realize that you haven't just learned attack techniques—you've discovered that the fundamental nature of computing has changed.
-
-Each chapter builds on the last, not just in complexity, but in understanding. You'll start thinking like a traditional attacker and end up understanding that in the age of programmable systems, the very concept of "attack" versus "legitimate functionality" becomes meaningless.
-
-### Ready to Go Down the Rabbit Hole?
-
-eBPF is not vulnerable. eBPF is not broken. eBPF is not a mistake.
-
-eBPF is working as documented. The surprises come from what "working as documented" means when the capability is granted to observability agents by default.
+- Taxonomy: [Chapter 20]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html)
+- Skip accounting: [Chapter 21]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html)
+- Defender playbook: [Chapter 22]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html)

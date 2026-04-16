@@ -8,6 +8,8 @@ date: 2025-01-31
 
 # Chapter 1: The Mirror Controls
 
+> **See also**: [Blog post]({{ site.baseurl }}/2025/01/31/the-mirror-controls.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch01-mirror-controls) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+
 I was poking at `cap_capable` on a linuxkit 6.12 VM, trying to understand what an unprivileged observer could actually see from a kprobe. The function is the single choke point every capability check routes through (`security/commons.c`), so if you want to know who is asking for what, this is where you sit. What I wanted to know next was whether I could do anything about the answer.
 
 The short version: on a stock kernel, you cannot. `cap_capable` is not in `ALLOW_ERROR_INJECTION`, so `bpf_override_return` against it loads but never fires. The verifier accepts the program; the kernel silently ignores the override. I confirmed this by checking `/sys/kernel/debug/kprobes/list` and then by reading `kernel/bpf/verifier.c` around `check_attach_btf_id`. The result is that this chapter is about an observation channel, not a bypass. If you want the bypass you need a kernel built with `CONFIG_BPF_KPROBE_OVERRIDE=y` and the target function annotated — two conditions that almost never coincide in production.

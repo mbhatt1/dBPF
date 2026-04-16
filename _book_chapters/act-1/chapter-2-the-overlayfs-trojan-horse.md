@@ -8,6 +8,8 @@ date: 2025-02-01
 
 # Chapter 2: The OverlayFS Trojan Horse
 
+> **See also**: [Blog post]({{ site.baseurl }}/2025/02/01/the-overlayfs-trojan-horse.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch02-overlayfs) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+
 I started on this one after noticing, on a linuxkit 6.12 test VM, how much work `ovl_copy_up_one` actually does between the moment it allocates the upper inode and the moment the merged dentry becomes visible. That window is the thing. I wanted to measure it, and then I wanted to see whether a userspace racer could fit inside it.
 
 Up front: the BPF side of this chapter is an observation channel. The override call is there in the code, but `ovl_copy_up_one` is not in `ALLOW_ERROR_INJECTION` on stock 6.12, so the override is a no-op the same way it is in chapter 1. What the probe gives you is a reliable signal — a ringbuf event saying "copy-up is happening now, at this path, for this inode." The weaponization is a userspace racer that consumes those events and tries to touch the upper file before overlayfs finishes wiring it in.

@@ -8,6 +8,8 @@ Act II: Kernel Intrusion
 
 **Chapter 10: Mapping Host PID to Namespace PID**
 
+> **See also**: [Blog post]({{ site.baseurl }}/2025/02/09/pid-namespace-doppelg-nger.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch09-pid-doppel) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+
 This one is almost embarrassingly straightforward once you know where to look. The primitive — recovering the host-visible PID of a task along with its namespace-local PID — has been shipping in bpftrace examples for years. Academic work on PID-namespace side channels via `sched_process_fork` goes back to at least 2020 (there's a USENIX Security paper I reread while writing this). My contribution, if it counts as one, is bundling the observation with an end-to-end confirmation: kill a process across the namespace boundary using only the PID my BPF program recovered.
 
 The key fact is that `struct task_struct` contains both views. `task->pid` and `task->tgid` are the host PIDs. The namespace-local PID lives off `task->thread_pid`, which is a `struct pid *`, and within it `numbers[level].nr` gives you the per-level PID. The namespace inode comes from `task->nsproxy->pid_ns_for_children->ns.inum`, or for the active PID namespace, `task->thread_pid->numbers[level].ns->ns.inum`.

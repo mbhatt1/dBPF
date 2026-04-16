@@ -6,6 +6,8 @@ date: 2025-03-15
 
 **Chapter 14: Forging the Return Value of `sched_setscheduler`**
 
+> **See also**: [Blog post]({{ site.baseurl }}/2025/03/15/sched-fifo-impersonator.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch14-sched-fifo) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+
 This is a userspace-illusion bypass. Same shape as the token forgery in chapter 18: the kernel's internal state is unchanged, but the syscall return value is rewritten before it reaches libc. Anything that trusts the return value acts as if the call succeeded; anything that goes back and asks the kernel directly sees the truth.
 
 The target is `__arm64_sys_sched_setscheduler`. I checked `/sys/kernel/debug/error_injection/list` on the linuxkit 6.12 aarch64 kernel I was testing against and it was there, which is the only reason this works — `bpf_override_return` silently no-ops against functions not on that list. Most syscall entrypoints are on the list; most internal kernel functions are not.

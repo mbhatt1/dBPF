@@ -8,6 +8,8 @@ Act II: Kernel Intrusion
 
 **Chapter 11: Making Files Vanish from getdents64**
 
+> **See also**: [Blog post]({{ site.baseurl }}/2025/02/10/inode-cloak.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch10-inode-cloak) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+
 This one isn't new. The d_reclen-swallow trick for hiding dirents inside the `getdents64` return buffer has been in rootkit proof-of-concepts for years — Jiska Classen, the kovid/reveng'd crowd, and various LKM rootkits have used variants of it since at least 2016. My contribution here is narrower: a modern CO-RE reproduction on 6.12 aarch64 using two syscall tracepoints, with ringbuf evidence and honest testing against `ls`, `find`, and `stat`.
 
 The primitive: when `getdents64` returns, each entry in the user buffer carries its own `d_reclen` field telling userspace how many bytes to skip to reach the next record. If I extend the previous entry's `d_reclen` so it covers the one I want to hide, every userspace reader — libc, Python, Go — will stride right over the hidden name without ever seeing it. No file is deleted. No inode is touched on disk. `open("/tmp/cloak/.backdoor")` still works because name resolution goes through a different path.

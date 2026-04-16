@@ -8,6 +8,8 @@ Act II: Kernel Intrusion
 
 **Chapter 13: Forging the finit_module Return Value**
 
+> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) for the skip reasoning and [the surviving workaround variant in dBPF-pocs](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs) (e.g. `ch12-signed-driver-swap-syscall/`).
+
 The question I started with: can a BPF program flip a rejected kernel module load into one that userspace believes succeeded? Not actually load a malicious module — that's a different, much harder problem — but defeat the class of orchestrators and monitors that treat the module-load syscall return as proof of load.
 
 The first approach failed. I tried a BPF LSM program on `kernel_read_file` and `mod_verify_sig`, planning to flip their returns from a signature failure to success. Two independent problems killed it on my test kernels:

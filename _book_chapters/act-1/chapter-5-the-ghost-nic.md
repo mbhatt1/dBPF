@@ -8,6 +8,8 @@ Act I: Foundations of Breach
 
 **Chapter 5b: Networking in the Shadows**
 
+> **See also**: [Blog post]({{ site.baseurl }}/2025/02/04/the-ghost-nic.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch05b-ghost-nic) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+
 I used to think containers were prisons built of veth pairs and namespaces. What if the walls were just a suggestion, and the tunnels ran deeper than anyone realized?
 
 Under the cover of midnight commits, I slipped into the kernel’s network stack. I let eBPF sock_ops intercept my traffic before it ever hit the bridge. To the orchestrator, I was still talking on eth0, but in reality I had conjured a phantom interface that only I could see.

@@ -8,6 +8,8 @@ Act I: Foundations of Breach
 
 **Chapter 6: Silencing SELinux**
 
+> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) for the skip reasoning and [the surviving workaround variant in dBPF-pocs](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs) (e.g. `ch06-silence-selinux-lsm-synthetic/`).
+
 I used to think SELinux was the unbreakable seal in the kernel’s vault—the one thing that even root couldn’t fudge. Turns out, that guard is just another piece of code you can whisper to.
 
 Under cover of a stealthy kprobe, I hooked into `avc_has_perm()`, the function that decides who gets in and who stays out. One line of eBPF, and every "deny" became a "permit."
