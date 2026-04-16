@@ -4,8 +4,6 @@ title: "Chapter 3: The FUSE Audit Black-Hole"
 date: 2025-02-02
 ---
 
-# Act I: Foundations of Breach
-
 # Chapter 3: The FUSE Audit Black-Hole
 
 > **See also**: [Blog post]({{ site.baseurl }}/the-fuse-audit-black-hole.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch03-fuse-blackhole) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)

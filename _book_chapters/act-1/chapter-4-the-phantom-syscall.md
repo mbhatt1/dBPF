@@ -4,8 +4,6 @@ title: "Chapter 4: The Phantom Syscall"
 date: 2025-02-03
 ---
 
-# Act I: Foundations of Breach
-
 # Chapter 4: The Phantom Syscall
 
 > **See also**: [Blog post]({{ site.baseurl }}/the-phantom-syscall.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch04-phantom-syscall) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)

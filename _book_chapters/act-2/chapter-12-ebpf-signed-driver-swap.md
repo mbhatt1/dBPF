@@ -1,14 +1,12 @@
 ---
 layout: book
-title: "eBPF Signed-Driver Swap"
+title: "Chapter 12: eBPF Signed-Driver Swap"
 date: 2025-03-01
 ---
 
-Act II: Kernel Intrusion
-
 **Chapter 13: Forging the finit_module Return Value**
 
-> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) for the skip reasoning and [the surviving workaround variant in dBPF-pocs](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs) (e.g. `ch12-signed-driver-swap-syscall/`).
+> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) and the surviving workaround variant at [dBPF-pocs/pocs/ch12-signed-driver-swap-syscall/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs).
 
 The question I started with: can a BPF program flip a rejected kernel module load into one that userspace believes succeeded? Not actually load a malicious module — that's a different, much harder problem — but defeat the class of orchestrators and monitors that treat the module-load syscall return as proof of load.
 

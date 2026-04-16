@@ -1,6 +1,6 @@
 ---
 layout: book
-title: "EBPF Token Bypass"
+title: "Chapter 18: eBPF Token Bypass"
 date: 2025-05-09
 ---
 

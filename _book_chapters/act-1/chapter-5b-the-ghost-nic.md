@@ -1,6 +1,6 @@
 ---
 layout: book
-title: "The Ghost NIC"
+title: "Chapter 5b: The Ghost NIC"
 date: 2025-02-04
 ---
 

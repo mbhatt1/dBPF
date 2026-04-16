@@ -1,10 +1,8 @@
 ---
 layout: book
-title: "PID Namespace Doppelgänger"
+title: "Chapter 9: PID Namespace Doppelgänger"
 date: 2025-02-09
 ---
-
-Act II: Kernel Intrusion
 
 **Chapter 10: Mapping Host PID to Namespace PID**
 

@@ -6,6 +6,8 @@ date: 2026-01-12
 
 # Chapter 22: The Defender Playbook
 
+> **See also**: [Blog post]({{ site.baseurl }}/the-defender-playbook.html) · [Harness](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+
 > **Navigation**: [Chapter 20 — Taxonomy]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html)
 
 The preceding twenty-one chapters establish what `CAP_BPF` permits. This chapter is the operational response. Seven steps, ordered from highest leverage to lowest. A mapping table at the end ties each step to the five primitive classes from chapter 20.

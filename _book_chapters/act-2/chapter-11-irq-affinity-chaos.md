@@ -1,10 +1,8 @@
 ---
 layout: book
-title: "IRQ Affinity Chaos"
+title: "Chapter 11: IRQ Affinity Chaos"
 date: 2025-02-11
 ---
-
-Act II: Kernel Intrusion
 
 **Chapter 12: What the IRQ Dispatch Path Will and Won't Let You Do**
 

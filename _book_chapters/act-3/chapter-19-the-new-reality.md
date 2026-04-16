@@ -4,11 +4,9 @@ title: "Chapter 19: What This Book Actually Demonstrated"
 date: 2025-12-31
 ---
 
-# Act III: Total Control
-
 # Chapter 19: What This Book Actually Demonstrated
 
-> **See also**: [Blog post]({{ site.baseurl }}/epilogue-the-new-reality.html) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+> **See also**: [Blog post]({{ site.baseurl }}/epilogue-the-new-reality.html) · [Harness](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
 Eighteen chapters, one kernel, one harness. This chapter draws a line under what was actually shown and what was not.
 

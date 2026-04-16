@@ -1,14 +1,12 @@
 ---
 layout: book
-title: "Device-cgroup Houdini"
+title: "Chapter 7: Device-cgroup Houdini"
 date: 2025-02-07
 ---
 
-Act II: Kernel Intrusion
-
 **Chapter 8: Device cgroup Bypass via LSM**
 
-> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) for the skip reasoning and [the surviving workaround variant in dBPF-pocs](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs) (e.g. `ch07-devcgroup-houdini-lsm/`).
+> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) and the surviving workaround variant at [dBPF-pocs/pocs/ch07-devcgroup-houdini-lsm/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs).
 
 I started this one expecting an easy win. Device cgroups are the standard container control for hardware access, and privileged container bypasses are well-trodden ground — Aqua and NCC Group have written about direct mknod escapes for years. My question was narrower: can a `BPF_PROG_TYPE_LSM` program flip a denied `/dev/mem` open into an allowed one without the container being privileged?
 

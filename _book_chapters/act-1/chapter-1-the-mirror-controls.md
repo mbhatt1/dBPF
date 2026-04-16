@@ -4,8 +4,6 @@ title: "Chapter 1: The Mirror Controls"
 date: 2025-01-31
 ---
 
-# Act I: Foundations of Breach
-
 # Chapter 1: The Mirror Controls
 
 > **See also**: [Blog post]({{ site.baseurl }}/the-mirror-controls.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch01-mirror-controls) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)

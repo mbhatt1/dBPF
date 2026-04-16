@@ -1,14 +1,12 @@
 ---
 layout: book
-title: "Powercap Override"
+title: "Chapter 13: Powercap Override"
 date: 2025-03-10
 ---
 
-Act II: Kernel Intrusion
-
 **Chapter 13: An x86-Only Primitive, Tested on aarch64**
 
-> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) for the skip reasoning and [the surviving workaround variant in dBPF-pocs](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs) (e.g. `ch13-powercap-override-analog/`).
+> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) and the surviving workaround variant at [dBPF-pocs/pocs/ch13-powercap-override-analog/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs).
 
 I want to be honest about this one before describing anything. Intel RAPL and the powercap framework are x86-only. On the aarch64 linuxkit kernel I'm using as my test bed, `CONFIG_POWERCAP` is off and none of the RAPL symbols exist. My loader preflighted four targets — `powercap_register_control_type`, `powercap_set_max_power_uw`, `powercap_get_max_power_uw`, `thermal_zone_device_update` — and every single one came back absent. The primary POC cannot fire on this host. I don't get to pretend otherwise.
 

@@ -1,10 +1,8 @@
 ---
 layout: book
-title: "Inode Cloak"
+title: "Chapter 10: Inode Cloak"
 date: 2025-02-10
 ---
-
-Act II: Kernel Intrusion
 
 **Chapter 11: Making Files Vanish from getdents64**
 

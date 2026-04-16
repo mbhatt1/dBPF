@@ -1,6 +1,6 @@
 ---
 layout: book
-title: "NetNS VLAN Ghost"
+title: "Chapter 15: NetNS VLAN Ghost"
 date: 2025-04-15
 ---
 

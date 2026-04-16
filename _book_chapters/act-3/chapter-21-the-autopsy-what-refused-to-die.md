@@ -6,6 +6,8 @@ date: 2026-01-11
 
 # Chapter 21: Skip Accounting — Primitives That Needed Another Kernel
 
+> **See also**: [Blog post]({{ site.baseurl }}/skip-accounting.html) · [Harness](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+
 > **Navigation**: [Chapter 20 — Taxonomy]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html)
 
 Six primitives did not produce effects on linuxkit 6.12 aarch64. Not because the BPF code was wrong; because the kernel environment did not host the surface the primitive needed to grip. There are three shapes of refusal in play: (a) no enforcement point was active at runtime, (b) BTF or the hook's target symbol was missing, (c) the target subsystem was absent from this kernel build. Each of the six is a cold case on this kernel and a live case on someone else's. The goal of this chapter is to make that distinction reproducible.

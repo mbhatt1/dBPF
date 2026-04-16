@@ -1,6 +1,6 @@
 ---
 layout: book
-title: "SCHED_FIFO Impersonator"
+title: "Chapter 14: SCHED_FIFO Impersonator"
 date: 2025-03-15
 ---
 

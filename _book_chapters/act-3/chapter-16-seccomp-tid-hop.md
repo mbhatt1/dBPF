@@ -1,6 +1,6 @@
 ---
 layout: book
-title: "Seccomp TID Hop"
+title: "Chapter 16: Seccomp TID Hop"
 date: 2025-04-20
 ---
 

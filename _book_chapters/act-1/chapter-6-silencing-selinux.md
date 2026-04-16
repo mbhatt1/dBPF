@@ -1,6 +1,6 @@
 ---
 layout: book
-title: "Silencing SELinux"
+title: "Chapter 6: Silencing SELinux"
 date: 2025-02-06
 ---
 

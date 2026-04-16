@@ -4,8 +4,6 @@ title: "Chapter 2: The OverlayFS Trojan Horse"
 date: 2025-02-01
 ---
 
-# Act I: Foundations of Breach
-
 # Chapter 2: The OverlayFS Trojan Horse
 
 > **See also**: [Blog post]({{ site.baseurl }}/the-overlayfs-trojan-horse.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch02-overlayfs) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
