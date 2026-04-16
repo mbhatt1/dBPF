@@ -183,6 +183,16 @@ The final line prints three things. `requested` is the snapshot — what the use
 
 This is a deliberately small, boring, unprivileged program. If it were not for the BPF program running alongside it, running `fw_requester` with basename `CH17_REQ_real_firmware.bin` would simply open `/tmp/CH17_REQ_real_firmware.bin`, read it, and print `ORIGINAL\n` (the seeded content). With the BPF program attached, the same invocation reads `/tmp/CH17_REQ_attacker_replacement.bin` and prints `REPLACED`. The program itself is unchanged. The kernel's view of its argument was rewritten mid-syscall.
 
+## A word about tracepoints versus kprobes here
+
+The analog attaches via a tracepoint (`tp/syscalls/sys_enter_openat`) rather than via a kprobe, and the choice merits a short justification because tracepoints and kprobes have different availability and different semantics.
+
+A kprobe binds to a kernel function address; attaching a kprobe to `__arm64_sys_openat` would work in theory on this kernel. The tradeoff is that kprobes are dynamic — they modify kernel text to install a breakpoint — and some hardened kernels disable them (`CONFIG_KPROBES=n`). Tracepoints are statically compiled trace-event entry points that the kernel developers have placed at defined points in the code; they have no kernel-text modification, and `CONFIG_TRACEPOINTS` is enabled on essentially every Linux kernel.
+
+The `sys_enter_*` tracepoints are specifically interesting because they fire at a defined point in the syscall entry machinery, before the syscall body runs, with a well-typed context struct. The context struct exposes the raw syscall arguments as an array indexed by position. For `openat(int dirfd, const char *pathname, int flags, ...)`, the args array has dirfd at index 0, the path pointer at index 1, flags at index 2. This is guaranteed by the syscall machinery; a kprobe on `__arm64_sys_openat` would have to extract the arguments from `struct pt_regs`, which on aarch64 means reading x0/x1/x2 explicitly. The tracepoint approach is portable across architectures in a way the kprobe approach is not.
+
+The cost is that tracepoints fire at a single defined point; I cannot choose to attach mid-function or at return. For the primitive demonstrated here the single defined point is exactly what I want — I need sys_enter, before `getname()` runs, with the user pointer still dereferenceable. For a primitive that needed a different window, I would have had to use kprobes and worry about the architecture-specific argument extraction.
+
 ## `ch17-acpi-wsmi-analog.bpf.c` line by line
 
 The BPF program is 120 lines, most of them declarative. I want to walk it end-to-end because every line exists for a reason.
@@ -353,6 +363,54 @@ The `e->swapped` flag records the rewrite outcome so the loader can correlate th
 
 Finish populating the scratch event, reserve a ringbuf slot, memcpy the scratch into it, submit. The pattern "fill a scratch struct, then copy it into a ringbuf reservation" is a common verifier-friendly idiom; reserving directly would work too but complicates the partial-population paths.
 
+## The verifier story behind the XOR-OR comparator
+
+I mentioned the XOR-OR reduction in passing; it deserves a full paragraph because the journey of getting it past the verifier is instructive.
+
+My first attempt was a `strncmp`-like loop:
+
+```c
+// does not verify
+static __always_inline int streq_bad(const char *s, const char *e, int n) {
+    for (int i = 0; i < n; i++) {
+        if (s[i] != e[i]) return 0;
+        if (s[i] == 0) return 1;
+    }
+    return 1;
+}
+```
+
+This verifies, but only at low `n`. Each branch `if (s[i] != e[i])` is a conditional the verifier has to track the state of; past about 16 iterations the combined state space explodes and the verifier refuses. The verifier complaint is subtle — it is not about stack, it is about "program exceeds 1 million instruction limit" or "too many loops" depending on kernel version.
+
+My second attempt tried to bound the loop more tightly:
+
+```c
+// also does not verify, for a different reason
+int diff = 0;
+#pragma unroll
+for (int i = 0; i < 32; i++) {
+    if (s[i] != expect[i]) diff = 1;
+}
+return diff == 0;
+```
+
+This fails at the verifier with a stack-slot complaint. Each `s[i]` dereference requires the verifier to prove `s + i` is in bounds of the input; with 32 such dereferences, each feeding a conditional, the verifier tracks a growing state space on its internal stack. The program ends up with more spilled state than the 512-byte BPF stack allows.
+
+The XOR-OR reduction avoids both problems by eliminating the conditional entirely:
+
+```c
+int diff = 0;
+#pragma unroll
+for (int i = 0; i < 32; i++) {
+    diff |= (int)((unsigned char)s[i] ^ (unsigned char)expect[i]);
+}
+return diff == 0;
+```
+
+Each iteration is a pure ALU operation: read `s[i]`, read `expect[i]`, XOR, OR into `diff`. No conditional. The verifier tracks `diff` as a single scalar with an upper bound of `255 * 32 = 8160` (if every byte differed, the OR accumulates all bits). The bounds are tight, the state space is trivial, the stack usage is negligible. The resulting emitted code after `#pragma unroll` is 32 straight ALU ops in a row; there is literally nothing for the verifier to be confused about.
+
+This pattern — "replace branches with ALU, let the XOR tell you the answer" — is a cornerstone of verifier-friendly BPF. It is the same pattern used in constant-time cryptography for exactly the same reason: branches introduce state the analyzer has to track. Eliminating branches eliminates state. The pattern crops up in every BPF program I have written that compares byte sequences of non-trivial length, and I still catch myself reaching for an `if` first out of habit.
+
 ## The `sys_enter` window, explicitly
 
 The reason this works at all is a specific property of how the kernel implements the `openat` syscall, and it is worth laying out explicitly because the analog hangs on it.
@@ -372,6 +430,14 @@ It would be a different story if the syscall implementation re-read the user buf
 This same windowing logic is how `bpf_probe_write_user` is used in general. The helper is only meaningful inside a syscall context where the kernel has a user pointer in hand but has not yet dereferenced it. Pre-dereference: writable, with effect. Post-dereference: writable, but the kernel has moved on and the write has no further kernel-observable effect (though it may confuse the userspace caller, which is occasionally useful too).
 
 `bpf_probe_write_user` is gated by its own CAP requirements and by the fact that programs calling it are marked unsafe and locked to `CAP_SYS_ADMIN` (or equivalent) at load. The kernel does not let an arbitrary BPF program write to arbitrary userspace; it requires the elevated capability specifically because this primitive is obviously useful for mischief. The gate is a design choice, not an accident. Users who grant `CAP_BPF + CAP_SYS_ADMIN` to an untrusted workload are granting this primitive specifically.
+
+## A note on multi-CPU concurrency
+
+One more detail the POC handles that deserves explanation: per-CPU scratch storage. Two processes named `fw_requester` could in principle be running simultaneously on different CPUs, and both could trigger the tracepoint simultaneously. If they shared a single scratch buffer, the two handlers would race and corrupt each other's event records before they reached the ringbuf.
+
+The fix is `BPF_MAP_TYPE_PERCPU_ARRAY`. Each CPU gets its own copy of the scratch map; a lookup returns the CPU-local copy; two CPUs looking up simultaneously get two different buffers. No race. The tradeoff is memory usage: the map is allocated once per CPU, so on a 16-core machine there are 16 copies. The `evt` struct is ~120 bytes, so 16 copies is under 2 KiB. The cost is negligible; the correctness gain is total.
+
+Per-CPU maps are a common pattern in BPF for exactly this reason. Any program that needs scratch space in a handler should use per-CPU, not shared. The pattern generalizes to stats: per-CPU counters incremented without atomics, aggregated on the consumer side. Higher throughput than atomic operations on a shared counter, at the cost of slightly-stale reads when the consumer drains.
 
 ## Harness wiring
 
@@ -413,6 +479,70 @@ echo "=== CH17_ANALOG_PROVEN requested=CH17_REQ_real_firmware.bin served=${AFTER
 
 `AFTER_CONTENT` is captured from the AFTER invocation's `content="..."` field via sed. `BEFORE_CONTENT` likewise from the BEFORE. `SWAPPED_COUNT` is `grep -c 'swapped=1' "$LOADER_LOG"`. Three independent measurements, one proof line.
 
+## How the BEFORE and AFTER numbers are actually computed
+
+A quick walk through the trigger's state machine, because the proof-marker line is composed from three separate measurements and getting any one of them wrong would produce a silently-invalid proof.
+
+The trigger runs in four phases: seed, BEFORE, load, AFTER.
+
+**Seed.** Two files are written into `/tmp`:
+
+```bash
+printf 'ORIGINAL\n' > "$REAL_FILE"
+printf 'REPLACED\n' > "$REPL_FILE"
+```
+
+`REAL_FILE` is `/tmp/CH17_REQ_real_firmware.bin` and contains the literal string `ORIGINAL`. `REPL_FILE` is `/tmp/CH17_REQ_attacker_replacement.bin` and contains the literal string `REPLACED`. These are distinct non-empty strings because the trigger's proof relies on distinguishing them, and a one-character difference would be harder to spot in the output.
+
+**BEFORE.** The trigger runs `fw_requester` with basename `CH17_REQ_real_firmware.bin` and captures stdout:
+
+```bash
+BEFORE_OUT="$(echo "CH17_REQ_real_firmware.bin" | "$REQUESTER" 2>&1)"
+BEFORE_CONTENT="$(echo "$BEFORE_OUT" | sed -n 's/.*content="\([^"]*\)".*/\1/p')"
+```
+
+The sed extracts the `content="..."` field from the requester's output. The expected value is `ORIGINAL`, because at this point no BPF program is attached and the path composition proceeds normally. This measurement is the baseline: if it returns anything other than `ORIGINAL` the test setup is broken and the rest of the proof is invalid.
+
+**Load.** The BPF loader is spawned in the background and the trigger waits for the `[ch17-analog] attached` signal on stderr:
+
+```bash
+"$BIN" >"$LOADER_LOG" 2>&1 &
+LOADER_PID=$!
+for _ in $(seq 1 100); do
+    grep -q "\[ch17-analog\] attached" "$LOADER_LOG" && break
+    sleep 0.1
+done
+```
+
+The polling loop gives the loader up to 10 seconds to attach. If the attach never succeeds, the trigger bails with a message to stderr and the harness records `fail`.
+
+**AFTER.** The trigger runs `fw_requester` a second time with the same basename and captures stdout:
+
+```bash
+AFTER_OUT="$(echo "CH17_REQ_real_firmware.bin" | "$REQUESTER" 2>&1)"
+AFTER_CONTENT="$(echo "$AFTER_OUT" | sed -n 's/.*content="\([^"]*\)".*/\1/p')"
+```
+
+Same invocation, different result if the rewrite worked. The expected value with the BPF probe attached is `REPLACED`, because the BPF program rewrites the user path before `getname()` reads it.
+
+The `SWAPPED_COUNT` is computed from the loader log:
+
+```bash
+SWAPPED_COUNT="$(grep -c 'swapped=1' "$LOADER_LOG")"
+```
+
+Each time the BPF program successfully rewrites a user buffer, it emits a ringbuf event with `swapped=1`; the loader prints each event to stdout. `grep -c 'swapped=1'` counts those lines. In the trigger's one-invocation AFTER flow, the expected count is 1.
+
+The proof-marker line:
+
+```bash
+echo "=== CH17_ANALOG_PROVEN requested=CH17_REQ_real_firmware.bin served=${AFTER_CONTENT:-?} before_content=${BEFORE_CONTENT:-?} swapped_events=${SWAPPED_COUNT} disclaimer=\"...\" ==="
+```
+
+The fields are assembled from the three measurements. `requested=` is the known basename the requester was invoked with. `served=` is `AFTER_CONTENT`. `before_content=` is `BEFORE_CONTENT`. `swapped_events=` is `SWAPPED_COUNT`. `disclaimer=` is hard-coded. The `${...:-?}` default values (`?` if the variable is empty) are defensive: if any measurement failed, the field shows `?` rather than disappearing, so the reviewer can see which measurement went missing.
+
+This is more ceremonial than it needs to be, and that is intentional. Any one of the three measurements in isolation could be spurious — a hardcoded string, a leftover file, an accidentally-wildcarded match — but three independent measurements combined make the proof robust. A reviewer who doubts the claim can re-run the trigger and check each field manually.
+
 ## What the real primitive looks like on x86
 
 For completeness, here is the x86 version of this primitive that the original chapter drafted and that this analog stands in for.
@@ -441,6 +571,28 @@ Same primitive, different surface. The caller has a pointer to a string; the BPF
 WSMI on Dell and HP laptops extends this further. The WSMI driver registers callback handlers for specific AML methods that the EC invokes on power events. An attacker who rewrote the AML pathname in flight could, in principle, redirect a power-event callback to a different method — a method that, for example, pokes a SMBus device the attacker controls, or that the AML interpreter evaluates to a side effect the attacker wants. The analogue on WSMI-capable hardware would be a more interesting target than simple `acpi_evaluate_object`, but the primitive shape is identical: rewrite the string, let the kernel follow the rewrite.
 
 I did not test either of these on real x86 hardware for this book. Both scenarios are left as future work — or, more honestly, as things that deserve a different book on a different kernel. This chapter's contribution is the motion, demonstrated on a surface that is actually live on the test kernel, with honest labelling that says so.
+
+## What `bpf_probe_write_user` is actually allowed to do
+
+A short clarification on the write helper because it is the load-bearing capability in this chapter.
+
+`bpf_probe_write_user(void *dst, const void *src, u32 size)` writes `size` bytes from a kernel-side source into a userspace destination. The helper is documented as "use this very rarely and very carefully" in `include/uapi/linux/bpf.h`, because writing to arbitrary user memory from kernel context is an obvious footgun.
+
+The constraints the kernel imposes at load time:
+- The calling program type must be one that the kernel permits to use the helper. Tracing programs (kprobes, tracepoints, perf_event) are on the list; socket filters and XDP programs are not.
+- The caller must have `CAP_SYS_ADMIN`, not just `CAP_BPF`. This is stricter than most BPF helpers; the kernel is explicit that this one is privileged.
+- The verifier requires the destination and size arguments to be tracked correctly: the destination must be a pointer, the size must be a scalar within bounds.
+
+The constraints the kernel imposes at runtime:
+- The destination user page must be resident (not swapped out, not demand-paged).
+- The destination must be writable by the target task (permission bits on the VMA).
+- The destination must not be in a protected region (e.g., kernel memory mistakenly handed to the helper; the helper does a user-vs-kernel check).
+
+On any of those runtime failures, the helper returns `-EFAULT` (or another negative errno) and does not write. The BPF program can inspect the return value to know whether the write succeeded. Our POC does exactly this: `rc = bpf_probe_write_user(...)`, `e->swapped = (rc == 0)`. If `swapped` is 0 in a logged event, the attack was prevented by one of the runtime checks.
+
+An important corollary: this helper is not a general memory-manipulation primitive. It cannot write across address spaces (it writes into *current*'s user space). It cannot write to a page that is not present. It cannot bypass the VMA protection bits. The useful attack envelope is "write a few bytes into a user buffer the current task has writable, during a syscall window the kernel has arranged so the user page is definitely mapped."
+
+That envelope sounds narrow when stated directly, and it is — which is why the kernel tolerates the helper at all. But the envelope is exactly large enough to cover this POC's path-rewrite attack, the ch05 cgroup-read-buffer-zero attack, and the ch10 getdents-buffer-splice attack. It is precisely the shape the error-injection-equivalent-for-writes tool wants.
 
 ## Detecting the analog
 

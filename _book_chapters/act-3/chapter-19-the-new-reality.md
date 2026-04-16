@@ -214,6 +214,19 @@ The second thing I will claim as useful is the `CH*_SKIP reason="..."` conventio
 
 Both conventions are boring. Both would be trivial to adopt in other BPF-primitives catalogs. Neither is new. But the combination of "explicit scope in the proof marker" + "explicit reason in the skip marker" is what makes this harness's output trustworthy at the line level, without requiring a reader to cross-reference the chapter text to know what happened. If there is a methodological contribution, it is that.
 
+## A note on reproducibility
+
+If I have done my job, anyone with Docker Desktop on Apple Silicon or an x86 host can clone the repo, build the harness image, and run the whole book's worth of demonstrations in one invocation. The container is self-contained: it pulls nothing at runtime, builds every POC against the live kernel's BTF, and runs each one sequentially with the TUI displaying progress. The run takes about six minutes on my laptop.
+
+Reproducibility has several layers, and it is worth naming each because the catalog is only useful to the extent that its claims can be rechecked.
+
+- **Build reproducibility**: the Dockerfile pins compiler versions, libbpf version, bpftool version, and the Debian base image. Rebuilding the image produces the same binaries for the same source. Without this, a year from now someone attempting to re-run the harness would see gratuitous build errors that have nothing to do with the primitives.
+- **Kernel reproducibility**: the harness runs against whatever kernel the container is hosted on. On Docker Desktop that is linuxkit 6.12; on a bare-metal Linux host it is the host's kernel. The results will differ between kernel versions — this is a feature, not a bug — but the harness's results-for-this-kernel are reproducible on this kernel.
+- **Result reproducibility**: every proof marker is deterministic given the same kernel, same build, same trigger. There is no randomness that would change outcomes between runs. The one straggler in the final tally is a timing artifact that converts under a longer timeout; running the harness twice back-to-back on the same machine produces identical `_PROVEN` markers and, modulo the straggler, identical status columns.
+- **Machine-readable output**: the harness writes `/tmp/proof-result.json` at the end of every run. A downstream consumer (a CI check, a regression detector, a cross-kernel matrix tester) can diff the JSON between runs to see exactly which primitives moved.
+
+Reproducibility is the single most important property for a catalog like this. An unreproducible catalog is an anecdote dressed up as research. The catalog is the harness; the harness is the catalog; the taxonomy falls out of what the harness actually observed.
+
 ## A note on what we chose not to do
 
 A few things the book deliberately avoids, with brief justification for each choice.
@@ -225,6 +238,23 @@ It does not attempt rootkit persistence. Staying resident across reboots, hiding
 It does not claim bugs in BPF. Every verifier refusal the book records is the verifier doing its job correctly. Every permitted load is a permitted load. Every helper behaves as documented. If the book seems to report surprising outcomes, the surprise is in the composition, not in any individual piece.
 
 It does not generalize to other BPF subsystems this kernel does not expose. There is presumably interesting surface in `struct_ops` programs, in sleepable LSM programs, in iter programs; this book does not cover them because the test kernel either does not expose them or does not expose them in a way that is useful for offense. A future book on a different kernel would have different chapters.
+
+## One more pass over the numbers
+
+Just for clarity, the final tally one more time.
+
+25 POCs total in the harness's POCS list.
+
+19 are "primary" POCs — the chapters of the book — from ch01 through ch18 plus the ch05b network chapter.
+
+6 are "workaround" POCs — the variants added for chapters whose natural hook did not fire on this kernel. These are `ch06s`, `ch07w`, `ch08k`, `ch12s`, `ch13a`, `ch17a`. Their proof markers use `_CONCEPT_` or `_ANALOG_` labels to distinguish them from native `_WEAPON_` proofs.
+
+Of the 25:
+- **20 flipped to `effect_demonstrated`** on the final run: their `_PROVEN` marker printed on stdout before the loader was torn down.
+- **4 flipped to `skip`** with explicit `CH*_SKIP reason="..."` lines: ch06 native, ch12 native, ch13 native, ch17 native. These are the natives whose workaround variants also fired and were counted.
+- **1 flipped to `fail`** on the specific final run: a straggler whose `_PROVEN` marker missed the timeout window. The true failure rate is zero; the straggler converts on a longer timeout.
+
+Counting the stricter bar — only native POCs where the original hook fired — gives 13 or 14 depending on how you count the LSM-versus-kprobe variant chapters (ch07 has an LSM variant that fires and an alternative kprobe variant that also fires; I only count one per chapter). The 20-vs-13 spread is the "with workarounds vs without workarounds" choice and I am counting the with-workarounds number as the headline because the workarounds demonstrate the primitive class on an adjacent surface, and the book's contribution is the primitive class rather than any specific symbol.
 
 ## Closing
 

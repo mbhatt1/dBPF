@@ -461,6 +461,22 @@ An attacker who has compromised a single container on the host (through some oth
 
 The defense here is specifically about not granting `CAP_BPF` to containers that do not need it. The Datadog agent needing `CAP_BPF` on the host is reasonable; a container running `apt-get install` and `make` does not need `CAP_BPF` and should not have it. Container runtimes that default to inheriting host capabilities are the problem; container runtimes that default to dropping capabilities unless explicitly granted are the defense.
 
+## What a complete uid-hiding attack looks like
+
+A complete uid-hiding implementation, not in this POC but worth sketching, hits every surface that exposes uid. The list is longer than it appears.
+
+- `getuid`, `geteuid`, `getresuid` — hooked via kretprobe + override, as in this POC (plus the `resuid` variant for the r/e/s triple).
+- `getgid`, `getegid`, `getresgid` — same pattern, but for gids. Needed to close the `uid=0 gid=1001` tell.
+- `getgroups` — supplementary groups. Hooked via kretprobe + override with a constant return, or via `bpf_probe_write_user` on the user-provided group array to zero it.
+- `setuid`, `setgid`, `setresuid`, `setresgid` — these don't query uid, they set it, but they return an error if the caller lacks `CAP_SETUID`. A complete attack overrides their returns to make the caller think the setuid succeeded. Kernel-side cred remains unchanged — this is purely a userspace illusion — but a program that tried to drop privileges and then branched on "did drop_priv() succeed" would be fooled.
+- `/proc/self/status` — the `Uid:` line. The procfs read path is `sys_read` + `proc_pid_status`. Rewriting would require a `bpf_probe_write_user` in the `sys_exit_read` path with content-aware substitution. This is harder than the syscall-return forge because the output is variable-length text that has to be parsed, rewritten, and checksummed. I did not implement this; the implementation exists in published rootkit tooling.
+- `/proc/self/loginuid`, `/proc/self/sessionid` — similar to status, similar hardness.
+- `/etc/passwd`/`/etc/shadow` read paths — not typically the target because they are read via library functions (`getpwuid`) that are themselves implemented on top of the syscalls above. But a defender who reads the files directly would see truth, so a truly complete uid-hide would rewrite those reads too.
+- `audit` records — uid is embedded in audit records by the audit subsystem, which reads `current->cred` directly. A complete uid-hide would need to also suppress audit records for the attacker's operations, which is a different primitive entirely (see chapter 3).
+- `ps` / `top` output — read from `/proc/<pid>/status`, covered above.
+
+The POC in this chapter covers only `getuid` and `geteuid` because the point is to demonstrate the class, not to ship a production-ready uid-hiding rootkit. A reader who wanted the full implementation can extend the POC following the list above; the extensions are mechanical. Each additional hook extends the illusion by one more surface and extends the detection surface by one more attach point.
+
 ## Historical lineage
 
 I want to give credit to the prior art here, because this primitive has a long pedigree and the BPF version is one more point on a decades-old curve.
@@ -472,6 +488,27 @@ The second generation is the sudo token-validation CVEs of the 2000s and 2010s. 
 The third generation is BPF-mechanized. That is this chapter. The pattern is not new; the mechanism of exploitation is new, in the sense that `CAP_BPF` + error-injection + kretprobe gives you a reliable, attach-in-one-line knob for the same class of bug across any function on the error-injection list. It is a force multiplier, not a new class.
 
 Credit the class, not the technique. The defense is the same defense Sendmail and sudo learned the hard way: enforce at the kernel, not at the query. If your code consults `getuid()` to make a security decision, it is wrong regardless of whether a BPF program is forging the return value, because the next generation of attack tools will forge the return value by some other means if this one gets closed. The problem is the consultation pattern, not the specific forging mechanism.
+
+## A look at the ringbuf event stream
+
+The loader's stdout during a typical run looks like this (annotated):
+
+```
+[token] symbol=__arm64_sys_getuid	status=present       # preflight succeeded
+[token] symbol=__arm64_sys_geteuid	status=present      # preflight succeeded
+[token] attached=2	skipped=0                           # both programs attached
+[token] tag=target	mode=wildcard                        # wildcard install done
+[token] status=ready	msg=token bypass active          # ready for traffic
+[token] FORGE pid=19481 comm=sh getuid: 1000 -> 0 (root)  # first forged call
+[token] FORGE pid=19482 comm=id geteuid: 1000 -> 0 (root) # `id` called geteuid
+[token] FORGE pid=19483 comm=whoami getuid: 1000 -> 0 (root)  # `whoami` called getuid
+```
+
+Every `FORGE` line is one forged syscall. The fields are the pid of the calling process, the comm (executable name), the syscall that was forged, the original return value, and the forced `0`. In practice the rate is low enough for a human to read in real time if the loader has an interactive terminal; under automated load it can be thousands per second, which is why the ringbuf is 256 KiB.
+
+Non-forged events (where `is_target()` returns false) are not logged — the `emit` helper fills the ringbuf and the userspace `handle` callback prints only those with `flipped=1`. This keeps the stdout readable while still logging every forge.
+
+The loader also accepts `-v` for verbose libbpf output; under `-v` the kernel's libbpf prints internal debugging information about program load, map creation, and attach. This is essential when something goes wrong and invaluable when developing new primitives; for normal operation it is noise.
 
 ## Detection
 
@@ -510,6 +547,23 @@ Looking forward from the third-generation BPF version: the fourth generation of 
 There is a good engineering argument that syscall return values should never be treated as authoritative for security by any userspace code. Kernel enforcement points exist for exactly this reason. The engineering reality is that cross-checking is expensive (two syscalls instead of one, plus parsing overhead) and most codebases do not bother. The attack surface grows every time a new userspace component reads `getuid` and makes a decision based on it. Without coordinated change in how userspace components reason about identity, the primitive class demonstrated in this chapter stays open indefinitely.
 
 This is the point at which a researcher pounds the table and says "we need a better syscall for this." We do not need a better syscall. We need consumers to stop asking questions of the kernel whose answers depend on the kernel not being lied to via primitives the same consumers' capabilities grant. That is a policy problem, not a mechanism problem, and it is the kind of problem that software ecosystems are consistently bad at solving.
+
+## A note on the loader's lifecycle
+
+The loader handles SIGINT and SIGTERM to unwind cleanly:
+
+```c
+struct sigaction sa = { .sa_handler = on_signal };
+sigemptyset(&sa.sa_mask);
+sigaction(SIGINT, &sa, NULL);
+sigaction(SIGTERM, &sa, NULL);
+```
+
+On signal, the main poll loop sees `stop = 1` at its next iteration and exits. The `ch18_token_bypass_bpf__destroy(s)` call at the end of `main` detaches the programs via libbpf's skeleton API; the kernel side tears down the kretprobes and unregisters them. After the loader exits, the error-injection overrides are gone, and userspace observes honest uids again.
+
+This matters because an attacker who wanted persistence would need to avoid the clean-unload path — either by pinning the programs to `/sys/fs/bpf/` so they survive the loader exit, or by holding the loader open in a way that cannot be SIGKILLed (which is not possible without elevated privileges the attacker may not have). The POC does not pin because the goal is a short demonstration; a real persistence attack would pin to a bpffs mount and keep the programs live across loader restarts.
+
+Pinning is a separate primitive. It is also a separate detection surface: `ls /sys/fs/bpf/` on any host reveals the pinned BPF objects, which is a strong signal. Pinned programs that no living process has a reference to are particularly suspicious — they represent attack persistence without a parent process to own them.
 
 ## Hook points
 
