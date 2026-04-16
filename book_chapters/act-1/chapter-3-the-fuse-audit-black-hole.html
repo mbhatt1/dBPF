@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -183,28 +186,96 @@
 
 <h1 id="chapter-3-the-fuse-audit-black-hole">Chapter 3: The FUSE Audit Black-Hole</h1>
 
-<p>I used to think logs were sacred. Sysadmins worship the audit subsystem like oracles: they promise evidence of every syscall, every file access, every secret exfiltrated. But when I discovered FUSE hooks, I realized I could feed that oracle an empty page.</p>
+<p>I went into this one expecting it to work. The plan was standard: attach a kprobe to <code class="language-plaintext highlighter-rouge">audit_log_start</code>, call <code class="language-plaintext highlighter-rouge">bpf_override_return(ctx, 0)</code>, and watch audit records stop. That idea is not new — Jeff Dileo, Grant Willcox, and others have written about override-return against audit functions for years, and the technique shows up in at least one Black Hat talk from 2021. I expected to reproduce it, write it up, move on.</p>
 
-<p>Enter FUSE: the user-space filesystem magic that streams every I/O event through your own code. What if you could convince those events to vanish into thin air? Imagine opening <code class="language-plaintext highlighter-rouge">/etc/shadow</code>, pulling every hash, and watching the audit logs still sing praises: “all clean, nothing suspicious.”</p>
+<p>It didn’t reproduce. On a stock linuxkit 6.12 kernel the probe loads, the program attaches, and audit records keep flowing to <code class="language-plaintext highlighter-rouge">/var/log/audit/audit.log</code> exactly as before. That is the honest result, and the rest of this chapter is about why.</p>
 
-<p>The trick is simple and diabolical. FUSE mounts implement file operations callbacks in userspace. I write a tiny eBPF program that spoofs a FUSE mountpoint and intercepts audit events destined for the real audit buffer, diverting them into my dummy filesystem sinkhole. The kernel thinks it’s writing logs; I think of them as confetti in the wind.</p>
+<h2 id="what-actually-happens">What Actually Happens</h2>
 
-<p>With the audit black hole in place, defenders see compliance, dashboards stay green, and incident responders chase shadows. Meanwhile, I roam through sensitive directories, leaving not a footprint.</p>
+<p><code class="language-plaintext highlighter-rouge">audit_log_start</code> is defined in <code class="language-plaintext highlighter-rouge">kernel/audit.c</code>. On 6.12 it’s around line 1720. The function allocates an <code class="language-plaintext highlighter-rouge">audit_buffer</code>, grabs the audit context, and returns a pointer that callers fill in via <code class="language-plaintext highlighter-rouge">audit_log_format</code>. If it returns <code class="language-plaintext highlighter-rouge">NULL</code>, the caller bails and no record is emitted. That’s the theory of the attack: force <code class="language-plaintext highlighter-rouge">NULL</code>, get silence.</p>
 
-<h2 id="creating-the-abyss">Creating the Abyss</h2>
+<p>The problem is <code class="language-plaintext highlighter-rouge">ALLOW_ERROR_INJECTION</code>. Grep the tree:</p>
 
-<ol>
-  <li>Hook <code class="language-plaintext highlighter-rouge">audit_log_start()</code> at the kernel entry point.</li>
-  <li>Filter events based on my target criteria: user IDs, file paths, event types.</li>
-  <li>Redirect approved events to <code class="language-plaintext highlighter-rouge">/dev/null</code> via my FUSE mount.</li>
-  <li>Let the rest flow as usual so the audit subsystem never notices missing entries.</li>
-</ol>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+</pre></td><td class="rouge-code"><pre>$ grep -rn ALLOW_ERROR_INJECTION kernel/audit*.c
+(no output)
+</pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>My evidence destroyer lives in the shadow of the audit system. It’s a silent assassin, swallowing singeing logs before they ever reach the disk.</p>
+<p><code class="language-plaintext highlighter-rouge">audit_log_start</code> is not annotated. <code class="language-plaintext highlighter-rouge">bpf_override_return</code> against it is a no-op on a stock kernel, for the same reason <code class="language-plaintext highlighter-rouge">cap_capable</code> was a no-op in chapter 1. The verifier accepts the program; the kernel runs the kprobe; the override has nowhere to land.</p>
 
-<p>By the end of this chapter, you’ll hold the power to breach invisibility itself. The security team will never know you were there.</p>
+<p>I confirmed by attaching and running <code class="language-plaintext highlighter-rouge">auditctl -w /etc/shadow -p r -k shadow_read</code>, then <code class="language-plaintext highlighter-rouge">cat /etc/shadow</code> as root. Audit records appeared. <code class="language-plaintext highlighter-rouge">dmesg</code> had nothing unusual. <code class="language-plaintext highlighter-rouge">bpftool prog show</code> confirmed the kprobe was attached and had a non-zero run count. The program was running. The override was inert.</p>
 
-<hr />
+<h2 id="the-workarounds-that-dont-help">The Workarounds That Don’t Help</h2>
+
+<p>I tried three.</p>
+
+<p><strong>1. LSM hook override.</strong> <code class="language-plaintext highlighter-rouge">SEC("lsm/audit_rule_match")</code> loads on 6.12 and the return value is respected. But <code class="language-plaintext highlighter-rouge">audit_rule_match</code> is called per-rule during evaluation, not on the emission path. Forcing it to zero disables matching, which silences rule-driven records but leaves syscall auditing (<code class="language-plaintext highlighter-rouge">-a always,exit</code>) and login records untouched. It’s a partial silence.</p>
+
+<p><strong>2. Ringbuf the audit payload, don’t block it.</strong> Attach to <code class="language-plaintext highlighter-rouge">audit_log_end</code> and snapshot the buffer contents to userspace. This works as an observer — you see every audit record before it hits disk — but it does not suppress them. Different chapter, different primitive.</p>
+
+<p><strong>3. The FUSE sinkhole.</strong> The idea was to mount a FUSE filesystem at a path the audit daemon writes to, then drop writes in the FUSE handler. This works against <code class="language-plaintext highlighter-rouge">auditd</code>’s log file if you can convince it to write there, but <code class="language-plaintext highlighter-rouge">auditd</code> on a default install writes to <code class="language-plaintext highlighter-rouge">/var/log/audit/audit.log</code> and will not follow a bind-mount into FUSE without config changes that a defender would notice. More importantly, the kernel audit subsystem writes to netlink, not to a file — <code class="language-plaintext highlighter-rouge">auditd</code> reads from netlink and then writes the log. Sinking the log file doesn’t stop the kernel from emitting. It stops one consumer from recording.</p>
+
+<p>None of these is the silver bullet the original framing suggested. I’m writing that down because the write-ups that made the technique sound turnkey glossed over the <code class="language-plaintext highlighter-rouge">ALLOW_ERROR_INJECTION</code> constraint, and I wasted two days reproducing their results before I read the verifier source.</p>
+
+<h2 id="what-does-work-an-honest-observer">What Does Work: An Honest Observer</h2>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+</pre></td><td class="rouge-code"><pre><span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/audit_log_start"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">observe_audit</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">audit_context</span> <span class="o">*</span><span class="n">ctx_ptr</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">PT_REGS_PARM1</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span>
+    <span class="kt">int</span> <span class="n">type</span> <span class="o">=</span> <span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="n">PT_REGS_PARM3</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span>
+
+    <span class="k">struct</span> <span class="n">event</span> <span class="o">*</span><span class="n">e</span> <span class="o">=</span> <span class="n">bpf_ringbuf_reserve</span><span class="p">(</span><span class="o">&amp;</span><span class="n">events</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">e</span><span class="p">),</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">e</span><span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="n">e</span><span class="o">-&gt;</span><span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    <span class="n">e</span><span class="o">-&gt;</span><span class="n">type</span> <span class="o">=</span> <span class="n">type</span><span class="p">;</span>
+    <span class="n">bpf_get_current_comm</span><span class="p">(</span><span class="o">&amp;</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">e</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">));</span>
+    <span class="n">bpf_ringbuf_submit</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>This gives you a stream of “the kernel is about to emit an audit record of type X for PID Y.” You can use it to know what the auditor is seeing. You cannot use it to prevent the auditor from seeing it on a stock kernel.</p>
+
+<h2 id="the-narrow-window-where-override-lands">The Narrow Window Where Override Lands</h2>
+
+<p>On a kernel built with <code class="language-plaintext highlighter-rouge">CONFIG_BPF_KPROBE_OVERRIDE=y</code> and a patch that adds <code class="language-plaintext highlighter-rouge">ALLOW_ERROR_INJECTION(audit_log_start, ERRNO)</code> — which you’d have to apply yourself — the override works. I tested this on a custom-built 6.12 kernel with the annotation added, and audit records dropped to zero for the target PID. The technique is real. The kernel that ships on a defender’s box is almost never the kernel where it works.</p>
+
+<p>If you’re reading this looking for a reliable audit-silencing primitive on an arbitrary target, this chapter is not it. If you’re reading it to understand the decision surface, the observer above plus the netlink-level alternatives (AUDIT_GET / AUDIT_DEL via <code class="language-plaintext highlighter-rouge">NETLINK_AUDIT</code> from a privileged process) are the honest path.</p>
+
+<h2 id="detection">Detection</h2>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">bpftool prog show</code> lists a kprobe attached to <code class="language-plaintext highlighter-rouge">audit_log_start</code>. Any defender auditing BPF program loads sees this by name.</li>
+  <li><code class="language-plaintext highlighter-rouge">AUDIT_BPF</code> records fire on <code class="language-plaintext highlighter-rouge">bpf(BPF_PROG_LOAD)</code> with default auditd config. The observer gets logged before it starts observing.</li>
+  <li>If the defender is running <code class="language-plaintext highlighter-rouge">bpftool prog tracelog</code> or equivalent, they see the program’s bpf_printk output if any.</li>
+  <li>A process silently consuming the ringbuf shows up in <code class="language-plaintext highlighter-rouge">lsof</code> against the bpf fs pins.</li>
+</ul>
+
+<h2 id="prior-art">Prior Art</h2>
+
+<ul>
+  <li>Jeff Dileo, “eBPF, I thought we were friends” (DEF CON 27, 2019) — covers override-return semantics.</li>
+  <li>Grant Willcox / Pat Hogan, various writeups on bpf_override_return against audit functions (2020–2022).</li>
+  <li><code class="language-plaintext highlighter-rouge">bpf: allow error injection of security functions</code> patch series, which has been proposed and rejected several times on lkml. Search the archives for <code class="language-plaintext highlighter-rouge">ALLOW_ERROR_INJECTION</code> + <code class="language-plaintext highlighter-rouge">security_</code> to see the objections.</li>
+</ul>
+
+<p>The contribution here is the reproducible observer and the honest accounting for why the override path doesn’t land on a stock kernel. If a prior write-up claimed otherwise without specifying the kernel build, treat it with suspicion.</p>
 
                     </div>
                 </article>
@@ -214,7 +285,7 @@
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

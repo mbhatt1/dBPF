@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 20: What We Proved — The Taxonomy | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="/dBPF/assets/css/book.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark'
+    });
+  });
+</script>
+
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Chapter 20: What We Proved — The Taxonomy | Diabolical eBPF: Linux Red Team Field Manual</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Chapter 20: What We Proved — The Taxonomy" />
+<meta name="author" content="Diabolical eBPF" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
+<meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-20-the-autopsy-what-we-proved" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-20-the-autopsy-what-we-proved" />
+<meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2026-01-10T00:00:00+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Chapter 20: What We Proved — The Taxonomy" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2026-01-10T00:00:00+00:00","datePublished":"2026-01-10T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 20: What We Proved — The Taxonomy","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-20-the-autopsy-what-we-proved"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-20-the-autopsy-what-we-proved"}</script>
+<!-- End Jekyll SEO tag -->
+
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <a href="/dBPF/" class="site-title">Diabolical eBPF: Linux Red Team Field Manual</a>
+            </div>
+            <div class="sidebar-content">
+                
+                
+                    
+                    
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Preface
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-mirror-controls.html" >
+                        The Mirror Controls
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-overlayfs-trojan-horse.html" >
+                        The OverlayFS Trojan Horse
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-fuse-audit-black-hole.html" >
+                        The FUSE Audit Black-Hole
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-phantom-syscall.html" >
+                        The Phantom Syscall
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-ghost-nic.html" >
+                        The Ghost NIC
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/slipping-the-cgroup-leash.html" >
+                        Slipping the Cgroup Leash
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/silencing-selinux.html" >
+                        Silencing SELinux
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/device-cgroup-houdini.html" >
+                        Device‑cgroup Houdini
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/keyring-heist.html" >
+                        Keyring Heist
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/pid-namespace-doppelg-nger.html" >
+                        PID Namespace Doppelgänger
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/inode-cloak.html" >
+                        Inode Cloak
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/irq-affinity-chaos.html" >
+                        IRQ Affinity Chaos
+                    </a>
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+            </div>
+        </nav>
+
+        <div class="content-wrapper">
+            <main class="content">
+                <article class="post">
+                    <header class="post-header">
+                        <h1 class="post-title">Chapter 20: What We Proved — The Taxonomy</h1>
+                        
+                        <time class="post-date" datetime="2026-01-10T00:00:00+00:00">
+                            January 10, 2026
+                        </time>
+                        
+                    </header>
+
+                    <div class="post-content">
+                        <h1 id="chapter-20-what-we-proved--the-taxonomy">Chapter 20: What We Proved — The Taxonomy</h1>
+
+<p>The harness ran nineteen POCs on kernel 6.12.54-linuxkit aarch64 via Docker Desktop. Thirteen produced BEFORE/AFTER proof markers on stdout. The remaining six either required architectural context this kernel does not expose (BTF for a target struct was absent, or the subsystem — powercap RAPL, WMI on ACPI — was not present), or the program loaded and attached cleanly but sat on an enforcement point that was not active at runtime. Chapter 21 accounts for those. This chapter walks only the ones that produced effects, and puts them in five classes. The five-class taxonomy is the durable artifact of this book.</p>
+
+<h2 id="the-rule-for-inclusion">The rule for inclusion</h2>
+
+<p>Each trigger must print a BEFORE line and an AFTER line showing state that actually changed, and a machine-grep-able <code class="language-plaintext highlighter-rouge">CHxx_PROVEN</code> marker must appear on stdout before the loader is torn down. Anything less is observation, not a proven primitive. “The kprobe fired and we logged the arguments” is not a primitive in this book; that is a telemetry feature. The bar is: userspace or the kernel saw something different after the probe attached than it saw before.</p>
+
+<h2 id="the-taxonomy">The taxonomy</h2>
+
+<h3 id="class-i--return-value-override-at-the-api-boundary">Class I — Return-value override at the API boundary</h3>
+
+<p>The kernel’s computation happened; the caller sees a different answer. This class is implemented with <code class="language-plaintext highlighter-rouge">kretprobe + bpf_override_return</code> (requires the target to be on <code class="language-plaintext highlighter-rouge">/sys/kernel/debug/error_injection/list</code>), or with the BPF LSM <code class="language-plaintext highlighter-rouge">fmod_ret</code> attach type (requires <code class="language-plaintext highlighter-rouge">CONFIG_BPF_LSM=y</code> and the target hook to be present), or with <code class="language-plaintext highlighter-rouge">XDP_DROP</code> at the netdev layer. All three share a shape: observe the kernel decision, replace the return value, let the caller proceed on the forged answer.</p>
+
+<p>Representative chapters: ch01 (cap_capable / selinux_file_permission override — marker <code class="language-plaintext highlighter-rouge">CH01_WEAPON_PROVEN flips=N</code>), ch14 (sched_setscheduler forge to pretend SCHED_FIFO promotion succeeded — marker <code class="language-plaintext highlighter-rouge">SCHED_WEAPON_PROVEN flips=N</code>), ch18 (token-bypass syscall return forge — marker <code class="language-plaintext highlighter-rouge">TOKEN_FORGE_PROVEN uid_forges=N</code>), ch06 and ch07 LSM variants (SELinux AVC and devcgroup permission flips — markers <code class="language-plaintext highlighter-rouge">CH06_PROVEN flipped=N</code>, <code class="language-plaintext highlighter-rouge">CH07_CONCEPT_PROVEN before_rc=N after_rc=0</code>).</p>
+
+<p>The framing matters: this class is an illusion against userspace consumers of the syscall return. Kernel-side decisions that happen later in the call chain — a subsequent LSM check on <code class="language-plaintext highlighter-rouge">current-&gt;cred</code>, a capability check performed inside the kernel against live credentials — are unaffected. The override lies to the userspace caller. It does not change what the kernel actually did.</p>
+
+<h3 id="class-ii--userspace-buffer-rewrite-via-bpf_probe_write_user">Class II — Userspace buffer rewrite via <code class="language-plaintext highlighter-rouge">bpf_probe_write_user</code></h3>
+
+<p>The kernel produces a correct result and writes it to a userspace buffer. A BPF program waits for the syscall to return, computes where the buffer lives, and mutates it before the caller regains control. The caller then reads the mutated buffer as if it were the kernel’s answer.</p>
+
+<p>Representative chapters: ch05 (cgroup memory accounting — before <code class="language-plaintext highlighter-rouge">after_usage</code> reflects real allocation, after <code class="language-plaintext highlighter-rouge">zeroed=yes patched_events=N</code>, marker <code class="language-plaintext highlighter-rouge">CH05_PROVEN before_usage=X after_usage=0 zeroed=yes</code>), ch10 (getdents64 d_reclen swallow to hide directory entries — marker <code class="language-plaintext highlighter-rouge">CLOAK_PROVEN before_count=4 after_count=2 hidden=2 stat_still_works=yes</code>).</p>
+
+<p>The primitive needs a stable window: the kernel has written the buffer, the process has not yet been returned control, the memory page is still mapped and not about to be unmapped. <code class="language-plaintext highlighter-rouge">kretprobe</code> or <code class="language-plaintext highlighter-rouge">tp/syscalls/sys_exit_*</code> gives that window.</p>
+
+<h3 id="class-iii--ringbuf-exfiltration-of-kernel-internal-state">Class III — Ringbuf exfiltration of kernel-internal state</h3>
+
+<p>Observation, not modification. A BPF program reads a kernel structure that userspace could not otherwise see — a credential, a key description, a seccomp decision for a sibling thread — and copies it out-of-band through a BPF ringbuf that the privileged loader is draining. The victim syscall returns whatever it would have returned; the fact of the read is the primitive.</p>
+
+<p>Representative chapters: ch03 (FUSE request metadata via fentry — marker <code class="language-plaintext highlighter-rouge">CH03_PROVEN variant=fentry before=N after=M</code>), ch04 (phantom syscall field leakage — marker <code class="language-plaintext highlighter-rouge">CH04_PROVEN leaked_fields=N</code>), ch09 (PID-namespace cross-mapping — marker <code class="language-plaintext highlighter-rouge">CH09_PROVEN host_pid=N mapped=yes</code>), ch11 (per-IRQ timing sidechannel — marker <code class="language-plaintext highlighter-rouge">CH11_PROVEN events=N unique=M per_event_timing=yes</code>), ch16 (seccomp decision for another TID — marker <code class="language-plaintext highlighter-rouge">SECCOMP_SIDECHANNEL_PROVEN events=N</code>), ch08 (keyring description leakage — marker <code class="language-plaintext highlighter-rouge">CH08_PROVEN events=N</code>).</p>
+
+<p>Important framing for ch16 specifically: seccomp’s threat model is the filtered process itself. A privileged sibling holding <code class="language-plaintext highlighter-rouge">CAP_BPF</code> is explicitly outside that threat model. This primitive sits inside the gap the seccomp design already acknowledges; it is not a failure of seccomp. The chapter labels the marker <code class="language-plaintext highlighter-rouge">SIDECHANNEL</code> rather than <code class="language-plaintext highlighter-rouge">BYPASS</code> for exactly that reason.</p>
+
+<h3 id="class-iv--packet-path-interception-xdp">Class IV — Packet-path interception (XDP)</h3>
+
+<p>The BPF program runs as a peer to the netdev, below the IP stack and below every userspace observer. <code class="language-plaintext highlighter-rouge">XDP_DROP</code> makes packets vanish before <code class="language-plaintext highlighter-rouge">tcpdump</code> on the host sees them; <code class="language-plaintext highlighter-rouge">XDP_TX</code> and <code class="language-plaintext highlighter-rouge">bpf_redirect_peer</code> reroute them. Because XDP executes in the driver’s rx path (or veth tx peer), packet captures taken above that layer do not see modifications.</p>
+
+<p>Representative chapters: ch05b (ghost-NIC covert channel — packets vanish from <code class="language-plaintext highlighter-rouge">tcpdump</code> but are logged to ringbuf, marker <code class="language-plaintext highlighter-rouge">GHOST_COVERT_CHANNEL_PROVEN dropped=2 tcpdump=0</code>), ch15 (netns VLAN ghost cross-namespace redirect — marker <code class="language-plaintext highlighter-rouge">VLAN_GHOST_CROSSNS_PROVEN redirect_count=N</code>).</p>
+
+<h3 id="class-v--kernel-event-triggered-userspace-racer">Class V — Kernel-event-triggered userspace racer</h3>
+
+<p>The most composite primitive in the book. A BPF program watches a kernel event (a specific <code class="language-plaintext highlighter-rouge">kprobe</code> fires, a tracepoint records a specific inode being touched) and emits to ringbuf. A privileged userspace racer drains the ringbuf and, on seeing the target event, wins a write race against the legitimate code path — it writes to the promoted inode before the victim process reads.</p>
+
+<p>Representative chapter: ch02 (OverlayFS copy-up race — ringbuf fires on <code class="language-plaintext highlighter-rouge">ovl_copy_up_one</code>, racer writes a payload to the upper-layer inode before the container reads back, marker <code class="language-plaintext highlighter-rouge">[ch02] PWNED path=/mnt/ovlbacking/upper/secret.txt bytes=N hits=M</code>).</p>
+
+<h2 id="a-note-on-ch10-and-the-d_reclen-trick">A note on ch10 and the d_reclen trick</h2>
+
+<p>This is not a new idea. The <code class="language-plaintext highlighter-rouge">d_reclen</code> swallow trick for <code class="language-plaintext highlighter-rouge">getdents64</code> has been in rootkit proof-of-concepts since at least 2016. My contribution in chapter 10 is a modern-kernel CO-RE reproduction on 6.12 aarch64 with ringbuf evidence and reproducible before/after counts, not the primitive itself. Cite the prior art if you build on it.</p>
+
+<h2 id="the-meta-result">The meta-result</h2>
+
+<p>Every primitive in this book is one of three motions: change the syscall return, rewrite the user buffer, or copy the decision out-of-band. These three motions are what <code class="language-plaintext highlighter-rouge">CAP_BPF</code> grants. The nineteen chapters are demonstrations that granting <code class="language-plaintext highlighter-rouge">CAP_BPF</code> grants access to all three motions across a representative surface of kernel subsystems. That is the capability, operating as designed. The blue-team implication is in chapter 22.</p>
+
+<h2 id="summary-table">Summary table</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Chapter</th>
+      <th>Class</th>
+      <th>Effect demonstrated (marker)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>ch01</td>
+      <td>I</td>
+      <td>cap_capable / selinux_file_permission return forged to 0 (<code class="language-plaintext highlighter-rouge">CH01_WEAPON_PROVEN flips=N</code>)</td>
+    </tr>
+    <tr>
+      <td>ch02</td>
+      <td>V</td>
+      <td>Racer wins copy-up write race, injects payload to upper layer (<code class="language-plaintext highlighter-rouge">[ch02] PWNED path=... bytes=... hits=...</code>)</td>
+    </tr>
+    <tr>
+      <td>ch03</td>
+      <td>III</td>
+      <td>FUSE request metadata exfiltrated via fentry (<code class="language-plaintext highlighter-rouge">CH03_PROVEN variant=fentry before=N after=M</code>)</td>
+    </tr>
+    <tr>
+      <td>ch04</td>
+      <td>III</td>
+      <td>Phantom-syscall kernel fields leaked to ringbuf (<code class="language-plaintext highlighter-rouge">CH04_PROVEN leaked_fields=N</code>)</td>
+    </tr>
+    <tr>
+      <td>ch05</td>
+      <td>II</td>
+      <td>cgroup memory.current user buffer zeroed post-read (<code class="language-plaintext highlighter-rouge">CH05_PROVEN ... zeroed=yes patched_events=N</code>)</td>
+    </tr>
+    <tr>
+      <td>ch05b</td>
+      <td>IV</td>
+      <td>XDP drops packets; userspace tcpdump sees zero (<code class="language-plaintext highlighter-rouge">GHOST_COVERT_CHANNEL_PROVEN dropped=2 tcpdump=0</code>)</td>
+    </tr>
+    <tr>
+      <td>ch06 (LSM)</td>
+      <td>I</td>
+      <td>avc_has_perm flipped to allow via fmod_ret (<code class="language-plaintext highlighter-rouge">CH06_PROVEN flipped=N</code>)</td>
+    </tr>
+    <tr>
+      <td>ch07 (LSM)</td>
+      <td>I</td>
+      <td>devcgroup_inode_permission flipped via fmod_ret (<code class="language-plaintext highlighter-rouge">CH07_CONCEPT_PROVEN before_rc=N after_rc=0</code>)</td>
+    </tr>
+    <tr>
+      <td>ch08</td>
+      <td>III</td>
+      <td>Keyring description leaked to ringbuf during keyctl (<code class="language-plaintext highlighter-rouge">CH08_PROVEN events=N</code>)</td>
+    </tr>
+    <tr>
+      <td>ch09</td>
+      <td>III</td>
+      <td>Cross-namespace PID mapping exposed; host-PID kill confirmed (<code class="language-plaintext highlighter-rouge">CH09_PROVEN host_pid=N</code>)</td>
+    </tr>
+    <tr>
+      <td>ch10</td>
+      <td>II</td>
+      <td>getdents64 d_reclen swallow hides entries (<code class="language-plaintext highlighter-rouge">CLOAK_PROVEN before_count=4 after_count=2 hidden=2</code>)</td>
+    </tr>
+    <tr>
+      <td>ch11</td>
+      <td>III</td>
+      <td>Per-IRQ timing sidechannel with unique-event evidence (<code class="language-plaintext highlighter-rouge">CH11_PROVEN events=N unique=M</code>)</td>
+    </tr>
+    <tr>
+      <td>ch14</td>
+      <td>I</td>
+      <td>sched_setscheduler return forged SCHED_FIFO (<code class="language-plaintext highlighter-rouge">SCHED_WEAPON_PROVEN flips=N</code>)</td>
+    </tr>
+    <tr>
+      <td>ch15</td>
+      <td>IV</td>
+      <td>XDP cross-namespace VLAN redirect (<code class="language-plaintext highlighter-rouge">VLAN_GHOST_CROSSNS_PROVEN redirect_count=N</code>)</td>
+    </tr>
+    <tr>
+      <td>ch16</td>
+      <td>III</td>
+      <td>Seccomp decision for a sibling TID exfiltrated (<code class="language-plaintext highlighter-rouge">SECCOMP_SIDECHANNEL_PROVEN events=N</code>)</td>
+    </tr>
+    <tr>
+      <td>ch18</td>
+      <td>I</td>
+      <td>Token-bypass syscall return forged uid (<code class="language-plaintext highlighter-rouge">TOKEN_FORGE_PROVEN uid_forges=N</code>)</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="onward">Onward</h2>
+
+<p>Chapter 21 does the opposite accounting: the six primitives that did not produce effects on this kernel, and the specific kernel-environment reasons they were refused. Chapter 22 maps the five classes above to the mitigations that actually apply to each.</p>
+
+                    </div>
+                </article>
+
+                
+            </main>
+
+            <footer class="site-footer">
+                <div class="footer-content">
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize mermaid with custom dark theme
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: 'dark',
+                flowchart: {
+                    htmlLabels: true,  // Enable HTML in labels for better word wrapping
+                    curve: 'basis',    // Smoother curves
+                    useMaxWidth: true, // Constrain diagram width
+                    nodeSpacing: 50,   // More space between nodes
+                    rankSpacing: 70    // More space between ranks
+                },
+                themeVariables: {
+                    darkMode: true,
+                    background: '#000000',
+                    primaryColor: '#00ff9d',
+                    primaryTextColor: '#00ff9d',
+                    primaryBorderColor: '#00ff9d',
+                    lineColor: '#00ff9d',
+                    secondaryColor: '#ff00f7',
+                    tertiaryColor: '#00c3ff',
+                    nodeBorder: '#00ff9d',
+                    clusterBkg: '#000000',
+                    clusterBorder: '#00ff9d',
+                    edgeLabelBackground: '#000000',
+                    fontFamily: 'JetBrains Mono'
+                }
+            });
+
+            // Add custom CSS for Mermaid diagrams to handle word wrapping
+            var style = document.createElement('style');
+            style.textContent = `
+                .mermaid .node rect, .mermaid .node circle, .mermaid .node ellipse, .mermaid .node polygon, .mermaid .node path {
+                    rx: 5px;
+                    ry: 5px;
+                }
+                .mermaid .node .label {
+                    word-wrap: break-word;
+                    white-space: pre-wrap !important;
+                    max-width: 200px;
+                }
+                .mermaid .edgeLabel {
+                    background-color: #000000 !important;
+                    color: #00ff9d !important;
+                }
+            `;
+            document.head.appendChild(style);
+
+            // Find all pre code blocks with mermaid class
+            document.querySelectorAll('pre code.language-mermaid').forEach(function(element) {
+                // Create a div for mermaid
+                var div = document.createElement('div');
+                div.className = 'mermaid';
+                div.style.background = '#000000';
+                div.style.padding = '2em';
+                div.style.borderRadius = '8px';
+                div.style.marginBottom = '2em';
+                div.textContent = element.textContent;
+                // Replace the pre element with the div
+                element.parentElement.replaceWith(div);
+            });
+
+            // Run mermaid
+            mermaid.init();
+        });
+    </script>
+</body>
+</html>

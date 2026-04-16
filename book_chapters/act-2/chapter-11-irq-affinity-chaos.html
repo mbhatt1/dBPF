@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -181,29 +184,118 @@
                     <div class="post-content">
                         <p>Act II: Kernel Intrusion</p>
 
-<p><strong>Chapter 12: Act II Finale - Orchestrating System Chaos</strong></p>
+<p><strong>Chapter 12: What the IRQ Dispatch Path Will and Won’t Let You Do</strong></p>
 
-<p>I used to trust the kernel’s interrupt controller to keep everything balanced. Every keystroke, every network packet, every timer tick is delivered at lightning speed, perfectly orchestrated across CPU cores.</p>
+<p>I started this one wanting to rewrite CPU affinity masks inside <code class="language-plaintext highlighter-rouge">irq_dispatch()</code> from BPF. That’s the fantasy. What I got was an IRQ observer, because the override path is blocked at the verifier by the kernel’s error-injection allowlist, and the real re-steering lives below the Linux IRQ layer on aarch64 anyway.</p>
 
-<p>But behind the scenes, interrupt distribution is just a bitmask and a routing function. So I decided to break that trust.</p>
+<p>The useful thing to be clear about up front: per-IRQ timing and per-CPU-delivery side channels are academic-grade primitives at this point. Brumley and Boneh on cache-timing attacks, the long literature on keystroke-timing inference over SSH, the line of work on cross-VM covert channels via shared CPU resources — all of that is decades old and thoroughly published. A BPF-based IRQ observer is a fresh implementation of a well-understood building block. I’m not claiming a new attack; I’m documenting what the dispatch path actually exposes when you look at it with CO-RE on 6.12.</p>
 
-<p>I hooked into <code class="language-plaintext highlighter-rouge">irq_dispatch()</code>, captured each interrupt as it fired, and rewrote its CPU affinity mask. Suddenly, every hardware interrupt slammed into CPU0 like a wave at a windstorm.</p>
+<p>I picked three kprobe targets along overlapping rungs of the dispatch ladder and let the loader preflight each against <code class="language-plaintext highlighter-rouge">/proc/kallsyms</code>, disabling any that didn’t resolve before attaching:</p>
 
-<p>Other cores starved for interrupts, workloads ground to a halt, and perf stats looked like a failing data center. But to anyone watching, it was just “weird system load spikes”—no red flags for a security team.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Target</th>
+      <th>Role</th>
+      <th>Present on linuxkit aarch64 6.12</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">handle_irq_event</code></td>
+      <td>mid-layer dispatcher, one call per IRQ delivery</td>
+      <td>present, attached</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">__handle_irq_event_percpu</code></td>
+      <td>inner, once per registered <code class="language-plaintext highlighter-rouge">irqaction</code></td>
+      <td>present, attached</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">handle_irq_event_percpu</code></td>
+      <td>fallback name on some 6.x trees</td>
+      <td>absent, skipped</td>
+    </tr>
+  </tbody>
+</table>
 
-<p>I even built a covert channel by modulating interrupt timings, leaking bits via nanosecond delays.</p>
+<p>Two out of three fired on this kernel. The third is a naming variant that never resolved; the preflight kept the load clean. CO-RE walk pulls the IRQ number out of <code class="language-plaintext highlighter-rouge">irq_desc.irq_data.irq</code> and the driver label out of the first <code class="language-plaintext highlighter-rouge">irqaction.name</code>, bumps a per-CPU hash counter, and pushes a ringbuf event.</p>
 
-<p>With this, I owned the chaos. Act II was complete; Act III awaits.</p>
+<p>Why I gave up on override. Three independent blockers, any one of which kills the approach:</p>
 
-<p>```c
-SEC(“kprobe/irq_dispatch”)
-int hack_irq_dispatch(struct pt_regs *ctx) {
-    u32 irq = PT_REGS_PARM1(ctx);
-    u64 mask = 1; // CPU0
-    bpf_map_update_elem(&amp;irq_affinity_map, &amp;irq, &amp;mask, BPF_ANY);
-    return 0;
-}
-char LICENSE[] SEC(“license”) = “GPL”;</p>
+<ol>
+  <li>Neither <code class="language-plaintext highlighter-rouge">handle_irq_event</code> nor <code class="language-plaintext highlighter-rouge">__handle_irq_event_percpu</code> appears in <code class="language-plaintext highlighter-rouge">/sys/kernel/debug/error_injection/list</code> on this kernel, so <code class="language-plaintext highlighter-rouge">bpf_override_return()</code> is refused at verifier load. No allowlist entry, no injection.</li>
+  <li>These paths run with local IRQs disabled on the target CPU — atomic context. Calling <code class="language-plaintext highlighter-rouge">irq_set_affinity()</code> from a kprobe in that context would be a sleep-in-atomic bug even if the verifier let it through.</li>
+  <li>On aarch64 the routing decision is done by the GIC distributor, not by a Linux function. Re-pointing an IRQ at a different CPU means writing <code class="language-plaintext highlighter-rouge">GICD_ITARGETSR</code>/<code class="language-plaintext highlighter-rouge">GICD_IROUTER</code>, and those registers live behind the device-cgroup wall that ch07 spent a chapter not quite breaking.</li>
+</ol>
+
+<p>The realistic userspace attack that the POC’s observer actually catches: a process with <code class="language-plaintext highlighter-rouge">CAP_SYS_NICE</code>/<code class="language-plaintext highlighter-rouge">CAP_NET_ADMIN</code> writes a narrow mask into <code class="language-plaintext highlighter-rouge">/proc/irq/&lt;n&gt;/smp_affinity</code>, pinning every high-rate IRQ onto CPU0. Other cores starve; a victim pinned to CPU0 sees latency explode. My per-CPU counters make the asymmetry obvious in the exit summary, and a defender diffing the per-CPU column over time can spot a stuck mask.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+</pre></td><td class="rouge-code"><pre><span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/handle_irq_event"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">kp_handle_irq_event</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// CO-RE read desc-&gt;irq_data.irq; bump per-CPU counter; push ringbuf event</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/__handle_irq_event_percpu"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">kp_handle_irq_event_percpu</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// same, inner handler</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>Evidence from a short run on linuxkit aarch64:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+</pre></td><td class="rouge-code"><pre>[ch11] === symbol availability ===
+  handle_irq_event               : present
+  __handle_irq_event_percpu      : present
+  handle_irq_event_percpu        : ABSENT
+[ch11] attached 2 program(s) — IRQ observer active
+
+==== IRQ dispatch summary ====
+total ringbuf events seen: 1843
+CPU   | IRQ#  | count
+0     | 30    | 412
+2     | 29    | 631
+3     | 29    | 244
+per-CPU ringbuf totals:
+  cpu0 517  cpu1 99  cpu2 875  cpu3 352
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>The timing side-channel angle: once you have per-IRQ nanosecond deltas streaming from the inner handler, you have the raw material for keystroke inference on a shared host, for network-packet timing correlation, and for cache-state leaks via interrupt-induced context switches. None of this requires override. Observation is enough.</p>
+
+<p>Detection. <code class="language-plaintext highlighter-rouge">bpftool prog show type kprobe | grep -iE 'irq_event|handle_irq'</code> lists the attached probes. <code class="language-plaintext highlighter-rouge">/sys/kernel/tracing/kprobe_events</code> is the persistent registration interface. On the effect side, monitoring <code class="language-plaintext highlighter-rouge">/proc/irq/*/smp_affinity</code> for last-writer identity and diffing the per-CPU column of <code class="language-plaintext highlighter-rouge">/proc/interrupts</code> against a historical baseline catches the affinity-pinning attack at its symptom even if the BPF load is invisible.</p>
+
+<p>Factual note: the original chapter claimed I hooked <code class="language-plaintext highlighter-rouge">irq_dispatch()</code> and rewrote the CPU affinity mask inline. That’s not what the POC does and, as above, it isn’t achievable on this kernel. The observer is honest; the override was wishful thinking.</p>
 
                     </div>
                 </article>
@@ -213,7 +305,7 @@ char LICENSE[] SEC(“license”) = “GPL”;</p>
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

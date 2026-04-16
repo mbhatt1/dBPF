@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -183,15 +186,9 @@
 
 <p><strong>Chapter 1: The First Revelation</strong></p>
 
-<p>This is where our story begins. The moment you first realize that eBPF doesn’t just give you observability into the kernel—it gives you the power to rewrite reality itself.</p>
+<p>This chapter documents what a process holding <code class="language-plaintext highlighter-rouge">CAP_BPF</code> + <code class="language-plaintext highlighter-rouge">CAP_PERFMON</code> can do at the boundary of the kernel’s capability and LSM checks: observe the decision via kprobe, and on certain annotated functions override the return value before the caller regains control.</p>
 
-<p>Picture this: You’re staring at a system protected by capabilities, seccomp filters, SELinux policies—all the security controls that are supposed to keep attackers out. And then you discover that with eBPF, you can make all of these controls lie.</p>
-
-<p>Not break them. Not bypass them. Make them <em>lie</em>.</p>
-
-<p>We’re going to turn every security control in the Linux kernel into a funhouse mirror—everything looks normal from the outside, but reality is completely warped. The security controls will dutifully report “access denied” while we’re already inside, rummaging through their stuff.</p>
-
-<p>This is your first glimpse into what eBPF really means for security. Once you understand this technique, you’ll never look at kernel security controls the same way again.</p>
+<p>This chapter covers overriding the return value of <code class="language-plaintext highlighter-rouge">cap_capable</code> and <code class="language-plaintext highlighter-rouge">selinux_file_permission</code> via <code class="language-plaintext highlighter-rouge">kretprobe + bpf_override_return</code>, demonstrating how a process holding <code class="language-plaintext highlighter-rouge">CAP_BPF</code> can make these checks return 0 to userspace callers while the kernel’s actual enforcement path sees the original decision.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -1028,7 +1025,7 @@ seccomp-bpf-filter.json:
 
 <p>This technique demonstrates why proper eBPF restrictions are critical for maintaining the integrity of security controls, especially in environments where multiple layers of security are expected to provide defense-in-depth.</p>
 
-<h2 id="how-theyll-try-to-catch-us">How They’ll Try to Catch Us</h2>
+<h2 id="detection">Detection</h2>
 
 <p>The security teams aren’t completely clueless. Here’s what they’ll try to do to stop our LSM manipulation:</p>
 
@@ -1070,13 +1067,13 @@ seccomp-bpf-filter.json:
   <li><strong>Fight fire with fire</strong> - Use eBPF-based security tools to detect malicious eBPF</li>
 </ol>
 
-<h2 id="why-this-changes-everything">Why This Changes Everything</h2>
+<h2 id="why-this-matters">Why This Matters</h2>
 
-<p>This isn’t just another bypass technique—this is a fundamental shift in how we think about kernel security. When you can make the security controls themselves lie, you’ve broken the basic assumptions that all defensive strategies are built on.</p>
+<p>The primitive in this chapter lies to userspace consumers of the syscall return, not to the kernel itself. A subsequent LSM check that consults <code class="language-plaintext highlighter-rouge">current-&gt;cred</code> inside the kernel is unaffected by the override. Orchestrators that make security decisions based on syscall return values see the forged answer; post-checks against <code class="language-plaintext highlighter-rouge">/proc/self/status</code> or <code class="language-plaintext highlighter-rouge">/proc/&lt;pid&gt;/status</code> see the ground truth. This is the durable shape of Class I primitives from chapter 20.</p>
 
-<p>The kernel becomes your accomplice. The security logs become your alibi. The monitoring systems become your cover story. You’re not just bypassing security—you’re turning it into your weapon.</p>
+<h2 id="poc">POC</h2>
 
-<p>Welcome to the new reality where eBPF is all you need.</p>
+<p>Companion code: <a href="/dBPF/dBPF-pocs/pocs/ch01-mirror-controls/"><code class="language-plaintext highlighter-rouge">ch01-mirror-controls</code></a></p>
 
                     </div>
                 </article>
@@ -1111,7 +1108,7 @@ seccomp-bpf-filter.json:
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

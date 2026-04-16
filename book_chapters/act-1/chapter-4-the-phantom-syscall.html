@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -183,17 +186,143 @@
 
 <h1 id="chapter-4-the-phantom-syscall">Chapter 4: The Phantom Syscall</h1>
 
-<p>We’ve warped security controls, unraveled containers, and swallowed our own audit trails. Now it’s time to shatter the very idea of observability. In this chapter, we’ll conjure syscalls that vanish into thin air—commands the kernel executes yet leaves no evidence behind.</p>
+<p>I was trying to see how far a tail-called BPF program could walk <code class="language-plaintext highlighter-rouge">task_struct</code> from a kprobe on <code class="language-plaintext highlighter-rouge">__x64_sys_write</code> before the verifier got unhappy. The idea is well-trodden: stage 1 is a small gatekeeper on syscall entry that checks some predicate on the current task, and stage 2, reached via <code class="language-plaintext highlighter-rouge">bpf_tail_call</code>, does the work that would blow the instruction budget in a single program. The interesting question is not whether this works — it does — but what exactly the verifier accepts when stage 2 reads <code class="language-plaintext highlighter-rouge">current-&gt;cred</code>, <code class="language-plaintext highlighter-rouge">current-&gt;nsproxy</code>, and friends. This chapter is notes from reading the reject messages.</p>
 
-<p>Picture a system call as a whispered command through a guarded door. Seccomp and tracers hang on every word. But what if you could slip in a message that echoes in the room, while all external microphones remain deaf? That’s the phantom syscall: it executes the forbidden action, yet every watcher sees silence.</p>
+<h2 id="stage-1-the-gate">Stage 1: The Gate</h2>
 
-<p>We begin by attaching to a harmless syscall—say, <code class="language-plaintext highlighter-rouge">write()</code>. The kernel stumbles into our BPF probe, handing us control. We invoke hidden helpers (<code class="language-plaintext highlighter-rouge">bpf_probe_read_user()</code> and others) to call deeper functions—file operations, credential swaps, network connections—without issuing the original syscall at all. The kernel kernel logs “write to fd 1,” but in reality, we’ve escalated privileges or opened a hidden channel.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+</pre></td><td class="rouge-code"><pre><span class="k">struct</span> <span class="p">{</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">type</span><span class="p">,</span> <span class="n">BPF_MAP_TYPE_PROG_ARRAY</span><span class="p">);</span>
+    <span class="n">__uint</span><span class="p">(</span><span class="n">max_entries</span><span class="p">,</span> <span class="mi">4</span><span class="p">);</span>
+    <span class="n">__type</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">u32</span><span class="p">);</span>
+    <span class="n">__type</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">u32</span><span class="p">);</span>
+<span class="p">}</span> <span class="n">prog_array</span> <span class="nf">SEC</span><span class="p">(</span><span class="s">".maps"</span><span class="p">);</span>
 
-<p>Our code uses <code class="language-plaintext highlighter-rouge">SEC("kprobe/sys_write")</code> to intercept the entry, then leverages <code class="language-plaintext highlighter-rouge">bpf_tail_call()</code> to trigger a hidden eBPF program that executes the true action via helpers. The seccomp filter never sees the actual restricted syscall. Auditd never reports the backdoor traffic. The entire incident happens in shadow.</p>
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/__x64_sys_write"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">stage1</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">target_pid</span><span class="p">(</span><span class="n">pid</span><span class="p">))</span>
+        <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">bpf_tail_call</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">prog_array</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>By the time defenders realize something incredible has occurred, they lack logs, traces, or stack samples. It’s as if the kernel granted their wishes in total secrecy.</p>
+<p>Nothing remarkable. The verifier has supported <code class="language-plaintext highlighter-rouge">bpf_tail_call</code> from a kprobe context for a long time. The program type of the tail-callee must match the caller — a kprobe program can only tail-call into another kprobe program. The max tail-call depth is 33 on current kernels (up from 32 in older versions).</p>
 
-<p>In Act I, we learned how to question reality. In Chapter 4, we bend reality itself. Every security assumption unravels when you can speak to the kernel in a language no one else understands.</p>
+<h2 id="stage-2-reading-current-cred">Stage 2: Reading current-&gt;cred</h2>
+
+<p>This is where it got interesting. I wrote:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+</pre></td><td class="rouge-code"><pre><span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/stage2"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">stage2</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">task</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="p">)</span><span class="n">bpf_get_current_task</span><span class="p">();</span>
+    <span class="k">const</span> <span class="k">struct</span> <span class="n">cred</span> <span class="o">*</span><span class="n">cred</span><span class="p">;</span>
+    <span class="n">kuid_t</span> <span class="n">uid</span><span class="p">;</span>
+
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cred</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">cred</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">task</span><span class="o">-&gt;</span><span class="n">cred</span><span class="p">);</span>
+    <span class="n">bpf_probe_read_kernel</span><span class="p">(</span><span class="o">&amp;</span><span class="n">uid</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">uid</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">cred</span><span class="o">-&gt;</span><span class="n">uid</span><span class="p">);</span>
+
+    <span class="c1">// ...</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>That loads. The verifier is happy because every dereference of a kernel pointer goes through <code class="language-plaintext highlighter-rouge">bpf_probe_read_kernel</code>, which returns an error rather than oopsing on a bad address.</p>
+
+<p>What the verifier rejects is the direct-dereference shortcut:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+</pre></td><td class="rouge-code"><pre><span class="k">const</span> <span class="k">struct</span> <span class="n">cred</span> <span class="o">*</span><span class="n">cred</span> <span class="o">=</span> <span class="n">task</span><span class="o">-&gt;</span><span class="n">cred</span><span class="p">;</span>           <span class="c1">// BTF read, fine on modern kernels</span>
+<span class="n">kuid_t</span> <span class="n">uid</span> <span class="o">=</span> <span class="n">cred</span><span class="o">-&gt;</span><span class="n">uid</span><span class="p">;</span>                         <span class="c1">// REJECTED: "invalid access to map value"</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>On 5.15 and later with BTF and <code class="language-plaintext highlighter-rouge">CONFIG_DEBUG_INFO_BTF=y</code>, the first line is accepted as a BTF-typed pointer read. The second is not, because <code class="language-plaintext highlighter-rouge">cred</code> is now tracked as a <code class="language-plaintext highlighter-rouge">PTR_TO_BTF_ID_OR_NULL</code> and the verifier requires the NULL check before the dereference. The fix is:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="rouge-code"><pre><span class="k">const</span> <span class="k">struct</span> <span class="n">cred</span> <span class="o">*</span><span class="n">cred</span> <span class="o">=</span> <span class="n">task</span><span class="o">-&gt;</span><span class="n">cred</span><span class="p">;</span>
+<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">cred</span><span class="p">)</span> <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="n">kuid_t</span> <span class="n">uid</span> <span class="o">=</span> <span class="n">BPF_CORE_READ</span><span class="p">(</span><span class="n">cred</span><span class="p">,</span> <span class="n">uid</span><span class="p">);</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">BPF_CORE_READ</code> expands to a chain of <code class="language-plaintext highlighter-rouge">bpf_probe_read_kernel</code> calls with CO-RE relocations. The verifier accepts this. <code class="language-plaintext highlighter-rouge">bpftool prog dump xlated</code> shows the calls getting inlined on kernels that support inlining.</p>
+
+<h2 id="what-the-verifier-accepts-concretely">What the Verifier Accepts, Concretely</h2>
+
+<p>Tested on 6.12:</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">task-&gt;pid</code>, <code class="language-plaintext highlighter-rouge">task-&gt;tgid</code>: direct BTF read, accepted.</li>
+  <li><code class="language-plaintext highlighter-rouge">task-&gt;cred</code> into a local pointer: accepted. Dereferencing that pointer requires a NULL check.</li>
+  <li><code class="language-plaintext highlighter-rouge">task-&gt;real_cred</code>: same as <code class="language-plaintext highlighter-rouge">cred</code>.</li>
+  <li><code class="language-plaintext highlighter-rouge">task-&gt;nsproxy-&gt;pid_ns_for_children-&gt;level</code>: rejected without NULL checks at each level. With checks, accepted.</li>
+  <li><code class="language-plaintext highlighter-rouge">task-&gt;mm-&gt;pgd</code>: rejected. <code class="language-plaintext highlighter-rouge">mm</code> can be NULL for kernel threads; verifier requires the check, and even with the check the <code class="language-plaintext highlighter-rouge">pgd</code> field is gated further.</li>
+  <li><code class="language-plaintext highlighter-rouge">task-&gt;fs-&gt;root.dentry</code>: accepted after NULL check on <code class="language-plaintext highlighter-rouge">fs</code>.</li>
+</ul>
+
+<p>The pattern is consistent: anything reachable from <code class="language-plaintext highlighter-rouge">current</code> that can legitimately be NULL requires the check, and the verifier knows which fields can be NULL from BTF.</p>
+
+<h2 id="what-the-verifier-rejects">What the Verifier Rejects</h2>
+
+<ul>
+  <li>Loops without bounded iteration. <code class="language-plaintext highlighter-rouge">for (int i = 0; i &lt; n; i++)</code> where <code class="language-plaintext highlighter-rouge">n</code> comes from a map value is rejected unless you use <code class="language-plaintext highlighter-rouge">bpf_loop</code> (5.17+) or <code class="language-plaintext highlighter-rouge">#pragma unroll</code> with a compile-time constant.</li>
+  <li>Pointer arithmetic on <code class="language-plaintext highlighter-rouge">PTR_TO_BTF_ID</code>. <code class="language-plaintext highlighter-rouge">&amp;task-&gt;cred + 1</code> does not work.</li>
+  <li>Writes to task fields. <code class="language-plaintext highlighter-rouge">task-&gt;cred = new_cred;</code> is rejected. The verifier tracks BTF pointers as read-only.</li>
+  <li>Calls to most kernel functions. <code class="language-plaintext highlighter-rouge">kfuncs</code> are a narrow allowlist; <code class="language-plaintext highlighter-rouge">commit_creds</code> is not on it.</li>
+</ul>
+
+<p>That last one is the thing. The phantom-syscall framing in earlier drafts implied you could swap credentials from BPF. You cannot. <code class="language-plaintext highlighter-rouge">commit_creds</code> is not a kfunc. <code class="language-plaintext highlighter-rouge">override_creds</code> is not a kfunc. The cred structure is readable from BPF and not writable from BPF, and the set of kfuncs that might change that is governed by <code class="language-plaintext highlighter-rouge">kernel/bpf/helpers.c</code> and the per-subsystem kfunc sets registered via <code class="language-plaintext highlighter-rouge">register_btf_kfunc_id_set</code>.</p>
+
+<h2 id="so-what-is-the-phantom-syscall-really">So What Is the Phantom Syscall, Really</h2>
+
+<p>A two-stage kprobe that reads task state on syscall entry and emits events based on that state. It is an observer with a cheap predicate in stage 1 and expensive walking in stage 2. The tail call keeps each program under the 1M-instruction verifier limit and lets you conditionally skip the expensive work.</p>
+
+<p>It is not a credential-swap primitive. It is not a syscall-bypass primitive. The syscall still runs; seccomp still sees it; auditd still sees it. What you get is visibility into syscalls conditioned on task state that a single-program kprobe couldn’t compute without blowing the complexity budget.</p>
+
+<p>If a prior write-up described this as “syscalls that leave no trace,” that write-up was wrong about what BPF can do to <code class="language-plaintext highlighter-rouge">current-&gt;cred</code>. Read the verifier. The rules are strict and they are documented in <code class="language-plaintext highlighter-rouge">Documentation/bpf/verifier.rst</code>.</p>
+
+<h2 id="detection">Detection</h2>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">bpftool prog show</code> lists both stage 1 and stage 2, plus the prog array map.</li>
+  <li><code class="language-plaintext highlighter-rouge">bpftool map dump id &lt;prog_array_id&gt;</code> reveals the tail-call targets.</li>
+  <li><code class="language-plaintext highlighter-rouge">/sys/kernel/debug/kprobes/list</code> shows the <code class="language-plaintext highlighter-rouge">__x64_sys_write</code> probe.</li>
+  <li><code class="language-plaintext highlighter-rouge">perf stat -e bpf_trace_printk</code> or equivalent catches any debug output.</li>
+  <li>Tail calls are visible in <code class="language-plaintext highlighter-rouge">bpftool prog profile</code> as a distinct program enter/exit pattern.</li>
+</ul>
+
+<h2 id="summary">Summary</h2>
+
+<p>Two programs, one prog-array map, one kprobe. Stage 1 gates, stage 2 walks. The verifier enforces NULL checks on nullable BTF fields and rejects writes to task state. The technique is a visibility primitive, not a bypass primitive. Prior art: <code class="language-plaintext highlighter-rouge">bpf_tail_call</code> has been in the kernel since 4.2; chained kprobes into stage-2 programs are a staple of bcc and bpftrace internals. What this chapter documents is the specific accept/reject boundary the verifier draws on modern kernels, because that boundary is where a lot of write-ups have drifted into fiction.</p>
 
                     </div>
                 </article>
@@ -203,7 +332,7 @@
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -1432,6 +1435,10 @@ auditctl <span class="nt">-a</span> always,exit <span class="nt">-F</span> <span
 
 <p>But here’s the beautiful part - we’re manipulating thread context at the kernel level, below where most monitoring tools operate. By the time they detect the anomaly, we’ve already executed our forbidden syscalls and potentially escaped their container.</p>
 
+<h2 id="poc">POC</h2>
+
+<p>Companion code: <a href="/dBPF/dBPF-pocs/pocs/ch16-seccomp-tid-hop/"><code class="language-plaintext highlighter-rouge">ch16-seccomp-tid-hop</code></a></p>
+
                     </div>
                 </article>
 
@@ -1455,7 +1462,7 @@ auditctl <span class="nt">-a</span> always,exit <span class="nt">-F</span> <span
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

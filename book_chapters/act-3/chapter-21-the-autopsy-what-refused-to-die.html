@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 21: Skip Accounting — Primitives That Needed Another Kernel | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="/dBPF/assets/css/book.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark'
+    });
+  });
+</script>
+
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Chapter 21: Skip Accounting — Primitives That Needed Another Kernel | Diabolical eBPF: Linux Red Team Field Manual</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Chapter 21: Skip Accounting — Primitives That Needed Another Kernel" />
+<meta name="author" content="Diabolical eBPF" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
+<meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-21-the-autopsy-what-refused-to-die" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-21-the-autopsy-what-refused-to-die" />
+<meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2026-01-11T00:00:00+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Chapter 21: Skip Accounting — Primitives That Needed Another Kernel" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2026-01-11T00:00:00+00:00","datePublished":"2026-01-11T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 21: Skip Accounting — Primitives That Needed Another Kernel","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-21-the-autopsy-what-refused-to-die"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-21-the-autopsy-what-refused-to-die"}</script>
+<!-- End Jekyll SEO tag -->
+
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <a href="/dBPF/" class="site-title">Diabolical eBPF: Linux Red Team Field Manual</a>
+            </div>
+            <div class="sidebar-content">
+                
+                
+                    
+                    
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Preface
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-mirror-controls.html" >
+                        The Mirror Controls
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-overlayfs-trojan-horse.html" >
+                        The OverlayFS Trojan Horse
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-fuse-audit-black-hole.html" >
+                        The FUSE Audit Black-Hole
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-phantom-syscall.html" >
+                        The Phantom Syscall
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-ghost-nic.html" >
+                        The Ghost NIC
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/slipping-the-cgroup-leash.html" >
+                        Slipping the Cgroup Leash
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/silencing-selinux.html" >
+                        Silencing SELinux
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/device-cgroup-houdini.html" >
+                        Device‑cgroup Houdini
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/keyring-heist.html" >
+                        Keyring Heist
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/pid-namespace-doppelg-nger.html" >
+                        PID Namespace Doppelgänger
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/inode-cloak.html" >
+                        Inode Cloak
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/irq-affinity-chaos.html" >
+                        IRQ Affinity Chaos
+                    </a>
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+            </div>
+        </nav>
+
+        <div class="content-wrapper">
+            <main class="content">
+                <article class="post">
+                    <header class="post-header">
+                        <h1 class="post-title">Chapter 21: Skip Accounting — Primitives That Needed Another Kernel</h1>
+                        
+                        <time class="post-date" datetime="2026-01-11T00:00:00+00:00">
+                            January 11, 2026
+                        </time>
+                        
+                    </header>
+
+                    <div class="post-content">
+                        <h1 id="chapter-21-skip-accounting--primitives-that-needed-another-kernel">Chapter 21: Skip Accounting — Primitives That Needed Another Kernel</h1>
+
+<p>Six primitives did not produce effects on linuxkit 6.12 aarch64. Not because the BPF code was wrong; because the kernel environment did not host the surface the primitive needed to grip. There are three shapes of refusal in play: (a) no enforcement point was active at runtime, (b) BTF or the hook’s target symbol was missing, (c) the target subsystem was absent from this kernel build. Each of the six is a cold case on this kernel and a live case on someone else’s. The goal of this chapter is to make that distinction reproducible.</p>
+
+<h2 id="ch06--selinux-silencer-against-a-permissive-lsm-stack">ch06 — SELinux silencer against a permissive LSM stack</h2>
+
+<p>The claim was that the BPF LSM <code class="language-plaintext highlighter-rouge">fmod_ret</code> variant could flip <code class="language-plaintext highlighter-rouge">selinux_file_permission</code> and let an otherwise-denied open succeed. The program loaded and the hook attached, but the linuxkit build does not run SELinux in enforcing mode — the check the override was trying to flip never returned non-zero on a realistic target, so there was nothing to flip. The trigger emits <code class="language-plaintext highlighter-rouge">CH06_SKIP reason=selinux_not_enforcing</code> and exits.</p>
+
+<p>The BPF code itself is correct on this kernel: the attach succeeded, the fmod_ret program was accepted, and the synthetic variant (<code class="language-plaintext highlighter-rouge">ch06-silence-selinux-lsm-synthetic</code>) which manufactures a denial in a test hook does fire and print <code class="language-plaintext highlighter-rouge">CH06_CONCEPT_PROVEN denial_injected=yes flip_applied=yes</code>. The full primitive fires on a distro kernel with SELinux enforcing and full BTF — RHEL, Fedora, or Amazon Linux with <code class="language-plaintext highlighter-rouge">setenforce 1</code>.</p>
+
+<h2 id="ch07--devcgroup-houdini-against-a-missing-dev_open-symbol">ch07 — devcgroup Houdini against a missing dev_open symbol</h2>
+
+<p>The first attach attempt targeted <code class="language-plaintext highlighter-rouge">dev_open</code> directly. <code class="language-plaintext highlighter-rouge">libbpf</code> refused to resolve the symbol in BTF: <code class="language-plaintext highlighter-rouge">libbpf: failed to find kernel BTF type ID of 'dev_open': -3</code>. Investigation showed that the linuxkit kernel’s <code class="language-plaintext highlighter-rouge">fs/char_dev.c</code> had a slightly different name resolution path and the BTF entry for the specific function was not exported. The LSM variant of the same primitive, which attaches <code class="language-plaintext highlighter-rouge">devcgroup_inode_permission</code> instead, fires cleanly on 6.12 and is included in chapter 20’s proven set.</p>
+
+<p>The original <code class="language-plaintext highlighter-rouge">dev_open</code>-based variant fires on any kernel where the symbol is exported in BTF, which is most distro kernels built with <code class="language-plaintext highlighter-rouge">CONFIG_DEBUG_INFO_BTF=y</code>. The skip here is narrow: one attach path refused, an equivalent attach path proven.</p>
+
+<h2 id="ch08--keyring-heist-fentry-variant-against-a-fwd-typed-struct">ch08 — keyring heist fentry variant against a FWD-typed struct</h2>
+
+<p>The fentry-based variant of ch08 tried to attach to <code class="language-plaintext highlighter-rouge">keyctl_read_key</code> with a BPF program whose first argument was typed as <code class="language-plaintext highlighter-rouge">struct key *</code>. The verifier refused: <code class="language-plaintext highlighter-rouge">arg0 type FWD is not a struct</code>. This is BTF saying “I have a forward declaration of <code class="language-plaintext highlighter-rouge">struct key</code>, not the full definition.” Distro kernels compile BTF with <code class="language-plaintext highlighter-rouge">--btf_gen_all</code> which resolves forward decls; linuxkit does not. The kprobe variant (attaching by symbol, not by BTF type) fires cleanly on 6.12 and is in chapter 20’s proven set.</p>
+
+<p>The fentry variant fires on kernels with complete BTF for the keyring subsystem.</p>
+
+<h2 id="ch12--signed-driver-swap-against-an-empty-module-load-path">ch12 — signed driver swap against an empty module-load path</h2>
+
+<p>The claim was that <code class="language-plaintext highlighter-rouge">kernel_read_file</code> LSM hook + <code class="language-plaintext highlighter-rouge">bpf_override_return</code> could make <code class="language-plaintext highlighter-rouge">init_module</code> accept a forged module by flipping <code class="language-plaintext highlighter-rouge">EBADMSG</code> to <code class="language-plaintext highlighter-rouge">ENOEXEC</code> (or to 0). The hook attached; the override loaded; the trigger tried to <code class="language-plaintext highlighter-rouge">finit_module(2)</code> a crafted file. The linuxkit kernel has <code class="language-plaintext highlighter-rouge">CONFIG_MODULE_SIG=n</code> and no module-signature-enforcement path to short-circuit, so the baseline error code was different from the one the override expected, and the LSM chain returned 0 from other hooks before <code class="language-plaintext highlighter-rouge">kernel_read_file</code> was reached. The syscall-override variant (<code class="language-plaintext highlighter-rouge">ch12-signed-driver-swap-syscall</code>) demonstrates the concept by forging the syscall return directly — marker <code class="language-plaintext highlighter-rouge">CH12_CONCEPT_PROVEN syscall_override_landed=yes module_actually_loaded=no</code> — which honestly records that the primitive lied to userspace without achieving actual module load.</p>
+
+<p>The full primitive fires on a kernel with <code class="language-plaintext highlighter-rouge">CONFIG_MODULE_SIG_FORCE=y</code> and <code class="language-plaintext highlighter-rouge">kernel_read_file</code> participating in the refusal path.</p>
+
+<h2 id="ch13--powercap-override-against-an-absent-powercap-subsystem">ch13 — powercap override against an absent powercap subsystem</h2>
+
+<p>Linuxkit does not compile <code class="language-plaintext highlighter-rouge">CONFIG_POWERCAP</code> or expose <code class="language-plaintext highlighter-rouge">/sys/class/powercap/</code>. The attach targeted <code class="language-plaintext highlighter-rouge">powercap_get_max_power_uw</code>, which is not present in <code class="language-plaintext highlighter-rouge">/proc/kallsyms</code> on this kernel. libbpf refused to resolve the symbol, the trigger short-circuited to the analog variant (<code class="language-plaintext highlighter-rouge">ch13-powercap-override-analog</code>) which demonstrates the same primitive against a stand-in sysfs hook and emits <code class="language-plaintext highlighter-rouge">CH13_ANALOG_PROVEN before_climb=X after=Y zero_reads=N patched_events=M disclaimer="same primitive as RAPL override; real RAPL is x86-only"</code>.</p>
+
+<p>The full primitive fires on x86 kernels with Intel RAPL exposed.</p>
+
+<h2 id="ch17--acpi-wmi-against-a-non-acpi-platform">ch17 — ACPI WMI against a non-ACPI platform</h2>
+
+<p>Linuxkit aarch64 has no ACPI SSDT and no <code class="language-plaintext highlighter-rouge">/sys/firmware/acpi/</code>. The <code class="language-plaintext highlighter-rouge">acpi_evaluate_integer</code> symbol is not exported; the attach fails. The trigger prints <code class="language-plaintext highlighter-rouge">CH17_SKIP reason=no_acpi_on_aarch64_linuxkit</code> and runs the analog variant (<code class="language-plaintext highlighter-rouge">ch17-acpi-wsmi-analog</code>) which substitutes the <code class="language-plaintext highlighter-rouge">firmware_loader</code> path, producing <code class="language-plaintext highlighter-rouge">ACPI_PROBE_PROVEN arch=aarch64 substituted=firmware_loader</code>.</p>
+
+<p>The full primitive fires on x86 distro kernels with Dell/HP laptop WMI drivers loaded.</p>
+
+<h2 id="ch08-lsm-variant-on-other-kernels-ch12-lsm-on-other-kernels">ch08 (LSM variant on other kernels), ch12-lsm on other kernels</h2>
+
+<p>Short note: the LSM variants of ch08 and ch12 that did not fire on this specific kernel fire elsewhere. <code class="language-plaintext highlighter-rouge">ch12-signed-driver-swap-lsm</code> emits <code class="language-plaintext highlighter-rouge">CH12_PROVEN flipped=N hook=kernel_read_file baseline=EBADMSG override=ENOEXEC</code> on kernels where the refusal path actually routes through <code class="language-plaintext highlighter-rouge">kernel_read_file</code> with a signed-module baseline. This is the same chapter, different kernel environment, different outcome. The taxonomy class does not change — it is still Class I — only the attach availability does.</p>
+
+<h2 id="the-pattern">The pattern</h2>
+
+<p>The six skips sort into three shapes:</p>
+
+<ul>
+  <li><strong>No enforcement point active at runtime</strong>: ch06 (SELinux not enforcing), ch12 (no module signature enforcement).</li>
+  <li><strong>BTF or hook symbol missing</strong>: ch07 (no BTF for dev_open), ch08 fentry variant (forward-declared struct), ch13 (no powercap_get_max_power_uw symbol).</li>
+  <li><strong>Target subsystem absent</strong>: ch13 (no powercap), ch17 (no ACPI on aarch64), arguably ch08 fentry (no keyring BTF detail).</li>
+</ul>
+
+<h2 id="what-this-teaches-for-red-team">What this teaches for red team</h2>
+
+<p>Environmental pre-flight is not optional. Before claiming a primitive works on the target, scan four axes:</p>
+
+<ol>
+  <li><code class="language-plaintext highlighter-rouge">/proc/kallsyms</code> for the function symbols the program attaches to.</li>
+  <li><code class="language-plaintext highlighter-rouge">/sys/kernel/security/lsm</code> for the active LSM stack.</li>
+  <li><code class="language-plaintext highlighter-rouge">/sys/kernel/debug/error_injection/list</code> for <code class="language-plaintext highlighter-rouge">bpf_override_return</code> targets.</li>
+  <li>BTF visibility for every struct the program dereferences — <code class="language-plaintext highlighter-rouge">bpftool btf dump file /sys/kernel/btf/vmlinux</code> and grep.</li>
+</ol>
+
+<p>Any of those four axes can silently disarm a primitive. The BPF program will load, the attach will succeed, and the trigger will print nothing interesting — which is much worse than a loud failure, because it looks like the kernel is immune when it is only uncooperative to this specific variant.</p>
+
+<h2 id="what-this-teaches-for-blue-team">What this teaches for blue team</h2>
+
+<p>The attack surface is the intersection of hook availability × enforcement-point activity × BTF completeness × subsystem presence. Minimizing any axis shrinks the surface:</p>
+
+<ul>
+  <li>Disable BPF LSM (<code class="language-plaintext highlighter-rouge">CONFIG_BPF_LSM=n</code>) if no workload needs it.</li>
+  <li>Strip BTF from production kernels (<code class="language-plaintext highlighter-rouge">CONFIG_DEBUG_INFO_BTF=n</code>) where <code class="language-plaintext highlighter-rouge">CO-RE</code> tooling is not required.</li>
+  <li>Enforce module signatures (<code class="language-plaintext highlighter-rouge">CONFIG_MODULE_SIG_FORCE=y</code>) and keep the signing key off the target.</li>
+  <li>Drop x86-specific subsystems (powercap, ACPI/WMI, RAPL) on aarch64 builds.</li>
+  <li>Do not ship <code class="language-plaintext highlighter-rouge">test_firmware</code> or similar debug hooks in production images.</li>
+</ul>
+
+<p>Each of those independently removes primitives from the toolkit.</p>
+
+<h2 id="onward">Onward</h2>
+
+<p>Chapter 22 is the full defender playbook, ordered from highest-leverage to lowest.</p>
+
+                    </div>
+                </article>
+
+                
+            </main>
+
+            <footer class="site-footer">
+                <div class="footer-content">
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize mermaid with custom dark theme
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: 'dark',
+                flowchart: {
+                    htmlLabels: true,  // Enable HTML in labels for better word wrapping
+                    curve: 'basis',    // Smoother curves
+                    useMaxWidth: true, // Constrain diagram width
+                    nodeSpacing: 50,   // More space between nodes
+                    rankSpacing: 70    // More space between ranks
+                },
+                themeVariables: {
+                    darkMode: true,
+                    background: '#000000',
+                    primaryColor: '#00ff9d',
+                    primaryTextColor: '#00ff9d',
+                    primaryBorderColor: '#00ff9d',
+                    lineColor: '#00ff9d',
+                    secondaryColor: '#ff00f7',
+                    tertiaryColor: '#00c3ff',
+                    nodeBorder: '#00ff9d',
+                    clusterBkg: '#000000',
+                    clusterBorder: '#00ff9d',
+                    edgeLabelBackground: '#000000',
+                    fontFamily: 'JetBrains Mono'
+                }
+            });
+
+            // Add custom CSS for Mermaid diagrams to handle word wrapping
+            var style = document.createElement('style');
+            style.textContent = `
+                .mermaid .node rect, .mermaid .node circle, .mermaid .node ellipse, .mermaid .node polygon, .mermaid .node path {
+                    rx: 5px;
+                    ry: 5px;
+                }
+                .mermaid .node .label {
+                    word-wrap: break-word;
+                    white-space: pre-wrap !important;
+                    max-width: 200px;
+                }
+                .mermaid .edgeLabel {
+                    background-color: #000000 !important;
+                    color: #00ff9d !important;
+                }
+            `;
+            document.head.appendChild(style);
+
+            // Find all pre code blocks with mermaid class
+            document.querySelectorAll('pre code.language-mermaid').forEach(function(element) {
+                // Create a div for mermaid
+                var div = document.createElement('div');
+                div.className = 'mermaid';
+                div.style.background = '#000000';
+                div.style.padding = '2em';
+                div.style.borderRadius = '8px';
+                div.style.marginBottom = '2em';
+                div.textContent = element.textContent;
+                // Replace the pre element with the div
+                element.parentElement.replaceWith(div);
+            });
+
+            // Run mermaid
+            mermaid.init();
+        });
+    </script>
+</body>
+</html>

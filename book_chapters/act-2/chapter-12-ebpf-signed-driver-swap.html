@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -181,25 +184,86 @@
                     <div class="post-content">
                         <p>Act II: Kernel Intrusion</p>
 
-<p><strong>Chapter 13: The Ultimate Trust Violation</strong></p>
+<p><strong>Chapter 13: Forging the finit_module Return Value</strong></p>
 
-<p>I used to believe that module signing was the unbreakable seal guarding the kernel’s integrity. The idea that only cryptographically signed code could run with kernel privileges felt like a moat no attacker could cross.</p>
+<p>The question I started with: can a BPF program flip a rejected kernel module load into one that userspace believes succeeded? Not actually load a malicious module — that’s a different, much harder problem — but defeat the class of orchestrators and monitors that treat the module-load syscall return as proof of load.</p>
 
-<p>But module loading in Linux is just more code, and code can be intercepted. Under cover of a stealthy kprobe, I hooked into <code class="language-plaintext highlighter-rouge">module_sig_check()</code>, the very function that validates signatures.</p>
+<p>The first approach failed. I tried a BPF LSM program on <code class="language-plaintext highlighter-rouge">kernel_read_file</code> and <code class="language-plaintext highlighter-rouge">mod_verify_sig</code>, planning to flip their returns from a signature failure to success. Two independent problems killed it on my test kernels:</p>
 
-<p>As the kernel read the signature blob, my eBPF program diverted it to a BPF map and served up a legitimate signature stored in memory. Once the check completed, I swapped the verified buffer for my own malicious driver.</p>
+<ol>
+  <li>The linuxkit kernel I’m running in Docker Desktop doesn’t enforce module signatures at all. <code class="language-plaintext highlighter-rouge">CONFIG_MODULE_SIG_FORCE</code> is off. There’s no signature denial to flip, because nothing is checking. Same story on Debian cloud images — stock kernels ship with signature enforcement as a warning, not a fail-closed gate. My LSM hook attached fine and never fired.</li>
+  <li><code class="language-plaintext highlighter-rouge">insmod</code> of a non-ELF blob fails inside the module loader at ELF validation, well before the signature LSM hooks run. Even on a kernel that does enforce signatures, if my test payload isn’t a valid ELF I never reach <code class="language-plaintext highlighter-rouge">mod_verify_sig</code>.</li>
+</ol>
 
-<p>The kernel nodded and loaded my code without a second thought. To the security team, logs gleamed with successful signature verifications; to me, the backdoor was wide open.</p>
+<p>Both are the same category of mistake: I was trying to hook a check that wasn’t happening on the code path I was triggering. The chapter draft I started from described exactly this LSM-flipping plan. It doesn’t work on stock kernels.</p>
 
-<p>With this ultimate trust violation, I had proven that even cryptographic defenses can be subverted. Act II may be drawing to a close, but the most dramatic scenes are yet to come.</p>
+<p>The approach that does work is coarser, and I have to be honest that it’s a userspace-illusion bypass: the module doesn’t actually load. The kernel still rejects the bytes. Only the syscall return lies.</p>
 
-<p>```c
-SEC(“kprobe/module_sig_check”)
-int bypass_module_signature(struct pt_regs *ctx) {
-    // Intercept verification and swap payload
-    return 0;
-}
-char LICENSE[] SEC(“license”) = “GPL”;</p>
+<p>I read <code class="language-plaintext highlighter-rouge">/sys/kernel/debug/error_injection/list</code> to see what was injectable. Two entries jumped out:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+</pre></td><td class="rouge-code"><pre>__arm64_sys_finit_module
+__arm64_sys_init_module
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>Both syscall entry wrappers are ERRNO-injectable on 6.12 aarch64 linuxkit. That means a kretprobe attached to either of them can call <code class="language-plaintext highlighter-rouge">bpf_override_return(ctx, 0)</code> and the verifier will accept it. The override runs on syscall exit, after every internal rejection path has already produced an errno, so it works regardless of why the loader gave up.</p>
+
+<p>I wrote a minimal kretprobe pair, and a trigger script that calls <code class="language-plaintext highlighter-rouge">insmod</code> on a non-ELF file to force the kernel into the ENOEXEC path. Before the probe attaches, <code class="language-plaintext highlighter-rouge">insmod</code> reports failure. After it attaches, <code class="language-plaintext highlighter-rouge">insmod</code> reports success — and <code class="language-plaintext highlighter-rouge">lsmod</code> agrees that no module was loaded, because no module was loaded.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+</pre></td><td class="rouge-code"><pre><span class="n">SEC</span><span class="p">(</span><span class="s">"kretprobe/__arm64_sys_finit_module"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KRETPROBE</span><span class="p">(</span><span class="n">kret_finit_module</span><span class="p">,</span> <span class="kt">long</span> <span class="n">ret</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="c1">// bpf_override_return(ctx, 0) via helper — allowlisted for this symbol</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">SEC</span><span class="p">(</span><span class="s">"kretprobe/__arm64_sys_init_module"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">BPF_KRETPROBE</span><span class="p">(</span><span class="n">kret_init_module</span><span class="p">,</span> <span class="kt">long</span> <span class="n">ret</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>Evidence from the trigger script:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="rouge-code"><pre>BEFORE: insmod_rc=1 error_text="ENOEXEC"
+AFTER:  insmod_rc=0 lsmod_shows_module=no syscall_return_forged=yes
+[ch12s] FORGE pid=&lt;N&gt; comm=insmod syscall=finit_module orig_ret=-8 -&gt; 0
+=== CH12_CONCEPT_PROVEN syscall_override_landed=yes module_actually_loaded=no ===
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">orig_ret=-8</code> is <code class="language-plaintext highlighter-rouge">-ENOEXEC</code> — the kernel’s actual verdict, observable inside the probe before the override rewrites it.</p>
+
+<p>What this buys an attacker and what it doesn’t. It fools any orchestrator that calls <code class="language-plaintext highlighter-rouge">finit_module(2)</code> and treats rc=0 as load-confirmation without cross-checking <code class="language-plaintext highlighter-rouge">/sys/module/&lt;name&gt;/</code> or <code class="language-plaintext highlighter-rouge">/proc/modules</code>. It defeats shell scripts that do <code class="language-plaintext highlighter-rouge">insmod x.ko &amp;&amp; echo loaded</code>. It does not actually load code into the kernel. Kernel memory is unchanged. <code class="language-plaintext highlighter-rouge">lsmod</code> is honest. <code class="language-plaintext highlighter-rouge">dmesg</code> still logs the original rejection reason.</p>
+
+<p>This is the same illusion-class trick as ch14 (sched_setscheduler return forgery) and ch18 (token syscall return forgery). The primitive is always the same: find a syscall entry in the error_injection allowlist, attach a kretprobe, rewrite the return. The value depends entirely on whether the defender treats the syscall return as load-bearing.</p>
+
+<p>Detection. The discrepancies are visible to anyone who checks kernel state instead of syscall returns. <code class="language-plaintext highlighter-rouge">lsmod</code> / <code class="language-plaintext highlighter-rouge">/proc/modules</code> won’t list the supposedly-loaded module. <code class="language-plaintext highlighter-rouge">/sys/module/&lt;name&gt;/</code> won’t exist. <code class="language-plaintext highlighter-rouge">dmesg</code> shows the original loader error (“Invalid module format”, signature failure, unknown symbol). Any orchestrator that does <code class="language-plaintext highlighter-rouge">finit_module()</code> followed by <code class="language-plaintext highlighter-rouge">stat("/sys/module/&lt;name&gt;")</code> catches the forgery instantly. <code class="language-plaintext highlighter-rouge">bpftool prog show type kprobe</code> lists the retprobe attachments; <code class="language-plaintext highlighter-rouge">/sys/kernel/tracing/kprobe_events</code> shows the registered probe.</p>
+
+<p>The defender’s question isn’t “did this load” — that’s easy to verify. It’s “which code path in my orchestration treats a syscall rc as authoritative.” That’s the surface this primitive attacks.</p>
+
+<p>Factual note: the chapter I started from described intercepting <code class="language-plaintext highlighter-rouge">module_sig_check()</code>, swapping signature blobs in flight, and loading a malicious driver the kernel believed was legitimate. None of that is what this POC does, and none of it works on the kernels I tested. The working attack is smaller, and its scope is strictly the syscall boundary.</p>
 
                     </div>
                 </article>
@@ -209,7 +273,7 @@ char LICENSE[] SEC(“license”) = “GPL”;</p>
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

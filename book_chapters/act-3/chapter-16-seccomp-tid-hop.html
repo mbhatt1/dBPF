@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -179,21 +182,44 @@
                     </header>
 
                     <div class="post-content">
-                        <p>Act III: Total Control</p>
+                        <p><strong>Chapter 16: Observing <code class="language-plaintext highlighter-rouge">__secure_computing</code> From a Peer Process</strong></p>
 
-<p><strong>Chapter 16: Dancing Between Threads</strong></p>
+<p>Before anything else in this chapter: seccomp’s threat model is the filtered process. It was never the gap between a filtered process and a sibling with <code class="language-plaintext highlighter-rouge">CAP_BPF</code>. When a privileged peer can load kprobes on <code class="language-plaintext highlighter-rouge">__secure_computing</code>, the filtered task’s filter has already been bypassed in the threat-model sense — an attacker at that level does not need to break seccomp, they can just attach to it. What follows is not a seccomp bug; it is seccomp behaving exactly as documented, observed from the side.</p>
 
-<p>I used to think seccomp filters were unbreakable—they stood guard at every syscall entrance, binding every thread in a process to the same strict rules.
-But I discovered a secret: seccomp filters key off thread identity, and thread IDs can be borrowed, swapped, and returned before anyone notices.</p>
+<p>I started with an observer: a kprobe on <code class="language-plaintext highlighter-rouge">__secure_computing</code> and a paired kretprobe. That function is called on every syscall made by a seccomp-filtered task. On 6.12.54-linuxkit aarch64 the symbol is present in <code class="language-plaintext highlighter-rouge">/proc/kallsyms</code> and kprobes attach cleanly. Every evaluation streams through a ringbuf with <code class="language-plaintext highlighter-rouge">{ts, pid, tid, tgid, comm, seccomp.mode, retval}</code>:</p>
 
-<p>Under cover of a stealthy kprobe on __secure_computing(), my eBPF program intercepts the seccomp check at the very moment a restricted syscall is about to be rejected.
-I pause the filter, slip in the TID of a sanctioned thread through a temporary context swap, let the syscall pass as if it were from an allowed thread, then restore my original identity—all before the kernel can raise an alarm.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+</pre></td><td class="rouge-code"><pre>[seccomp] ts=145203418715 pid=649 tgid=649 comm=redis-server mode=FILTER target=1 nr/ret=-1 allow=0
+[seccomp] ts=145203419842 pid=649 tgid=649 comm=redis-server mode=FILTER target=1 nr/ret=0  allow=1
+[seccomp] ts=145203712001 pid=812 tgid=812 comm=python3      mode=FILTER target=1 nr/ret=-1 allow=0
+[seccomp] ts=145203712110 pid=812 tgid=812 comm=python3      mode=FILTER target=1 nr/ret=0  allow=1
+[seccomp] ts=145204018344 pid=812 tgid=812 comm=python3      mode=FILTER target=1 nr/ret=-1 allow=0
+[seccomp] ts=145204018501 pid=812 tgid=812 comm=python3      mode=FILTER target=1 nr/ret=-1 allow=0  # getpriority denied
+</pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>The audit logs remained clean, the filter convinced I was a model thread. Meanwhile, I danced between identities, running syscalls that should have been off-limits.</p>
+<p>Two records per syscall: the kprobe entry (<code class="language-plaintext highlighter-rouge">nr/ret=-1</code>, <code class="language-plaintext highlighter-rouge">allow=0</code>) and the kretprobe paired tail carrying the real return value. On the final line <code class="language-plaintext highlighter-rouge">allow=0</code> on the tail corresponds to <code class="language-plaintext highlighter-rouge">SECCOMP_RET_ERRNO</code> — a <code class="language-plaintext highlighter-rouge">getpriority()</code> that the filter rejected. That is a full pre/post decision trace for every filter evaluation system-wide. For a defender this is useful; for a red-team it is a credentials-free enumeration of every seccomp policy running on the host, which filters are strict, which are permissive, and which syscalls each workload actually makes.</p>
 
-<p>It was like a carnival mirror maze—seccomp chasing a ghost that never stood still.</p>
+<p>The chapter’s original title calls for a “TID hop” — swap the current thread’s TID for the TID of a permitted sibling, let the filter evaluate against the borrowed identity, and swap back. I could not implement this on the test kernel. Two independent reasons:</p>
 
-<p>With thread ID hopping, I shattered the illusion of syscall confinement: nothing was forbidden, as long as I could borrow someone else’s ticket.</p>
+<ol>
+  <li><code class="language-plaintext highlighter-rouge">task-&gt;seccomp.mode</code> and <code class="language-plaintext highlighter-rouge">task-&gt;seccomp.filter</code> cannot be mutated from eBPF. The verifier rejects writes to <code class="language-plaintext highlighter-rouge">task_struct</code>.</li>
+  <li><code class="language-plaintext highlighter-rouge">__secure_computing</code> is not in <code class="language-plaintext highlighter-rouge">/sys/kernel/debug/error_injection/list</code> on 6.12.54-linuxkit. <code class="language-plaintext highlighter-rouge">bpf_override_return</code> against it refuses to attach and brings the program down with it.</li>
+</ol>
+
+<p>So the override path is documented as aspirational and dormant. The loader still records <code class="language-plaintext highlighter-rouge">override_attempted</code> on every evaluation so that, on a kernel where <code class="language-plaintext highlighter-rouge">__secure_computing</code> is annotated with <code class="language-plaintext highlighter-rouge">ALLOW_ERROR_INJECTION</code>, switching the kretprobe body to <code class="language-plaintext highlighter-rouge">bpf_override_return(ctx, 0)</code> would turn the observer into an actual bypass. On this kernel, it is not one. Calling the observation path a seccomp “bypass” would be a lie; it is a seccomp mapper.</p>
+
+<h2 id="hook-points">Hook points</h2>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">SEC("kprobe/__secure_computing")</code> — fires before every seccomp evaluation. Present in <code class="language-plaintext highlighter-rouge">/proc/kallsyms</code> on 6.12.54 aarch64.</li>
+  <li><code class="language-plaintext highlighter-rouge">SEC("kretprobe/__secure_computing")</code> — captures the final return value (0 = allow, non-zero = filtered).</li>
+  <li>Maps: <code class="language-plaintext highlighter-rouge">events</code> (ringbuf), <code class="language-plaintext highlighter-rouge">target_tgids</code> (hash, wildcard via key 0), <code class="language-plaintext highlighter-rouge">inflight</code> (hash keyed by pid_tgid).</li>
+</ul>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -217,7 +243,76 @@ I pause the filter, slip in the TID of a sanctioned thread through a temporary c
 <span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>Next up: ACPI WSMI ping to wake the hardware in unexpected ways.</p>
+<p>(The snippet above is the aspirational bypass form. The shipped program is an observer/kretprobe pair; <code class="language-plaintext highlighter-rouge">bpf_override_current_tgid</code> is not a helper and <code class="language-plaintext highlighter-rouge">__secure_computing</code> is not error-injectable on this kernel.)</p>
+
+<h2 id="targeting">Targeting</h2>
+
+<p>The loader takes the same flag shape as ch14:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Flag</th>
+      <th>Meaning</th>
+      <th>Tradeoff</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">--tgid &lt;pid&gt;</code> (repeatable, max 64)</td>
+      <td>Mark just this tgid as targeted</td>
+      <td>Surgical — events from other tasks still stream but with <code class="language-plaintext highlighter-rouge">target=0</code>. Preferred for production demos.</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">--all</code></td>
+      <td>Insert wildcard key 0</td>
+      <td>Loud — every seccomp check system-wide gets <code class="language-plaintext highlighter-rouge">target=1</code>. Use when you specifically want to fingerprint every filter eval on the host.</td>
+    </tr>
+    <tr>
+      <td>(no targeting flag)</td>
+      <td>Pure observation</td>
+      <td>Every event still streams; <code class="language-plaintext highlighter-rouge">target=0</code>. Useful for baseline.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="build">Build</h2>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+</pre></td><td class="rouge-code"><pre>docker run --rm -v "$PWD":/work -w /work dbpf-base \
+  bash -c 'cd pocs/ch16-seccomp-tid-hop &amp;&amp; make'
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h2 id="run">Run</h2>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="rouge-code"><pre>docker run --rm --privileged --pid=host \
+  -v "$PWD":/work -w /work \
+  -v /sys/kernel/debug:/sys/kernel/debug \
+  -v /sys/fs/bpf:/sys/fs/bpf \
+  dbpf-base bash pocs/ch16-seccomp-tid-hop/trigger.sh
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h2 id="detection">Detection</h2>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">bpftool prog show | grep __secure_computing</code> lists kprobes on this symbol. Only security tooling should hook it; a probe from an unexpected process is a strong signal.</li>
+  <li><code class="language-plaintext highlighter-rouge">cat /sys/kernel/tracing/kprobe_events</code> shows dynamic probes.</li>
+  <li>Any program calling <code class="language-plaintext highlighter-rouge">bpf_override_return</code> against a seccomp symbol is almost certainly malicious. <code class="language-plaintext highlighter-rouge">bpftool prog dump xlated</code> surfaces the helper-call opcode.</li>
+</ul>
+
+<h2 id="limitations--arch-notes">Limitations / arch notes</h2>
+
+<ul>
+  <li>Docker Desktop linuxkit aarch64 (6.12.54): <code class="language-plaintext highlighter-rouge">__secure_computing</code> is not in <code class="language-plaintext highlighter-rouge">/sys/kernel/debug/error_injection/list</code>, so the override path is dormant — observation only. The <code class="language-plaintext highlighter-rouge">override_attempted</code> flag records intent.</li>
+  <li><code class="language-plaintext highlighter-rouge">task-&gt;seccomp.filter</code> chain is itself a BPF program, not data — there is no in-place mutation primitive even on x86.</li>
+  <li>Reading the syscall number from <code class="language-plaintext highlighter-rouge">__secure_computing</code> is arch-specific (arm64 stashes <code class="language-plaintext highlighter-rouge">nr</code> in <code class="language-plaintext highlighter-rouge">pt_regs-&gt;regs[8]</code>); the shipped program returns <code class="language-plaintext highlighter-rouge">-1</code> for <code class="language-plaintext highlighter-rouge">syscall_nr</code> on entry and uses the kretprobe’s return value as the meaningful field. Userspace can correlate via <code class="language-plaintext highlighter-rouge">comm</code> + <code class="language-plaintext highlighter-rouge">ts_ns</code> if a precise <code class="language-plaintext highlighter-rouge">nr</code> is needed.</li>
+</ul>
 
                     </div>
                 </article>
@@ -227,7 +322,7 @@ I pause the filter, slip in the TID of a sanctioned thread through a temporary c
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

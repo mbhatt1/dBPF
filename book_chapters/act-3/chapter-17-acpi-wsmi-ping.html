@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -179,13 +182,65 @@
                     </header>
 
                     <div class="post-content">
-                        <p>Act III: Total Control</p>
+                        <p><strong>Chapter 17: Where the ACPI Interpreter Isn’t</strong></p>
 
-<p><strong>Chapter 17: Awakening the Hardware</strong></p>
+<p>The chapter as originally drafted hooks <code class="language-plaintext highlighter-rouge">acpi_evaluate_object</code>, watches for a specific ACPI pathname (<code class="language-plaintext highlighter-rouge">\_SB._WS0.Ping</code>), and swaps in custom AML parameters. That scenario is architecturally x86. I was working on aarch64 and the first thing I did was check whether the symbols exist:</p>
 
-<p>I always thought firmware was this unreachable fortress, guarded by the kernel’s highest privileges. But what if you could eBPF a backdoor straight into the BIOS hotline? Welcome to the ACPI WSMI ping—where your BPF program taps the kernel’s ACPI driver and whispers commands directly to the firmware.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="rouge-code"><pre>$ grep acpi_evaluate_object /proc/kallsyms
+$ grep acpi_ns_evaluate /proc/kallsyms
+$ grep acpi_ex_execute_method /proc/kallsyms
+</pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>You’ll hook into <a href="https://elixir.bootlin.com/linux/latest/source/drivers/acpi/acpica/nseval.c"><code class="language-plaintext highlighter-rouge">acpi_evaluate_object()</code></a> right before it sends AML code to the EC, swap in your custom method and parameters, then let it fly under the radar of every security guard in the kernel.</p>
+<p>All three returned nothing. Docker Desktop’s linuxkit kernel (6.12 aarch64) ships without the ACPI interpreter. There is no <code class="language-plaintext highlighter-rouge">acpi_*</code> symbol to kprobe. The chapter’s primary scenario cannot fire on this platform.</p>
+
+<p>The pragmatic pivot was to pick a different kernel path with the same shape — kernel code reaching out to firmware-land on behalf of a userspace request — and demonstrate the primitive against that. The analog is <code class="language-plaintext highlighter-rouge">request_firmware</code>, <code class="language-plaintext highlighter-rouge">_request_firmware</code>, and <code class="language-plaintext highlighter-rouge">firmware_request_nowarn</code>, all present:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+</pre></td><td class="rouge-code"><pre>[acpi] === symbol availability ===
+  acpi_evaluate_object       : ABSENT
+  acpi_ns_evaluate           : ABSENT
+  acpi_ex_execute_method     : ABSENT
+  request_firmware           : present
+  _request_firmware          : present
+  firmware_request_nowarn    : present
+[acpi] attached=firmware_fallback
+[acpi] ACPI_PROBE_PROVEN arch=aarch64 substituted=firmware_loader
+[acpi] tag=call pid=12034 comm=insmod hook=request_firmware arg=bogus-ch17-1728961234.bin
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>The observer streams <code class="language-plaintext highlighter-rouge">{pid, comm, hook, arg_string}</code> for every firmware request. <code class="language-plaintext highlighter-rouge">arg_string</code> captures the filename the caller asked for (truncated to 64 bytes; a per-CPU scratch keeps the BPF stack under budget). On x86 with ACPI present the same observer attaches the <code class="language-plaintext highlighter-rouge">acpi_*</code> trio instead and captures the ACPI pathname on the entry hook, producing records like <code class="language-plaintext highlighter-rouge">hook=acpi_evaluate_object arg=\_SB.PCI0._STA</code>. The loader’s first ringbuf event carries a proof marker — <code class="language-plaintext highlighter-rouge">ACPI_PROBE_PROVEN arch=x86_64 substituted=none</code> or <code class="language-plaintext highlighter-rouge">ACPI_PROBE_PROVEN arch=aarch64 substituted=firmware_loader</code> — so a reviewer can tell at a glance which path was attached and whether any substitution happened.</p>
+
+<p>This is scoped as observation. I did not attempt <code class="language-plaintext highlighter-rouge">bpf_override_return</code> on any of these symbols for this POC. On x86 a real WSMI-style bypass would require <code class="language-plaintext highlighter-rouge">bpf_override_return</code> against <code class="language-plaintext highlighter-rouge">acpi_ex_execute_method</code> (not on the error-injection list on stock kernels) or a BPF LSM program on <code class="language-plaintext highlighter-rouge">kernel_read_file</code> with <code class="language-plaintext highlighter-rouge">class=FIRMWARE</code>. Neither is wired up here. Calling the firmware-loader variant an “ACPI WSMI bypass” would be dishonest; it is a userspace-analog demonstration of the primitive shape — watch a string flow from user to kernel as it is loaded, which is the same shape as intercepting AML pathnames — running in the place where the real thing would run on a platform that has it.</p>
+
+<p>If <code class="language-plaintext highlighter-rouge">/proc/kallsyms</code> contains none of the six candidates, the loader prints <code class="language-plaintext highlighter-rouge">CH17_SKIP reason="no acpi nor firmware symbols"</code> and exits 2 rather than pretending to succeed.</p>
+
+<h2 id="hook-points">Hook points</h2>
+
+<h3 id="x86-primary">x86 (primary)</h3>
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">kprobe/acpi_evaluate_object</code></li>
+  <li><code class="language-plaintext highlighter-rouge">kprobe/acpi_ns_evaluate</code></li>
+  <li><code class="language-plaintext highlighter-rouge">kprobe/acpi_ex_execute_method</code></li>
+</ul>
+
+<h3 id="aarch64-fallback">aarch64 (fallback)</h3>
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">kprobe/request_firmware</code></li>
+  <li><code class="language-plaintext highlighter-rouge">kprobe/_request_firmware</code></li>
+  <li><code class="language-plaintext highlighter-rouge">kprobe/firmware_request_nowarn</code></li>
+</ul>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -219,7 +274,46 @@
 <span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>Next up: eBPF Token Bypass—ghosting through capability checks like they’re worthless paperwork.</p>
+<h2 id="build">Build</h2>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+</pre></td><td class="rouge-code"><pre>cd pocs/ch17-acpi-wsmi
+make
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h2 id="run">Run</h2>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="rouge-code"><pre>sudo ./build/ch17-acpi-wsmi -h
+sudo ./build/ch17-acpi-wsmi                 # observer mode
+sudo ./build/ch17-acpi-wsmi -v              # verbose libbpf
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>In another terminal:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+</pre></td><td class="rouge-code"><pre>sudo bash ./trigger.sh
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h2 id="detection">Detection</h2>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">bpftool prog show | grep -E 'acpi|firmware'</code></li>
+  <li><code class="language-plaintext highlighter-rouge">cat /sys/kernel/debug/tracing/kprobe_events</code> shows attached probes.</li>
+  <li><code class="language-plaintext highlighter-rouge">events</code> ringbuf visible in <code class="language-plaintext highlighter-rouge">bpftool map show</code>.</li>
+  <li>On production x86 hosts, any kprobe on <code class="language-plaintext highlighter-rouge">acpi_ex_execute_method</code> is worth investigating. Legitimate telemetry rarely hooks it.</li>
+</ul>
+
+<h2 id="limitations--arch-notes">Limitations / arch notes</h2>
+
+<ul>
+  <li>No ACPI, no firmware → honest skip. If <code class="language-plaintext highlighter-rouge">/proc/kallsyms</code> contains none of the six candidates, the loader prints <code class="language-plaintext highlighter-rouge">CH17_SKIP</code> and exits 2.</li>
+  <li>aarch64 linuxkit has no ACPI interpreter. The POC substitutes the firmware-request path, which is a best-effort moral equivalent. The substituted-path marker records this honestly in the first ringbuf event.</li>
+  <li>Override is out of scope for this POC. A real ACPI WSMI bypass would need <code class="language-plaintext highlighter-rouge">bpf_override_return</code> on <code class="language-plaintext highlighter-rouge">acpi_ex_execute_method</code> (not error-injectable on stock kernels) or a BPF LSM hook on <code class="language-plaintext highlighter-rouge">kernel_read_file</code> with <code class="language-plaintext highlighter-rouge">class=FIRMWARE</code>. Neither is wired up here.</li>
+</ul>
 
                     </div>
                 </article>
@@ -229,7 +323,7 @@
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

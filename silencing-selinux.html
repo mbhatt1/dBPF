@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -1389,13 +1392,25 @@ seccomp-bpf-filter.json:
   <li>Implement BPF LSM policies to restrict eBPF program loading</li>
   <li>Monitor for unexpected eBPF programs attached to security functions</li>
   <li>Deploy multiple independent monitoring systems</li>
-  <li>Use hardware-based security where possible
- u32 pid = bpf_get_current_pid_tgid() » 32;
- return (ts « 32) | pid;
-}</li>
+  <li>Use hardware-based security where possible</li>
+</ol>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="rouge-code"><pre>    <span class="n">u32</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">bpf_get_current_pid_tgid</span><span class="p">()</span> <span class="o">&gt;&gt;</span> <span class="mi">32</span><span class="p">;</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">ts</span> <span class="o">&lt;&lt;</span> <span class="mi">32</span><span class="p">)</span> <span class="o">|</span> <span class="n">pid</span><span class="p">;</span>
+<span class="err">}</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<ol>
   <li><strong>Intercept audit events</strong>: Prevent logging of policy violations</li>
   <li><strong>Maintain appearances</strong>: Ensure the system still reports SELinux as enforcing</li>
 </ol>
+
+<h2 id="poc">POC</h2>
+
+<p>Companion code: <a href="/dBPF/dBPF-pocs/pocs/ch06-silence-selinux/"><code class="language-plaintext highlighter-rouge">ch06-silence-selinux</code></a></p>
 
                     </div>
                 </article>
@@ -1430,7 +1445,7 @@ seccomp-bpf-filter.json:
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

@@ -81,6 +81,10 @@
 <lastmod>2025-05-09T00:00:00+00:00</lastmod>
 </url>
 <url>
+<loc>https://mbhatt1.github.io/dBPF/epilogue-the-new-reality.html</loc>
+<lastmod>2025-12-31T00:00:00+00:00</lastmod>
+</url>
+<url>
 <loc>https://mbhatt1.github.io/dBPF/blog-post-template</loc>
 </url>
 <url>
@@ -123,6 +127,15 @@
 <loc>https://mbhatt1.github.io/dBPF/book_chapters/act-1/chapter-2-the-overlayfs-trojan-horse</loc>
 </url>
 <url>
+<loc>https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-20-the-autopsy-what-we-proved</loc>
+</url>
+<url>
+<loc>https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-21-the-autopsy-what-refused-to-die</loc>
+</url>
+<url>
+<loc>https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-22-the-defender-playbook</loc>
+</url>
+<url>
 <loc>https://mbhatt1.github.io/dBPF/book_chapters/act-1/chapter-3-the-fuse-audit-black-hole</loc>
 </url>
 <url>
@@ -148,5 +161,8 @@
 </url>
 <url>
 <loc>https://mbhatt1.github.io/dBPF/</loc>
+</url>
+<url>
+<loc>https://mbhatt1.github.io/dBPF/book_chapters/</loc>
 </url>
 </urlset>

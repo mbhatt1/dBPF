@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -179,15 +182,59 @@
                     </header>
 
                     <div class="post-content">
-                        <p>Act III: Total Control</p>
+                        <p><strong>Chapter 18: Forging <code class="language-plaintext highlighter-rouge">uid=0</code> at the Syscall Return</strong></p>
 
-<p><strong>Chapter 18: Becoming Anyone, Anywhere</strong></p>
+<p>This is the canonical wrong-enforcement-point bug reimplemented with a kretprobe. The pattern goes back decades: a program consults <code class="language-plaintext highlighter-rouge">getuid()</code> to decide whether the caller is root, and trusts the return value rather than consulting the actual <code class="language-plaintext highlighter-rouge">current-&gt;cred</code> at the point of enforcement. Every time this bug shipped — Sendmail, several SUID binaries through the 2000s, a long tail of misconfigured services — the fix was the same: do the capability check at the kernel enforcement point, not via a userspace query. The eBPF version just makes it mechanical.</p>
 
-<p>I always believed tokens were the ultimate gatekeepers—signed, sealed, and unbreakable. Then I realized that eBPF can slip between the kernel’s identity checks like a ghost through walls.</p>
+<p>Two kretprobes, two <code class="language-plaintext highlighter-rouge">bpf_override_return(ctx, 0)</code> calls:</p>
 
-<p>I hooked into <a href="https://elixir.bootlin.com/linux/latest/source/security/security.c"><code class="language-plaintext highlighter-rouge">security_file_permission()</code></a> and <a href="https://elixir.bootlin.com/linux/latest/source/kernel/capability.c"><code class="language-plaintext highlighter-rouge">cap_capable()</code></a>, swapping my credentials on the fly. One moment I’m an unprivileged process; the next, I’m root with every key to the kingdom.</p>
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">kretprobe/__arm64_sys_getuid</code> → 0</li>
+  <li><code class="language-plaintext highlighter-rouge">kretprobe/__arm64_sys_geteuid</code> → 0</li>
+</ul>
 
-<p>The audit log never saw a thing—every forged token looked perfectly valid, every capability check passed with a smile.</p>
+<p>Both symbols are in <code class="language-plaintext highlighter-rouge">/sys/kernel/debug/error_injection/list</code> on the linuxkit 6.12 aarch64 kernel I tested on, so the override lands. Symbols are verified via <code class="language-plaintext highlighter-rouge">/proc/kallsyms</code> at load time; missing symbols are tolerated (<code class="language-plaintext highlighter-rouge">bpf_program__set_autoload(prog, false)</code>).</p>
+
+<p>What libc gets back on every <code class="language-plaintext highlighter-rouge">getuid()</code>/<code class="language-plaintext highlighter-rouge">geteuid()</code> call is <code class="language-plaintext highlighter-rouge">0</code>. Programs like <code class="language-plaintext highlighter-rouge">id</code> and <code class="language-plaintext highlighter-rouge">whoami</code> then ask NSS for “the user with uid 0” and print <code class="language-plaintext highlighter-rouge">root</code>:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+</pre></td><td class="rouge-code"><pre>=== baseline: id -u / whoami as t18 (no BPF interference expected) ===
+1000
+t18
+=== with BPF attached: should report uid=0 / root ===
+0
+root
+
+[token] FORGE pid=19481 comm=sh getuid: 1000 -&gt; 0 (root)
+[token] FORGE pid=19482 comm=id geteuid: 1000 -&gt; 0 (root)
+[token] FORGE pid=19483 comm=whoami getuid: 1000 -&gt; 0 (root)
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>Here is the clean tell that this is an illusion and not a real privilege escalation. Run <code class="language-plaintext highlighter-rouge">id</code> with the probe attached:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+</pre></td><td class="rouge-code"><pre>uid=0(root) gid=1001 groups=1001
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>Only the uid was forged. <code class="language-plaintext highlighter-rouge">getgid()</code> was not hooked, so <code class="language-plaintext highlighter-rouge">gid=1001</code> passed through untouched. A real root process has <code class="language-plaintext highlighter-rouge">gid=0</code>. Any tool that correlates uid and gid (or that reads <code class="language-plaintext highlighter-rouge">/proc/self/status</code>, which sources <code class="language-plaintext highlighter-rouge">Uid:</code> / <code class="language-plaintext highlighter-rouge">Gid:</code> straight from <code class="language-plaintext highlighter-rouge">task_struct-&gt;cred</code>) will see the divergence. The attack works against <code class="language-plaintext highlighter-rouge">id</code>/<code class="language-plaintext highlighter-rouge">whoami</code>/any script that just checks <code class="language-plaintext highlighter-rouge">$(id -u) -eq 0</code>; it does not work against anything that actually cares.</p>
+
+<p>And critically, kernel-side credential checks do not consult <code class="language-plaintext highlighter-rouge">sys_getuid</code>. VFS checks, capability checks, LSM hooks — they all go through <code class="language-plaintext highlighter-rouge">current-&gt;cred</code>, which is unchanged. <code class="language-plaintext highlighter-rouge">cat /etc/shadow</code> still returns <code class="language-plaintext highlighter-rouge">EACCES</code>. This is the entire point: the exploit class is narrow, well-known, and exactly as scoped as the historical userspace-query-based auth bugs it descends from.</p>
+
+<h2 id="hook-points">Hook points</h2>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">kretprobe/__arm64_sys_getuid</code>  → <code class="language-plaintext highlighter-rouge">bpf_override_return(ctx, 0)</code></li>
+  <li><code class="language-plaintext highlighter-rouge">kretprobe/__arm64_sys_geteuid</code> → <code class="language-plaintext highlighter-rouge">bpf_override_return(ctx, 0)</code></li>
+</ul>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -235,7 +282,70 @@
 <span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>Next up: Epilogue – The New Reality</p>
+<p>(The snippet above is the original draft — <code class="language-plaintext highlighter-rouge">prepare_kernel_cred</code> / <code class="language-plaintext highlighter-rouge">commit_creds</code> are not callable from BPF context. The shipped program uses <code class="language-plaintext highlighter-rouge">bpf_override_return(ctx, 0)</code> from kretprobes on <code class="language-plaintext highlighter-rouge">__arm64_sys_getuid</code> and <code class="language-plaintext highlighter-rouge">__arm64_sys_geteuid</code>, which is a userspace-facing illusion and not a real credential swap.)</p>
+
+<h2 id="build">Build</h2>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="rouge-code"><pre>cd pocs/ch18-token-bypass
+docker run --rm -v "$PWD/../..":/work -w /work dbpf-base \
+  bash -c 'cd pocs/ch18-token-bypass &amp;&amp; make'
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h2 id="run">Run</h2>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+</pre></td><td class="rouge-code"><pre># Wildcard: forge every getuid/geteuid call system-wide.
+sudo ./build/ch18-token-bypass --all
+
+# Targeted: forge only calls from a specific tgid.
+sudo ./build/ch18-token-bypass --tgid 1234
+
+# Multiple targets are accepted.
+sudo ./build/ch18-token-bypass --tgid 1234 --tgid 5678
+
+# Help.
+./build/ch18-token-bypass -h
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>In another shell, run the trigger:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+</pre></td><td class="rouge-code"><pre>sudo bash trigger.sh
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>Send <code class="language-plaintext highlighter-rouge">SIGINT</code> (Ctrl-C) to detach cleanly.</p>
+
+<h2 id="detection">Detection</h2>
+
+<ul>
+  <li>Audit subsystem does not see this. There is no syscall failure, only a forged return.</li>
+  <li><code class="language-plaintext highlighter-rouge">bpftool prog show</code> reveals two attached kretprobes on <code class="language-plaintext highlighter-rouge">sys_getuid</code> and <code class="language-plaintext highlighter-rouge">sys_geteuid</code>. On a production host these are highly anomalous attachment points and should be alerted on.</li>
+  <li>File-integrity and kernel-module monitoring will not catch it. No module is loaded.</li>
+  <li>Detection works best at the BPF load layer: <code class="language-plaintext highlighter-rouge">bpf()</code> syscall auditing with <code class="language-plaintext highlighter-rouge">BPF_PROG_LOAD</code> records, plus a policy rejecting kretprobes that call <code class="language-plaintext highlighter-rouge">bpf_override_return</code>.</li>
+  <li>Consistency check: any monitoring agent that compares <code class="language-plaintext highlighter-rouge">getuid()</code> return against <code class="language-plaintext highlighter-rouge">/proc/self/status</code> <code class="language-plaintext highlighter-rouge">Uid:</code> will flag the divergence. I have not seen anything in the wild doing this by default.</li>
+</ul>
+
+<h2 id="limitations--arch-notes">Limitations / arch notes</h2>
+
+<ul>
+  <li>aarch64 only. Symbols are spelled <code class="language-plaintext highlighter-rouge">__arm64_sys_getuid</code> / <code class="language-plaintext highlighter-rouge">__arm64_sys_geteuid</code>. On x86_64 they would be <code class="language-plaintext highlighter-rouge">__x64_sys_getuid</code> / <code class="language-plaintext highlighter-rouge">__x64_sys_geteuid</code>. The loader’s symbol preflight disables affected programs cleanly if absent.</li>
+  <li><code class="language-plaintext highlighter-rouge">bpf_override_return</code> only succeeds on functions present in <code class="language-plaintext highlighter-rouge">/sys/kernel/debug/error_injection/list</code>. Both targets happen to be on the linuxkit 6.12 list. On a hardened kernel without these entries, the kretprobe will attach but the override silently no-ops; the loader will still emit non-<code class="language-plaintext highlighter-rouge">flipped</code> events but the userspace illusion will not occur.</li>
+  <li>Userspace illusion only. No kernel access check is bypassed. This is intentional — the POC demonstrates the class of bug, which is identical in shape to the historical “trust-the-query, not-the-cred” CVEs.</li>
+  <li>Requires <code class="language-plaintext highlighter-rouge">CAP_BPF</code> + <code class="language-plaintext highlighter-rouge">CAP_PERFMON</code> (or root). Inside Docker, run with <code class="language-plaintext highlighter-rouge">--privileged --pid=host</code>.</li>
+</ul>
 
                     </div>
                 </article>
@@ -245,7 +355,7 @@
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -187,13 +190,9 @@
 
 <h3 id="what-youre-really-looking-at">What You’re Really Looking At</h3>
 
-<p>This field manual documents what happens when you take eBPF—this beautiful, elegant piece of kernel engineering—and ask the question every hacker worth their salt eventually asks: <em>“But what if I use this for evil?”</em></p>
+<p>This field manual documents what <code class="language-plaintext highlighter-rouge">CAP_BPF</code> plus <code class="language-plaintext highlighter-rouge">CAP_PERFMON</code> (or <code class="language-plaintext highlighter-rouge">CAP_SYS_ADMIN</code>) actually permits on a modern Linux kernel. Every technique here assumes the attacker already holds that capability.</p>
 
-<p>Spoiler alert: The answer is both fascinating and deeply unsettling.</p>
-
-<p>Every technique in here? <strong>Working as intended.</strong> Every “exploit”? <strong>Feature, not bug.</strong> Every bypass? <strong>Exactly what the kernel developers designed eBPF to do.</strong></p>
-
-<p>That’s what makes this so damn interesting.</p>
+<p>Every technique in here: working as intended. Every “exploit”: a feature used for its documented purpose. Every bypass: exactly what the kernel developers designed eBPF to do, operating against a workload whose threat model did not price in a privileged sibling holding <code class="language-plaintext highlighter-rouge">CAP_BPF</code>.</p>
 
 <h3 id="the-uncomfortable-truth">The Uncomfortable Truth</h3>
 
@@ -240,7 +239,7 @@
 <p>This isn’t just a collection of techniques—it’s a story. The story of what happens when you discover that the Linux kernel has become programmable, and what that really means for security.</p>
 
 <p><strong>Act I: The Discovery</strong> (Chapters 1-6)
-We start with <strong>The Mirror Controls</strong>—the moment you realize that security controls can be turned into funhouse mirrors. From there, we explore container escapes through <strong>OverlayFS manipulation</strong>, learn to make our actions invisible with <strong>audit evasion</strong>, create <strong>phantom syscalls</strong> that don’t exist, build <strong>ghost network interfaces</strong>, and slip the constraints of <strong>resource limits</strong>.</p>
+We start with <strong>The Mirror Controls</strong> — overriding the return value of kernel security-decision functions so userspace sees a forged answer. From there, we explore container escapes through <strong>OverlayFS manipulation</strong>, <strong>audit evasion</strong> via ringbuf exfiltration, <strong>phantom syscalls</strong> that leak kernel struct fields, <strong>ghost network interfaces</strong> via XDP, and cgroup accounting rewrites that let a workload <strong>slip its resource limits</strong>.</p>
 
 <p><strong>Act II: The Deep Dive</strong> (Chapters 7-12)
 We silence <strong>SELinux</strong> itself, perform the ultimate <strong>device access escape</strong>, steal secrets from the <strong>kernel keyring</strong>, create <strong>process doppelgängers</strong> across namespaces, make files <strong>invisible to detection</strong>, and weaponize <strong>interrupt handling</strong> for chaos.</p>
@@ -257,15 +256,7 @@ We step back and confront the ultimate truth—that in a fully programmable comp
 
 <p>eBPF is not vulnerable. eBPF is not broken. eBPF is not a mistake.</p>
 
-<p>eBPF is <em>perfect</em>. And that’s exactly what makes it so dangerous.</p>
-
-<p>Welcome to the dark side. Try not to get lost.</p>
-
-<hr />
-
-<p><em>“The best way to learn how something works is to try to break it. The best way to learn how eBPF works is to realize you can’t break it—you can only use it exactly as intended, which is somehow much worse.”</em></p>
-
-<p><strong>Let’s see how deep this rabbit hole goes.</strong></p>
+<p>eBPF is working as documented. The surprises come from what “working as documented” means when the capability is granted to observability agents by default.</p>
 
                     </div>
                 </article>
@@ -292,7 +283,7 @@ We step back and confront the ultimate truth—that in a fully programmable comp
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

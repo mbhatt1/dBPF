@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -1411,6 +1414,10 @@ iptables <span class="nt">-A</span> OUTPUT <span class="nt">-p</span> tcp <span 
 
 <p>But here’s the killer advantage - we’re operating at the packet level below their namespace monitoring. By the time they see the traffic on physical interfaces, it’s already bypassed all their isolation controls and policy enforcement.</p>
 
+<h2 id="poc">POC</h2>
+
+<p>Companion code: <a href="/dBPF/dBPF-pocs/pocs/ch15-netns-vlan-ghost/"><code class="language-plaintext highlighter-rouge">ch15-netns-vlan-ghost</code></a></p>
+
                     </div>
                 </article>
 
@@ -1434,7 +1441,7 @@ iptables <span class="nt">-A</span> OUTPUT <span class="nt">-p</span> tcp <span 
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

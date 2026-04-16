@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>book_chapters/ | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="/dBPF/assets/css/book.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark'
+    });
+  });
+</script>
+
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>book_chapters/ | Diabolical eBPF: Linux Red Team Field Manual</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="book_chapters/" />
+<meta name="author" content="Diabolical eBPF" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
+<meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/" />
+<meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="book_chapters/" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","author":{"@type":"Person","name":"Diabolical eBPF"},"description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"book_chapters/","url":"https://mbhatt1.github.io/dBPF/book_chapters/"}</script>
+<!-- End Jekyll SEO tag -->
+
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <a href="/dBPF/" class="site-title">Diabolical eBPF: Linux Red Team Field Manual</a>
+            </div>
+            <div class="sidebar-content">
+                
+                
+                    
+                    
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Preface
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-mirror-controls.html" >
+                        The Mirror Controls
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-overlayfs-trojan-horse.html" >
+                        The OverlayFS Trojan Horse
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-fuse-audit-black-hole.html" >
+                        The FUSE Audit Black-Hole
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-phantom-syscall.html" >
+                        The Phantom Syscall
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-ghost-nic.html" >
+                        The Ghost NIC
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/slipping-the-cgroup-leash.html" >
+                        Slipping the Cgroup Leash
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/silencing-selinux.html" >
+                        Silencing SELinux
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/device-cgroup-houdini.html" >
+                        Device‑cgroup Houdini
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/keyring-heist.html" >
+                        Keyring Heist
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/pid-namespace-doppelg-nger.html" >
+                        PID Namespace Doppelgänger
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/inode-cloak.html" >
+                        Inode Cloak
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/irq-affinity-chaos.html" >
+                        IRQ Affinity Chaos
+                    </a>
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+            </div>
+        </nav>
+
+        <div class="content-wrapper">
+            <main class="content">
+                <article class="post">
+                    <header class="post-header">
+                        <h1 class="post-title">book_chapters/</h1>
+                        
+                    </header>
+
+                    <div class="post-content">
+                        <h1 id="book_chapters">book_chapters/</h1>
+
+<p>Canonical manuscript source for <strong>The Diabolical eBPF Field Manual</strong>, organized as a
+three-act book with chapters 0–19 as standalone Markdown files. This tree is the
+source of truth for the prose; the Jekyll site and companion code are derived views.</p>
+
+<h2 id="layout">Layout</h2>
+
+<ul>
+  <li><strong><code class="language-plaintext highlighter-rouge">book_chapters/</code></strong> (this directory) — canonical manuscript, three-act structure,
+one file per chapter. Edit here first.</li>
+  <li><strong><code class="language-plaintext highlighter-rouge">_posts/</code></strong> — Jekyll-rendered web version of the same material (sibling content,
+web-formatted with front matter). Not the source of truth.</li>
+  <li><strong><code class="language-plaintext highlighter-rouge">dBPF-pocs/</code></strong> — working companion code: runnable eBPF proof-of-concept programs,
+loaders, and (where applicable) LSM/kprobe/fentry variants per chapter.</li>
+</ul>
+
+<h2 id="three-act-arc">Three-act arc</h2>
+
+<ul>
+  <li><strong>Act 1 — Foundational misuse.</strong> Early primitives: mirroring, overlay/FUSE tricks,
+syscall shims, cgroup/NIC slips, silencing LSM telemetry.</li>
+  <li><strong>Act 2 — Privilege &amp; namespace escalation.</strong> Device cgroups, keyrings, PID/inode
+cloaking, IRQ chaos, signed-driver swaps, powercap overrides.</li>
+  <li><strong>Act 3 — System-level subversion + epilogue.</strong> Scheduler impersonation, netns/VLAN
+ghosts, seccomp TID hops, ACPI/WMI pings, token bypass, and a closing reflection.</li>
+</ul>
+
+<h2 id="table-of-contents">Table of Contents</h2>
+
+<h3 id="act-1--foundational-misuse">Act 1 — Foundational misuse</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Chapter</th>
+      <th>POC</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0</td>
+      <td><a href="/dBPF/book_chapters/act-1/chapter-0-field-manual-preface">chapter-0-field-manual-preface.md</a> — preface and framing for the field manual</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>1</td>
+      <td><a href="/dBPF/book_chapters/act-1/chapter-1-the-mirror-controls">chapter-1-the-mirror-controls.md</a> — mirroring control-plane state from eBPF</td>
+      <td><a href="../dBPF-pocs/pocs/ch01-mirror-controls">ch01-mirror-controls</a> · <a href="../dBPF-pocs/pocs/ch01-mirror-controls-lsm">lsm</a></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><a href="/dBPF/book_chapters/act-1/chapter-2-the-overlayfs-trojan-horse">chapter-2-the-overlayfs-trojan-horse.md</a> — overlayfs as a delivery vector</td>
+      <td><a href="../dBPF-pocs/pocs/ch02-overlayfs">ch02-overlayfs</a> · <a href="../dBPF-pocs/pocs/ch02-overlayfs-lsm">lsm</a></td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><a href="/dBPF/book_chapters/act-1/chapter-3-the-fuse-audit-black-hole">chapter-3-the-fuse-audit-black-hole.md</a> — FUSE as an audit blind spot</td>
+      <td><a href="../dBPF-pocs/pocs/ch03-fuse-blackhole">ch03-fuse-blackhole</a> · <a href="../dBPF-pocs/pocs/ch03-fuse-blackhole-fentry">fentry</a></td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><a href="/dBPF/book_chapters/act-1/chapter-4-the-phantom-syscall">chapter-4-the-phantom-syscall.md</a> — syscalls that leave no trace</td>
+      <td><a href="../dBPF-pocs/pocs/ch04-phantom-syscall">ch04-phantom-syscall</a></td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><a href="/dBPF/book_chapters/act-1/chapter-5-slipping-the-cgroup-leash">chapter-5-slipping-the-cgroup-leash.md</a> — escaping cgroup constraints</td>
+      <td><a href="../dBPF-pocs/pocs/ch05-cgroup-leash">ch05-cgroup-leash</a></td>
+    </tr>
+    <tr>
+      <td>5b</td>
+      <td><a href="/dBPF/book_chapters/act-1/chapter-5-the-ghost-nic">chapter-5-the-ghost-nic.md</a> — a NIC that isn’t there</td>
+      <td><a href="../dBPF-pocs/pocs/ch05b-ghost-nic">ch05b-ghost-nic</a></td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td><a href="/dBPF/book_chapters/act-1/chapter-6-silencing-selinux">chapter-6-silencing-selinux.md</a> — muzzling SELinux telemetry</td>
+      <td><a href="../dBPF-pocs/pocs/ch06-silence-selinux">ch06-silence-selinux</a> · <a href="../dBPF-pocs/pocs/ch06-silence-selinux-lsm">lsm</a> · <a href="../dBPF-pocs/pocs/ch06-silence-selinux-lsm-synthetic">lsm-synthetic</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="act-2--privilege--namespace-escalation">Act 2 — Privilege &amp; namespace escalation</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Chapter</th>
+      <th>POC</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>7</td>
+      <td><a href="/dBPF/book_chapters/act-2/chapter-7-device-cgroup-houdini">chapter-7-device-cgroup-houdini.md</a> — escaping device cgroup gates</td>
+      <td><a href="../dBPF-pocs/pocs/ch07-devcgroup-houdini">ch07-devcgroup-houdini</a> · <a href="../dBPF-pocs/pocs/ch07-devcgroup-houdini-lsm">lsm</a></td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td><a href="/dBPF/book_chapters/act-2/chapter-8-keyring-heist">chapter-8-keyring-heist.md</a> — kernel keyring exfiltration</td>
+      <td><a href="../dBPF-pocs/pocs/ch08-keyring-heist">ch08-keyring-heist</a> · <a href="../dBPF-pocs/pocs/ch08-keyring-heist-kprobe">kprobe</a> · <a href="../dBPF-pocs/pocs/ch08-keyring-heist-lsm">lsm</a></td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td><a href="/dBPF/book_chapters/act-2/chapter-9-pid-namespace-doppelg-nger">chapter-9-pid-namespace-doppelg-nger.md</a> — PID namespace doppelgängers</td>
+      <td><a href="../dBPF-pocs/pocs/ch09-pid-doppel">ch09-pid-doppel</a></td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td><a href="/dBPF/book_chapters/act-2/chapter-10-inode-cloak">chapter-10-inode-cloak.md</a> — cloaking files at the inode layer</td>
+      <td><a href="../dBPF-pocs/pocs/ch10-inode-cloak">ch10-inode-cloak</a></td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td><a href="/dBPF/book_chapters/act-2/chapter-11-irq-affinity-chaos">chapter-11-irq-affinity-chaos.md</a> — weaponizing IRQ affinity</td>
+      <td><a href="../dBPF-pocs/pocs/ch11-irq-chaos">ch11-irq-chaos</a></td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td><a href="/dBPF/book_chapters/act-2/chapter-12-ebpf-signed-driver-swap">chapter-12-ebpf-signed-driver-swap.md</a> — swapping signed drivers via eBPF</td>
+      <td><a href="../dBPF-pocs/pocs/ch12-signed-driver-swap">ch12-signed-driver-swap</a> · <a href="../dBPF-pocs/pocs/ch12-signed-driver-swap-lsm">lsm</a> · <a href="../dBPF-pocs/pocs/ch12-signed-driver-swap-syscall">syscall</a></td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td><a href="/dBPF/book_chapters/act-2/chapter-13-powercap-override">chapter-13-powercap-override.md</a> — overriding powercap limits</td>
+      <td><a href="../dBPF-pocs/pocs/ch13-powercap-override">ch13-powercap-override</a> · <a href="../dBPF-pocs/pocs/ch13-powercap-override-analog">analog</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="act-3--system-level-subversion--epilogue">Act 3 — System-level subversion + epilogue</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Chapter</th>
+      <th>POC</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>14</td>
+      <td><a href="/dBPF/book_chapters/act-3/chapter-14-sched-fifo-impersonator">chapter-14-sched-fifo-impersonator.md</a> — impersonating SCHED_FIFO priority</td>
+      <td><a href="../dBPF-pocs/pocs/ch14-sched-fifo">ch14-sched-fifo</a></td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td><a href="/dBPF/book_chapters/act-3/chapter-15-netns-vlan-ghost">chapter-15-netns-vlan-ghost.md</a> — a VLAN ghost across network namespaces</td>
+      <td><a href="../dBPF-pocs/pocs/ch15-netns-vlan-ghost">ch15-netns-vlan-ghost</a></td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td><a href="/dBPF/book_chapters/act-3/chapter-16-seccomp-tid-hop">chapter-16-seccomp-tid-hop.md</a> — hopping TIDs around seccomp filters</td>
+      <td><a href="../dBPF-pocs/pocs/ch16-seccomp-tid-hop">ch16-seccomp-tid-hop</a></td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td><a href="/dBPF/book_chapters/act-3/chapter-17-acpi-wsmi-ping">chapter-17-acpi-wsmi-ping.md</a> — ACPI/WMI as a covert ping channel</td>
+      <td><a href="../dBPF-pocs/pocs/ch17-acpi-wsmi">ch17-acpi-wsmi</a> · <a href="../dBPF-pocs/pocs/ch17-acpi-wsmi-analog">analog</a></td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td><a href="/dBPF/book_chapters/act-3/chapter-18-ebpf-token-bypass">chapter-18-ebpf-token-bypass.md</a> — bypassing the eBPF token model</td>
+      <td><a href="../dBPF-pocs/pocs/ch18-token-bypass">ch18-token-bypass</a></td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td><a href="/dBPF/book_chapters/act-3/chapter-19-the-new-reality">chapter-19-the-new-reality.md</a> — epilogue: the new reality</td>
+      <td>—</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="relationship-to-siblings">Relationship to siblings</h2>
+
+<p><code class="language-plaintext highlighter-rouge">book_chapters/</code> is the <strong>source of truth</strong> for the manuscript. <code class="language-plaintext highlighter-rouge">_posts/</code> is the
+<strong>web-rendered form</strong> published through Jekyll (front matter, permalinks, theming).
+<code class="language-plaintext highlighter-rouge">dBPF-pocs/</code> is the <strong>working companion code</strong> — each chapter (except the preface
+and the epilogue) has at least one runnable POC, and several have LSM, kprobe,
+fentry, syscall, or analog variants that expand the same technique along a
+different kernel surface.</p>
+
+<p>When prose and code diverge, update the chapter here first, then propagate to
+<code class="language-plaintext highlighter-rouge">_posts/</code> and, if the technique itself changed, to the corresponding POC.</p>
+
+                    </div>
+                </article>
+
+                
+            </main>
+
+            <footer class="site-footer">
+                <div class="footer-content">
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize mermaid with custom dark theme
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: 'dark',
+                flowchart: {
+                    htmlLabels: true,  // Enable HTML in labels for better word wrapping
+                    curve: 'basis',    // Smoother curves
+                    useMaxWidth: true, // Constrain diagram width
+                    nodeSpacing: 50,   // More space between nodes
+                    rankSpacing: 70    // More space between ranks
+                },
+                themeVariables: {
+                    darkMode: true,
+                    background: '#000000',
+                    primaryColor: '#00ff9d',
+                    primaryTextColor: '#00ff9d',
+                    primaryBorderColor: '#00ff9d',
+                    lineColor: '#00ff9d',
+                    secondaryColor: '#ff00f7',
+                    tertiaryColor: '#00c3ff',
+                    nodeBorder: '#00ff9d',
+                    clusterBkg: '#000000',
+                    clusterBorder: '#00ff9d',
+                    edgeLabelBackground: '#000000',
+                    fontFamily: 'JetBrains Mono'
+                }
+            });
+
+            // Add custom CSS for Mermaid diagrams to handle word wrapping
+            var style = document.createElement('style');
+            style.textContent = `
+                .mermaid .node rect, .mermaid .node circle, .mermaid .node ellipse, .mermaid .node polygon, .mermaid .node path {
+                    rx: 5px;
+                    ry: 5px;
+                }
+                .mermaid .node .label {
+                    word-wrap: break-word;
+                    white-space: pre-wrap !important;
+                    max-width: 200px;
+                }
+                .mermaid .edgeLabel {
+                    background-color: #000000 !important;
+                    color: #00ff9d !important;
+                }
+            `;
+            document.head.appendChild(style);
+
+            // Find all pre code blocks with mermaid class
+            document.querySelectorAll('pre code.language-mermaid').forEach(function(element) {
+                // Create a div for mermaid
+                var div = document.createElement('div');
+                div.className = 'mermaid';
+                div.style.background = '#000000';
+                div.style.padding = '2em';
+                div.style.borderRadius = '8px';
+                div.style.marginBottom = '2em';
+                div.textContent = element.textContent;
+                // Replace the pre element with the div
+                element.parentElement.replaceWith(div);
+            });
+
+            // Run mermaid
+            mermaid.init();
+        });
+    </script>
+</body>
+</html>

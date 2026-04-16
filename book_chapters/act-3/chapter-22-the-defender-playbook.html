@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 22: The Defender Playbook | Diabolical eBPF: Linux Red Team Field Manual</title>
+    <meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need.">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="/dBPF/assets/css/book.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark'
+    });
+  });
+</script>
+
+    <!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Chapter 22: The Defender Playbook | Diabolical eBPF: Linux Red Team Field Manual</title>
+<meta name="generator" content="Jekyll v3.9.5" />
+<meta property="og:title" content="Chapter 22: The Defender Playbook" />
+<meta name="author" content="Diabolical eBPF" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
+<meta property="og:description" content="100 kernel-hacking micro-chapters proving eBPF is all you need." />
+<link rel="canonical" href="https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-22-the-defender-playbook" />
+<meta property="og:url" content="https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-22-the-defender-playbook" />
+<meta property="og:site_name" content="Diabolical eBPF: Linux Red Team Field Manual" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2026-01-12T00:00:00+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Chapter 22: The Defender Playbook" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Diabolical eBPF"},"dateModified":"2026-01-12T00:00:00+00:00","datePublished":"2026-01-12T00:00:00+00:00","description":"100 kernel-hacking micro-chapters proving eBPF is all you need.","headline":"Chapter 22: The Defender Playbook","mainEntityOfPage":{"@type":"WebPage","@id":"https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-22-the-defender-playbook"},"url":"https://mbhatt1.github.io/dBPF/book_chapters/act-3/chapter-22-the-defender-playbook"}</script>
+<!-- End Jekyll SEO tag -->
+
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <a href="/dBPF/" class="site-title">Diabolical eBPF: Linux Red Team Field Manual</a>
+            </div>
+            <div class="sidebar-content">
+                
+                
+                    
+                    
+                    <a href="/dBPF/chapter-0-field-manual-preface.html" >
+                        Preface
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-mirror-controls.html" >
+                        The Mirror Controls
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-overlayfs-trojan-horse.html" >
+                        The OverlayFS Trojan Horse
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-fuse-audit-black-hole.html" >
+                        The FUSE Audit Black-Hole
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-phantom-syscall.html" >
+                        The Phantom Syscall
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/the-ghost-nic.html" >
+                        The Ghost NIC
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/slipping-the-cgroup-leash.html" >
+                        Slipping the Cgroup Leash
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/silencing-selinux.html" >
+                        Silencing SELinux
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/device-cgroup-houdini.html" >
+                        Device‑cgroup Houdini
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/keyring-heist.html" >
+                        Keyring Heist
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/pid-namespace-doppelg-nger.html" >
+                        PID Namespace Doppelgänger
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/inode-cloak.html" >
+                        Inode Cloak
+                    </a>
+                    
+                
+                    
+                    
+                    <a href="/dBPF/irq-affinity-chaos.html" >
+                        IRQ Affinity Chaos
+                    </a>
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+                    
+                    
+                
+            </div>
+        </nav>
+
+        <div class="content-wrapper">
+            <main class="content">
+                <article class="post">
+                    <header class="post-header">
+                        <h1 class="post-title">Chapter 22: The Defender Playbook</h1>
+                        
+                        <time class="post-date" datetime="2026-01-12T00:00:00+00:00">
+                            January 12, 2026
+                        </time>
+                        
+                    </header>
+
+                    <div class="post-content">
+                        <h1 id="chapter-22-the-defender-playbook">Chapter 22: The Defender Playbook</h1>
+
+<p>The preceding twenty-one chapters establish what <code class="language-plaintext highlighter-rouge">CAP_BPF</code> permits. This chapter is the operational response. Seven steps, ordered from highest leverage to lowest. A mapping table at the end ties each step to the five primitive classes from chapter 20.</p>
+
+<h2 id="1-the-threat-model-restated">1. The threat model, restated</h2>
+
+<p>Every primitive in this book required <code class="language-plaintext highlighter-rouge">CAP_BPF</code>, and most additionally required <code class="language-plaintext highlighter-rouge">CAP_PERFMON</code> or <code class="language-plaintext highlighter-rouge">CAP_SYS_ADMIN</code>. The defender’s job is to know which workloads on the fleet hold that capability, what they do with it, and how to restrict or revoke it where the answer is “nothing good.” If you remember one sentence from this chapter: the threat is not BPF; the threat is ambient grants of <code class="language-plaintext highlighter-rouge">CAP_BPF</code> to workloads whose lineage and runtime behavior you do not audit.</p>
+
+<h2 id="2-inventory-cap_bpf-on-your-fleet">2. Inventory <code class="language-plaintext highlighter-rouge">CAP_BPF</code> on your fleet</h2>
+
+<p>Start with the running process tree:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+</pre></td><td class="rouge-code"><pre><span class="c"># Per-process effective capabilities</span>
+getpcaps <span class="si">$(</span>pgrep <span class="nt">-u</span> &lt;user&gt;<span class="si">)</span> 2&gt;&amp;1 | <span class="nb">grep</span> <span class="nt">-i</span> bpf
+
+<span class="c"># Per-systemd-unit capability bounding set</span>
+systemctl show <span class="nt">--property</span><span class="o">=</span>CapabilityBoundingSet &lt;unit&gt;
+
+<span class="c"># File capabilities baked into binaries</span>
+getcap <span class="nt">-r</span> / 2&gt;/dev/null | <span class="nb">grep</span> <span class="nt">-i</span> bpf
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>Typical unexpected holders in the wild: the Datadog agent, Dynatrace, Cilium, Pixie, bpftrace, <code class="language-plaintext highlighter-rouge">bcc</code> tools installed system-wide, and CI runners doing Docker-in-Docker with nested observability. None of those are malicious; they are the point at which the question “who holds CAP_BPF” stops being rhetorical. Pin the inventory to version control. Alert on diffs.</p>
+
+<h2 id="3-restrict-with-bpf-lsm">3. Restrict with BPF LSM</h2>
+
+<p>Confirm BPF LSM is active:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+</pre></td><td class="rouge-code"><pre><span class="nb">cat</span> /sys/kernel/security/lsm
+<span class="c"># expect: ...,bpf,...</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>Write a <code class="language-plaintext highlighter-rouge">SEC("lsm/bpf_prog")</code> program that gates program load by <code class="language-plaintext highlighter-rouge">attach_type</code> and caller credential. The Cilium “enforce signed programs only” pattern is a good starting point: permit only programs signed by a known key, refuse everything else. A minimal policy gate refuses <code class="language-plaintext highlighter-rouge">BPF_PROG_LOAD</code> for attach types that should never appear in your environment — for example, refusing <code class="language-plaintext highlighter-rouge">BPF_XDP</code> if no workload on the host is supposed to run XDP.</p>
+
+<p>This is the single highest-leverage control, because it operates on the entry point every primitive in this book had to pass through.</p>
+
+<h2 id="4-pin-loaded-programs-baseline-them">4. Pin loaded programs, baseline them</h2>
+
+<p>At boot, capture the set of loaded BPF programs:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+</pre></td><td class="rouge-code"><pre>bpftool prog show <span class="nt">-j</span> | jq <span class="nt">-c</span> <span class="s1">'.[] | {id, name, type, tag, load_time}'</span> | <span class="nb">sort</span> <span class="se">\</span>
+  <span class="o">&gt;</span> /var/lib/bpf-baseline.json
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>A systemd timer (or plain cron) runs every minute, repeats the capture, and diffs against the baseline. New attachments produce an alert shipped to a log sink that does not itself run with <code class="language-plaintext highlighter-rouge">CAP_BPF</code>. The alert includes <code class="language-plaintext highlighter-rouge">tag</code> (SHA of program instructions), <code class="language-plaintext highlighter-rouge">name</code>, and <code class="language-plaintext highlighter-rouge">load_time</code>, so you can correlate against the process that issued <code class="language-plaintext highlighter-rouge">BPF_PROG_LOAD</code>.</p>
+
+<p>This catches Class I, Class II, Class IV, and Class V primitives at load time, before the effect fires.</p>
+
+<h2 id="5-audit-bpf2">5. Audit <code class="language-plaintext highlighter-rouge">bpf(2)</code></h2>
+
+<p>Enable kernel auditing of the <code class="language-plaintext highlighter-rouge">bpf</code> syscall:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="rouge-code"><pre><span class="c"># aarch64</span>
+auditctl <span class="nt">-a</span> always,exit <span class="nt">-F</span> <span class="nb">arch</span><span class="o">=</span>aarch64 <span class="nt">-S</span> bpf <span class="nt">-k</span> bpf_syscall
+<span class="c"># x86_64 (add in addition, not instead of, on multi-arch boxes)</span>
+auditctl <span class="nt">-a</span> always,exit <span class="nt">-F</span> <span class="nb">arch</span><span class="o">=</span>b64 <span class="nt">-S</span> bpf <span class="nt">-k</span> bpf_syscall
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>This produces one audit record per <code class="language-plaintext highlighter-rouge">bpf(2)</code> call, including <code class="language-plaintext highlighter-rouge">BPF_PROG_LOAD</code>, <code class="language-plaintext highlighter-rouge">BPF_MAP_CREATE</code>, and <code class="language-plaintext highlighter-rouge">BPF_PROG_ATTACH</code>, tagged with the caller’s <code class="language-plaintext highlighter-rouge">comm</code>, <code class="language-plaintext highlighter-rouge">pid</code>, and effective credentials. Ship those records to a tamper-evident sink — a remote syslog receiver, a write-only append log, a SIEM — that itself does not run with <code class="language-plaintext highlighter-rouge">CAP_BPF</code>. The point of the off-box sink is that a Class III exfil primitive running on the monitored host cannot rewrite the records after the fact.</p>
+
+<h2 id="6-restrict-error-injection-where-possible">6. Restrict error-injection where possible</h2>
+
+<p>Chapter 20’s Class I depends on <code class="language-plaintext highlighter-rouge">bpf_override_return</code>, which only fires on functions annotated in <code class="language-plaintext highlighter-rouge">ALLOW_ERROR_INJECTION</code>. Inspect the list on production:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+</pre></td><td class="rouge-code"><pre><span class="nb">cat</span> /sys/kernel/debug/error_injection/list
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>If you build your own kernel, audit the <code class="language-plaintext highlighter-rouge">ALLOW_ERROR_INJECTION</code> annotations during the kernel config review, and delete any that your workload does not need to inject into. On stock distro kernels where you cannot re-audit, restrict debugfs mount visibility (<code class="language-plaintext highlighter-rouge">hidepid=2</code> is not enough; consider not mounting debugfs at all in production containers) and gate <code class="language-plaintext highlighter-rouge">bpf_override_return</code> via BPF LSM.</p>
+
+<h2 id="7-do-not-trust-userspace-syscall-returns-for-security-decisions">7. Do not trust userspace syscall returns for security decisions</h2>
+
+<p>Chapters ch18, ch14, and the ch12 syscall variant all forge syscall-layer results. The orchestrator that reads the forged return believes the kernel did something it did not do. The mitigation is not at the BPF layer; it is at the orchestrator layer: do not make security decisions based on what <code class="language-plaintext highlighter-rouge">syscall(...)</code> returned, because that value is writable by anyone with <code class="language-plaintext highlighter-rouge">CAP_BPF</code>.</p>
+
+<p>Instead: consult <code class="language-plaintext highlighter-rouge">current-&gt;cred</code> at the kernel enforcement point, or post-check ground-truth state. After a module load that claims success, read <code class="language-plaintext highlighter-rouge">/proc/modules</code> and <code class="language-plaintext highlighter-rouge">/sys/module/&lt;name&gt;/</code> to confirm the module actually exists. After a capability grant that claims success, read <code class="language-plaintext highlighter-rouge">/proc/self/status</code> and parse <code class="language-plaintext highlighter-rouge">CapEff</code>. After a scheduler-policy change that claims success, read <code class="language-plaintext highlighter-rouge">/proc/&lt;pid&gt;/sched</code> and parse the policy field. These checks are not free, but they are cheap compared to acting on a forged answer.</p>
+
+<h2 id="per-class-mitigation-table">Per-class mitigation table</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Class from ch. 20</th>
+      <th>Highest-leverage mitigation</th>
+      <th>Secondary</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>I — Return-value override</td>
+      <td>BPF LSM gate on <code class="language-plaintext highlighter-rouge">fmod_ret</code> and <code class="language-plaintext highlighter-rouge">kretprobe</code> attach; audit <code class="language-plaintext highlighter-rouge">ALLOW_ERROR_INJECTION</code>; post-check ground truth in the orchestrator</td>
+      <td>bpf(2) audit; program-baseline diff</td>
+    </tr>
+    <tr>
+      <td>II — Userspace buffer rewrite</td>
+      <td>BPF LSM gate on <code class="language-plaintext highlighter-rouge">bpf_probe_write_user</code> permission</td>
+      <td>bpf(2) audit; program-baseline diff</td>
+    </tr>
+    <tr>
+      <td>III — Ringbuf exfiltration</td>
+      <td>Restrict who can <code class="language-plaintext highlighter-rouge">CAP_BPF</code>; fewer tracepoints/kprobes exposed (strip BTF where not needed)</td>
+      <td>bpf(2) audit to off-box sink</td>
+    </tr>
+    <tr>
+      <td>IV — XDP packet-path interception</td>
+      <td>BPF LSM gate on <code class="language-plaintext highlighter-rouge">BPF_XDP</code> attach; netlink audit on netdev attach</td>
+      <td>bpf(2) audit; program-baseline diff</td>
+    </tr>
+    <tr>
+      <td>V — Userspace racer</td>
+      <td>Same as Class III for the observer half; filesystem-level hardening (read-only OverlayFS lower layers, integrity monitoring on upper layer) for the racer half</td>
+      <td>bpf(2) audit</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="closing">Closing</h2>
+
+<p>None of this is novel. Inventory the capability holders, restrict who can load programs, baseline what is loaded, audit the syscall to a sink the attacker cannot reach, and stop trusting forged return values for security decisions. The justification for doing it — not the content of what to do — is what chapters 1 through 18 provide.</p>
+
+                    </div>
+                </article>
+
+                
+            </main>
+
+            <footer class="site-footer">
+                <div class="footer-content">
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize mermaid with custom dark theme
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: 'dark',
+                flowchart: {
+                    htmlLabels: true,  // Enable HTML in labels for better word wrapping
+                    curve: 'basis',    // Smoother curves
+                    useMaxWidth: true, // Constrain diagram width
+                    nodeSpacing: 50,   // More space between nodes
+                    rankSpacing: 70    // More space between ranks
+                },
+                themeVariables: {
+                    darkMode: true,
+                    background: '#000000',
+                    primaryColor: '#00ff9d',
+                    primaryTextColor: '#00ff9d',
+                    primaryBorderColor: '#00ff9d',
+                    lineColor: '#00ff9d',
+                    secondaryColor: '#ff00f7',
+                    tertiaryColor: '#00c3ff',
+                    nodeBorder: '#00ff9d',
+                    clusterBkg: '#000000',
+                    clusterBorder: '#00ff9d',
+                    edgeLabelBackground: '#000000',
+                    fontFamily: 'JetBrains Mono'
+                }
+            });
+
+            // Add custom CSS for Mermaid diagrams to handle word wrapping
+            var style = document.createElement('style');
+            style.textContent = `
+                .mermaid .node rect, .mermaid .node circle, .mermaid .node ellipse, .mermaid .node polygon, .mermaid .node path {
+                    rx: 5px;
+                    ry: 5px;
+                }
+                .mermaid .node .label {
+                    word-wrap: break-word;
+                    white-space: pre-wrap !important;
+                    max-width: 200px;
+                }
+                .mermaid .edgeLabel {
+                    background-color: #000000 !important;
+                    color: #00ff9d !important;
+                }
+            `;
+            document.head.appendChild(style);
+
+            // Find all pre code blocks with mermaid class
+            document.querySelectorAll('pre code.language-mermaid').forEach(function(element) {
+                // Create a div for mermaid
+                var div = document.createElement('div');
+                div.className = 'mermaid';
+                div.style.background = '#000000';
+                div.style.padding = '2em';
+                div.style.borderRadius = '8px';
+                div.style.marginBottom = '2em';
+                div.textContent = element.textContent;
+                // Replace the pre element with the div
+                element.parentElement.replaceWith(div);
+            });
+
+            // Run mermaid
+            mermaid.init();
+        });
+    </script>
+</body>
+</html>

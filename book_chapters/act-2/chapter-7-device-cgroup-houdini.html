@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -181,17 +184,31 @@
                     <div class="post-content">
                         <p>Act II: Kernel Intrusion</p>
 
-<p><strong>Chapter 8: Hardware Becomes Our Playground</strong></p>
+<p><strong>Chapter 8: Device cgroup Bypass via LSM</strong></p>
 
-<p>I used to think container escapes stopped at process boundaries and file systems. But there’s one frontier that’s supposed to be sacrosanct: direct hardware access.</p>
+<p>I started this one expecting an easy win. Device cgroups are the standard container control for hardware access, and privileged container bypasses are well-trodden ground — Aqua and NCC Group have written about direct mknod escapes for years. My question was narrower: can a <code class="language-plaintext highlighter-rouge">BPF_PROG_TYPE_LSM</code> program flip a denied <code class="language-plaintext highlighter-rouge">/dev/mem</code> open into an allowed one without the container being privileged?</p>
 
-<p>Device cgroups stand guard over every piece of hardware: /dev/mem, GPUs, block devices. They’re the final bouncer, the line you can’t cross.</p>
+<p>The honest answer is: not the way I first tried.</p>
 
-<p>So I pulled out my eBPF toolkit and attached a kprobe to the kernel’s gatekeeper, <a href="dBPF/book_chapters/act-2/chapter-7-device-cgroup-houdini.md:137"><code class="language-plaintext highlighter-rouge">devcgroup_check_permission()</code></a>. With a single return of 0, I gave myself a VIP pass to every device I wanted.</p>
+<p>My initial plan was to hook <code class="language-plaintext highlighter-rouge">devcgroup_check_permission()</code> with a kprobe and return 0. That does work, but it’s a kprobe override, not an LSM decision, and it requires <code class="language-plaintext highlighter-rouge">CONFIG_BPF_KPROBE_OVERRIDE=y</code> plus <code class="language-plaintext highlighter-rouge">ALLOW_ERROR_INJECTION</code> on the target — neither is set on the stock Debian bookworm 6.1 kernel I was testing against. So I moved to the LSM hook <code class="language-plaintext highlighter-rouge">security_inode_mknod</code> instead, which is a proper BPF LSM attach point.</p>
 
-<p>The orchestrator saw compliant device access logs. The kernel thought it was enforcing rules. Meanwhile, I was reading raw memory, writing to disks, and conjuring hardware miracles.</p>
+<p>That’s when I hit the real problem. I ran the unprivileged container, called <code class="language-plaintext highlighter-rouge">mknod /dev/mem c 1 1</code>, and my LSM program was never invoked. The syscall failed with <code class="language-plaintext highlighter-rouge">EPERM</code> before my hook ran.</p>
 
-<p>Bypassing device-cgroup controls proved that even the hardware sandbox is just code. And code can be rewritten.</p>
+<p>I went to the source. In <code class="language-plaintext highlighter-rouge">fs/namei.c</code>, <code class="language-plaintext highlighter-rouge">vfs_mknod()</code> sits behind <code class="language-plaintext highlighter-rouge">do_mknodat()</code>, and the capability check happens much earlier. The relevant line is in <code class="language-plaintext highlighter-rouge">do_mknodat()</code> around line 4050 in 6.1:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="rouge-code"><pre>if (!IS_POSIXACL(path.dentry-&gt;d_inode))
+    mode &amp;= ~current_umask();
+error = may_mknod(mode, dev);
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">may_mknod()</code> short-circuits on <code class="language-plaintext highlighter-rouge">capable(CAP_MKNOD)</code> before any inode operation. In an unprivileged user namespace, <code class="language-plaintext highlighter-rouge">CAP_MKNOD</code> against the init user_ns is false, so <code class="language-plaintext highlighter-rouge">may_mknod</code> returns <code class="language-plaintext highlighter-rouge">-EPERM</code> and we never reach <code class="language-plaintext highlighter-rouge">security_inode_mknod</code>. The LSM hook only fires if capability already allowed the call.</p>
+
+<p>This is a known kernel design choice — LSMs restrict what capability permits, they don’t re-open what capability denies. Grsecurity and SELinux FAQ material have pointed this out for years. But it means my pure “flip deny to allow” LSM program can’t see the request in the first place.</p>
+
+<p>So the workaround is ugly but honest: I issue a synthetic <code class="language-plaintext highlighter-rouge">mknod</code> from a process that already has <code class="language-plaintext highlighter-rouge">CAP_MKNOD</code> in its user_ns (a short-lived helper in a <code class="language-plaintext highlighter-rouge">userns</code> where uid 0 is mapped), let the LSM hook observe it, and use bpf_map state set by my attacker process to decide the return. The LSM program returns 0 to allow, or an engineered -EACCES that my trigger detects and retries. It’s not an escape of cgroup enforcement so much as a cooperative bypass riding on an existing capability.</p>
 
 <p>```c
 SEC(“kprobe/devcgroup_check_permission”)
@@ -210,7 +227,7 @@ int override_device_check(struct pt_regs *ctx) {
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

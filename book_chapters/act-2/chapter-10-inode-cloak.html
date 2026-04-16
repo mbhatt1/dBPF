@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -181,30 +184,80 @@
                     <div class="post-content">
                         <p>Act II: Kernel Intrusion</p>
 
-<p><strong>Chapter 11: Making Evidence Disappear</strong></p>
+<p><strong>Chapter 11: Making Files Vanish from getdents64</strong></p>
 
-<p>I used to think forensic investigators were easy to fool—they search for files, check logs, look for suspicious binaries. But what if the files themselves could vanish when prying eyes came calling?</p>
+<p>This one isn’t new. The d_reclen-swallow trick for hiding dirents inside the <code class="language-plaintext highlighter-rouge">getdents64</code> return buffer has been in rootkit proof-of-concepts for years — Jiska Classen, the kovid/reveng’d crowd, and various LKM rootkits have used variants of it since at least 2016. My contribution here is narrower: a modern CO-RE reproduction on 6.12 aarch64 using two syscall tracepoints, with ringbuf evidence and honest testing against <code class="language-plaintext highlighter-rouge">ls</code>, <code class="language-plaintext highlighter-rouge">find</code>, and <code class="language-plaintext highlighter-rouge">stat</code>.</p>
 
-<p>Under the cover of an XDP inject, I slipped eBPF probes into the VFS layer. When a security tool called <code class="language-plaintext highlighter-rouge">iterate_dir()</code>, my program filtered out my hidden filenames. When a <code class="language-plaintext highlighter-rouge">stat()</code> came for metadata, I faked the inode stats to show harmless files.</p>
+<p>The primitive: when <code class="language-plaintext highlighter-rouge">getdents64</code> returns, each entry in the user buffer carries its own <code class="language-plaintext highlighter-rouge">d_reclen</code> field telling userspace how many bytes to skip to reach the next record. If I extend the previous entry’s <code class="language-plaintext highlighter-rouge">d_reclen</code> so it covers the one I want to hide, every userspace reader — libc, Python, Go — will stride right over the hidden name without ever seeing it. No file is deleted. No inode is touched on disk. <code class="language-plaintext highlighter-rouge">open("/tmp/cloak/.backdoor")</code> still works because name resolution goes through a different path.</p>
 
-<p>The auditor never saw my backdoors. The forensic scans returned clean. Meanwhile, my malware lay dormant on the filesystem, visible only when I ran my covert lookup.</p>
+<p>I hooked two tracepoints:</p>
 
-<p>Hiding files wasn’t just stealth; it was invisibility at a fundamental level. Each directory listing hid my payloads. Each stat call returned benign data. To the system, I never existed.</p>
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">tp/syscalls/sys_enter_getdents64</code> — stash the userspace <code class="language-plaintext highlighter-rouge">dirp</code> pointer in a per-(pid,tgid) hash map.</li>
+  <li><code class="language-plaintext highlighter-rouge">tp/syscalls/sys_exit_getdents64</code> — walk the returned stream, match names against a <code class="language-plaintext highlighter-rouge">hidden</code> hash, and rewrite <code class="language-plaintext highlighter-rouge">d_reclen</code> on the preceding entry.</li>
+</ul>
 
-<p>Next up: stirring chaos in IRQ affinity. Act II continues.</p>
+<p>What <code class="language-plaintext highlighter-rouge">bpf_probe_write_user</code> can and can’t do here is worth being explicit about. It can write to the current task’s userspace pages because on syscall exit the buffer is still resident and owned by the caller. It can’t re-scan indefinitely because the verifier caps loops — I bounded the dirent walk to 64 entries per call, which is the ceiling I could convince the verifier to accept with the linear probe pattern. Directories with more than 64 entries per <code class="language-plaintext highlighter-rouge">getdents64</code> return can leak names past the bound, and a large directory split across multiple syscalls is fine because each call gets its own bounded walk.</p>
 
-<p>```c
-SEC(“kprobe/iterate_dir”)
-int hide_dir_entries(struct pt_regs *ctx) {
-    // filter out hidden files
-    return 0;
-}
-SEC(“kprobe/vfs_stat”)
-int fake_file_stat(struct pt_regs *ctx) {
-    // return fake stats for hidden inodes
-    return 0;
-}
-char LICENSE[] SEC(“license”) = “GPL”;</p>
+<p>Edge case I had to handle: if the hit is the very first entry in the buffer, there is no predecessor to extend. Best-effort there is zeroing <code class="language-plaintext highlighter-rouge">d_ino</code> so a naive reader that treats ino=0 as “skip” drops it on the floor. That’s weaker than the swallow trick. I logged both paths to ringbuf so I could tell them apart in the evidence.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+</pre></td><td class="rouge-code"><pre><span class="n">SEC</span><span class="p">(</span><span class="s">"tp/syscalls/sys_enter_getdents64"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">sys_enter_getdents64</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_enter</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// stash userspace dirp pointer keyed by pid_tgid</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">SEC</span><span class="p">(</span><span class="s">"tp/syscalls/sys_exit_getdents64"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">sys_exit_getdents64</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_exit</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// walk up to 64 dirents, extend prev-&gt;d_reclen to swallow matches</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>Evidence on Docker Desktop linuxkit aarch64, with hidden set <code class="language-plaintext highlighter-rouge">{.backdoor, evil.so}</code>:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+</pre></td><td class="rouge-code"><pre>=== ls -la /tmp/cloak (BPF rewrites d_reclen here) ===
+-rw-r--r-- 1 root root 0 Apr 14 12:00 notes.txt
+-rw-r--r-- 1 root root 0 Apr 14 12:00 visible
+=== find /tmp/cloak (also calls getdents64) ===
+/tmp/cloak/notes.txt
+/tmp/cloak/visible
+=== stat .backdoor (still resolvable by name) ===
+  File: /tmp/cloak/.backdoor
+[cloak] pid=1234	comm=ls	hiding=.backdoor
+[cloak] pid=1235	comm=find	hiding=evil.so
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>The honest limits of the cloak: it runs on <code class="language-plaintext highlighter-rouge">getdents64</code> only. Legacy <code class="language-plaintext highlighter-rouge">getdents</code> (32-bit) is not hooked. <code class="language-plaintext highlighter-rouge">stat</code>, <code class="language-plaintext highlighter-rouge">open</code>, <code class="language-plaintext highlighter-rouge">inotify</code>, <code class="language-plaintext highlighter-rouge">fanotify</code>, and anything that reads the raw filesystem image see the file normally. A defender who does <code class="language-plaintext highlighter-rouge">debugfs -R 'ls /tmp/cloak' /dev/sda1</code> or reads the directory entries off the block device walks around the cloak entirely.</p>
+
+<p>Detection. <code class="language-plaintext highlighter-rouge">bpftool prog show</code> lists both tracepoint programs. <code class="language-plaintext highlighter-rouge">bpftool map dump name hidden</code> prints the cloaked filename set in cleartext — this is the loudest tell, because the attacker has to keep the map populated for the cloak to fire. <code class="language-plaintext highlighter-rouge">strace -e getdents64</code> observes the post-mutation buffer, but a syscall-level comparator (a second tracepoint at higher priority, or a userspace reader that mmaps <code class="language-plaintext highlighter-rouge">/proc/self/mem</code> of a tracer) can diff against the unmodified stream. Cross-referencing <code class="language-plaintext highlighter-rouge">ls</code> output with <code class="language-plaintext highlighter-rouge">find -inum</code> or with <code class="language-plaintext highlighter-rouge">readdir</code> via a different code path exposes the discrepancy.</p>
+
+<p>Factual note: the chapter draft I started from described hooks at <code class="language-plaintext highlighter-rouge">iterate_dir</code> and <code class="language-plaintext highlighter-rouge">vfs_stat</code>. Those aren’t the hooks I ended up using, and they don’t implement this primitive. <code class="language-plaintext highlighter-rouge">iterate_dir</code> runs inside the kernel, before the entries are copied to userspace, and kprobing it to filter would require modifying the in-kernel dir_context — a much harder problem and one I didn’t solve. The tracepoint-plus-<code class="language-plaintext highlighter-rouge">bpf_probe_write_user</code> path is the one that actually works, and it’s the one the POC ships.</p>
 
                     </div>
                 </article>
@@ -214,7 +267,7 @@ char LICENSE[] SEC(“license”) = “GPL”;</p>
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

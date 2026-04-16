@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -179,29 +182,129 @@
                     </header>
 
                     <div class="post-content">
-                        <p>Act III: Total Control</p>
+                        <p><strong>Chapter 15: Cross-Namespace Redirect via XDP and DEVMAP</strong></p>
 
-<p><strong>Chapter 15: Haunting Multiple Network Realities</strong></p>
+<p>My first instinct for this chapter was the one the original outline called for: a kprobe on <code class="language-plaintext highlighter-rouge">__netif_receive_skb_core</code> that rewrites the namespace metadata on an incoming skb and lets the kernel re-receive it on the other side. The verifier rejected that. Writes to <code class="language-plaintext highlighter-rouge">sk_buff</code> from kprobe context are not allowed, and <code class="language-plaintext highlighter-rouge">__netif_receive_skb_core</code> is not in the error-injection list, so there is no legal way to intercept-and-divert from that attach point on 6.12.</p>
 
-<p>I used to believe network namespaces were impenetrable walls—each container living in its own isolated network universe. Then I realized the kernel speaks VLAN, and VLAN tags can be my brushstroke for covert tunnels.</p>
+<p>The working expression of the same primitive is XDP plus <code class="language-plaintext highlighter-rouge">bpf_redirect_map</code> into a devmap slot whose target ifindex lives in a different network namespace. None of this is novel. Cilium has been using the pattern since around 2019 for legitimate cross-namespace forwarding in its service mesh datapath. The only contribution of this chapter is pointing it in the other direction.</p>
 
-<p>Under cover of an eBPF hook on <code class="language-plaintext highlighter-rouge">__netif_receive_skb_core()</code>, I inspect each packet’s VLAN header. When I spot my secret tag—VLAN 4242—I rewrite the packet’s namespace metadata and bounce it into the target namespace before anyone notices. To the kernel, it’s just another VLAN packet; to me, it’s a phantom bridge between isolated nets.</p>
+<p>The sequence the XDP program runs on every ingress frame:</p>
 
-<p>The orchestrator sees clean traffic on eth0. The network monitors log nothing unusual. Meanwhile, my ghost VLAN carries commands and data between containers as if the namespaces never existed.</p>
+<ol>
+  <li>Parse the ethernet header. If the ethertype is <code class="language-plaintext highlighter-rouge">0x8100</code> and the VID in the 802.1Q TCI matches <code class="language-plaintext highlighter-rouge">COVERT_VLAN_ID</code> (4242), this frame is in scope.</li>
+  <li>Save the original src/dst MAC and the inner ethertype from offset +16.</li>
+  <li>Rewrite a fresh 14-byte ethernet header at offset +4, overlaying the old <code class="language-plaintext highlighter-rouge">src_mac</code> tail, the <code class="language-plaintext highlighter-rouge">0x8100</code> ethertype bytes, and the VLAN TCI.</li>
+  <li>Call <code class="language-plaintext highlighter-rouge">bpf_xdp_adjust_head(ctx, +4)</code> to trim the leading 4 bytes. The VLAN tag is now gone and the new untagged ethernet header is the packet head.</li>
+  <li>If userspace registered an egress ifindex in the <code class="language-plaintext highlighter-rouge">tx_port</code> DEVMAP (slot 0) and the config array has mode flag set, call <code class="language-plaintext highlighter-rouge">bpf_redirect_map(&amp;tx_port, 0, 0)</code>. Otherwise return <code class="language-plaintext highlighter-rouge">XDP_PASS</code>.</li>
+</ol>
 
-<p>```c
-SEC(“kprobe/__netif_receive_skb_core”)
-int ghost_vlan(struct pt_regs *ctx) {
-    struct sk_buff *skb = (struct sk_buff *)PT_REGS_PARM1(ctx);
-    // Detect covert VLAN tag
-    if (skb_vlan_tag_present(skb) &amp;&amp; skb_vlan_tag_get(skb) == COVERT_VLAN_ID) {
-        // Rewrite namespace metadata for cross-namespace routing
-        redirect_skb_to_namespace(skb, target_ns);
-    }
-    return XDP_PASS;
-}</p>
+<p>The egress ifindex can belong to a veth whose peer lives in a different netns. That is the “ghost” part. Running the trigger in the privileged dbpf-base container on linuxkit aarch64, XDP forced to SKB-mode because veth does not implement native XDP on this platform:</p>
 
-<p>char LICENSE[] SEC(“license”) = “GPL”;</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="rouge-code"><pre>[ch15] tag=ready ingress=veth_host ifidx=42 mode=redirect egress=veth_host2 ifidx=44 xdp_flags=0x2
+sent 5 VLAN-4242 covert frames
+[vghost] ifin=42 vid=4242 inner=0x88b5 ee:f0:6e:11:22:33 -&gt; ff:ff:ff:ff:ff:ff  STRIP+REDIRECT ifout=44
+[vghost] ifin=42 vid=4242 inner=0x88b5 ee:f0:6e:11:22:33 -&gt; ff:ff:ff:ff:ff:ff  STRIP+REDIRECT ifout=44
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">tcpdump</code> on <code class="language-plaintext highlighter-rouge">veth_host2</code> shows the frame arriving untagged — no <code class="language-plaintext highlighter-rouge">vlan 4242</code> in the dissector output, inner ethertype <code class="language-plaintext highlighter-rouge">0x88b5</code> (IEEE Local Experimental) is the outermost now. That is the evidence the strip ran before the egress veth received the packet.</p>
+
+<p>I want to be honest about the threat model here. VLAN-based network segmentation was never designed to resist host-level XDP programs. XDP runs as a peer to the netdev, not above it. A program attached to the host side of a veth sees every frame that arrives at that device before the bridge, before netfilter, before the stack. Calling this a “VLAN escape” is overselling it. A more accurate framing: if you have <code class="language-plaintext highlighter-rouge">CAP_BPF</code> on the host, netns isolation between containers wired via veth is not a barrier against an XDP-assisted attacker. The orchestrator’s VLAN-aware bridge never sees the tagged frame because XDP ran first.</p>
+
+<h2 id="hook-points">Hook points</h2>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">SEC("xdp")</code> <code class="language-plaintext highlighter-rouge">xdp_vlan_ghost</code> on the ingress veth.</li>
+  <li><code class="language-plaintext highlighter-rouge">BPF_MAP_TYPE_DEVMAP tx_port</code> (slot 0 → egress ifindex) drives <code class="language-plaintext highlighter-rouge">bpf_redirect_map</code>.</li>
+  <li><code class="language-plaintext highlighter-rouge">BPF_MAP_TYPE_ARRAY cfg</code> (slot 0 = mode flag, slot 1 = audit copy of egress ifindex).</li>
+</ul>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+</pre></td><td class="rouge-code"><pre><span class="n">SEC</span><span class="p">(</span><span class="s">"kprobe/__netif_receive_skb_core"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">ghost_vlan</span><span class="p">(</span><span class="k">struct</span> <span class="n">pt_regs</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="p">)</span><span class="n">PT_REGS_PARM1</span><span class="p">(</span><span class="n">ctx</span><span class="p">);</span>
+    <span class="c1">// Detect covert VLAN tag</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">skb_vlan_tag_present</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="n">skb_vlan_tag_get</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span> <span class="o">==</span> <span class="n">COVERT_VLAN_ID</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Rewrite namespace metadata for cross-namespace routing</span>
+        <span class="n">redirect_skb_to_namespace</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">target_ns</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">XDP_PASS</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>(The kprobe snippet above is the rejected original sketch; the working code is an XDP program that adjusts the head and redirects via DEVMAP. See the POC repo.)</p>
+
+<h2 id="build">Build</h2>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="rouge-code"><pre>cd /Users/mbhatt/spaceclaw/evilBPF/dBPF-pocs
+docker run --rm -v "$PWD":/work -w /work dbpf-base \
+  bash -c 'cd pocs/ch15-netns-vlan-ghost &amp;&amp; make'
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h2 id="run">Run</h2>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+</pre></td><td class="rouge-code"><pre>./build/ch15-netns-vlan-ghost --help
+./build/ch15-netns-vlan-ghost --skb -i veth_host -o veth_host2
+./build/ch15-netns-vlan-ghost -i veth_host                    # strip-only
+./build/ch15-netns-vlan-ghost veth_host veth_host2            # back-compat
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>SIGINT/SIGTERM detaches XDP from every interface it attached to; if the loader exits via any error path, <code class="language-plaintext highlighter-rouge">detach_all()</code> still runs.</p>
+
+<p>End-to-end demo (creates ghost_a / ghost_b netns, sends one VLAN-4242-tagged AF_PACKET frame from inside ghost_a, sniffs egress on veth_host2):</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+</pre></td><td class="rouge-code"><pre>docker run --rm --privileged --pid=host \
+  -v "$PWD":/work -w /work \
+  -v /sys/kernel/debug:/sys/kernel/debug \
+  -v /sys/fs/bpf:/sys/fs/bpf \
+  dbpf-base bash pocs/ch15-netns-vlan-ghost/trigger.sh
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<h2 id="detection">Detection</h2>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">bpftool net show dev &lt;ifname&gt;</code> lists XDP programs attached to an interface. Almost nothing legitimate loads XDP on container veths; a datapath-class program on a veth in a conventional workload is a reliable signal.</li>
+  <li><code class="language-plaintext highlighter-rouge">bpftool prog show</code> plus <code class="language-plaintext highlighter-rouge">bpftool map dump name tx_port</code> reveals DEVMAP entries pointing at veths whose peers live in foreign namespaces.</li>
+  <li><code class="language-plaintext highlighter-rouge">ip -d link show dev &lt;ifname&gt;</code> annotates <code class="language-plaintext highlighter-rouge">xdpgeneric</code>, <code class="language-plaintext highlighter-rouge">xdp</code>, or <code class="language-plaintext highlighter-rouge">xdpoffload</code> when an program is attached.</li>
+  <li>The <code class="language-plaintext highlighter-rouge">bpf_xdp_adjust_head</code> plus <code class="language-plaintext highlighter-rouge">bpf_redirect_map</code> helper pair is rare outside dataplane software. Auditing programs that call both is worthwhile.</li>
+</ul>
+
+<h2 id="limitations--arch-notes">Limitations / arch notes</h2>
+
+<ul>
+  <li>Docker Desktop linuxkit aarch64: veth drivers do not implement native XDP; the loader falls back to SKB-mode (or use <code class="language-plaintext highlighter-rouge">--skb</code> to skip the probe). Native-mode redirect is unavailable.</li>
+  <li><code class="language-plaintext highlighter-rouge">bpf_redirect_map</code> to a device in another netns requires the egress device to also have an XDP program loaded on many kernels; the loader attaches the same program there.</li>
+  <li>The verifier rejects skb writes from kprobe context, so the chapter’s original <code class="language-plaintext highlighter-rouge">__netif_receive_skb_core</code> mutation cannot be done directly. XDP at the NIC edge is the equivalent primitive.</li>
+  <li><code class="language-plaintext highlighter-rouge">arping</code> and <code class="language-plaintext highlighter-rouge">ping</code> will not generate the covert frames reliably; the trigger uses an embedded AF_PACKET sender for deterministic VLAN-4242 emission with inner ethertype <code class="language-plaintext highlighter-rouge">0x88b5</code>.</li>
+</ul>
 
                     </div>
                 </article>
@@ -211,7 +314,7 @@ int ghost_vlan(struct pt_regs *ctx) {
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

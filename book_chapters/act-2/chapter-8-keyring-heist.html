@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -181,15 +184,33 @@
                     <div class="post-content">
                         <p>Act II: Kernel Intrusion</p>
 
-<p><strong>Chapter 9: The Crown Jewels</strong></p>
+<p><strong>Chapter 9: Reading the Kernel Keyring via BPF</strong></p>
 
-<p>I thought the kernel keyring was untouchable—a high-security vault where SSH keys, Kerberos tickets, and TLS certificates were kept under strict lock and key. But fortresses are only as strong as the code that builds them.</p>
+<p>Reading the kernel keyring from BPF is not a new idea. I’ve seen variants of this in talks going back to at least 2019 — Brendan Gregg’s bpftrace one-liners touch keyring state, and there was a LinuxCon Europe talk in 2020 that walked through <code class="language-plaintext highlighter-rouge">key_task_permission</code> as an observation point. What I was interested in was getting a clean LSM attach on <code class="language-plaintext highlighter-rouge">security_key_permission</code> and reading the payload. That turned out to be harder than expected for a BTF reason I hadn’t hit before.</p>
 
-<p>Under cover of a silent kprobe, I attached an eBPF program to the <code class="language-plaintext highlighter-rouge">key_permission()</code> function. One forced return value, and every “permission denied” became “permission granted.” My code ran faster than the kernel could notice, capturing secrets in a hidden BPF map.</p>
+<p>I started with an <code class="language-plaintext highlighter-rouge">SEC("lsm/key_permission")</code> program. libbpf on my system (v1.3.0, built against clang 16) rejected it at load with:</p>
 
-<p>I even silenced the audit hook, dropping events so the security logs never rang an alarm. To the system, everything looked normal; to me, the vault emptied into my perf buffer.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="rouge-code"><pre>libbpf: prog 'lsm_key_perm': BPF program load failed: Invalid argument
+libbpf: prog 'lsm_key_perm': -- BEGIN PROG LOAD LOG --
+arg#0 reference type('FWD key') size cannot be determined: -22
+</pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>Armed with stolen credentials, I gained keys to escalate privileges, move laterally, and unlock encrypted data—all without altering a single firewall rule.</p>
+<p>This is the error message when the BTF describing the hook argument is a forward declaration, not a full struct definition. <code class="language-plaintext highlighter-rouge">struct key</code> is defined in <code class="language-plaintext highlighter-rouge">include/linux/key.h</code>, but for LSM BTF purposes the kernel was exposing it as <code class="language-plaintext highlighter-rouge">FWD key</code> — the full type wasn’t reachable through the LSM hook’s BTF. I don’t fully understand why; my suspicion is that the LSM hook signature was declared before <code class="language-plaintext highlighter-rouge">struct key</code> in the BTF-generating translation unit, and <code class="language-plaintext highlighter-rouge">pahole</code> emitted a forward-declaration record. I didn’t track this down further because I found a workaround.</p>
+
+<p>The workaround is to drop from <code class="language-plaintext highlighter-rouge">lsm/</code> to <code class="language-plaintext highlighter-rouge">kprobe/</code> on <code class="language-plaintext highlighter-rouge">key_task_permission</code>. That function has signature <code class="language-plaintext highlighter-rouge">int key_task_permission(const key_ref_t key_ref, const struct cred *cred, enum key_need_perm need_perm)</code>, which means <code class="language-plaintext highlighter-rouge">PT_REGS_PARM1</code> is an opaque <code class="language-plaintext highlighter-rouge">unsigned long</code> containing a <code class="language-plaintext highlighter-rouge">key_ref_t</code> (which is <code class="language-plaintext highlighter-rouge">struct key *</code> with the possession bit in the low bit). Since I’m reading via kprobe, I don’t need the LSM BTF; I use <code class="language-plaintext highlighter-rouge">vmlinux.h</code> and <code class="language-plaintext highlighter-rouge">BPF_CORE_READ</code> directly against <code class="language-plaintext highlighter-rouge">struct key</code>:</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+</pre></td><td class="rouge-code"><pre><span class="k">struct</span> <span class="n">key</span> <span class="o">*</span><span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">key</span> <span class="o">*</span><span class="p">)(</span><span class="n">PT_REGS_PARM1</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span> <span class="o">&amp;</span> <span class="o">~</span><span class="mi">1UL</span><span class="p">);</span>
+<span class="n">__u32</span> <span class="n">serial</span> <span class="o">=</span> <span class="n">BPF_CORE_READ</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">serial</span><span class="p">);</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>This is the teaching point: BTF as exposed through LSM attach points can lag the fuller BTF you get from vmlinux.h. When LSM rejects with FWD, drop to kprobe with PT_REGS_PARMn and read the struct through CO-RE. You lose the clean LSM semantics (kprobes fire before the security decision rather than being the security decision) but you get the payload access.</p>
+
+<p>What I observed. On my test box (Debian 12, kernel 6.1.0-17-amd64), attaching the kprobe and triggering <code class="language-plaintext highlighter-rouge">keyctl list @u</code> produced serial numbers and description pointers for each key in the user keyring. Reading the payload requires chasing <code class="language-plaintext highlighter-rouge">key-&gt;payload.data[0]</code>, which for <code class="language-plaintext highlighter-rouge">user</code>-type keys is a <code class="language-plaintext highlighter-rouge">struct user_key_payload</code> with an <code class="language-plaintext highlighter-rouge">rcu</code> and a <code class="language-plaintext highlighter-rouge">datalen</code>. That’s a kernel-internal layout and CO-RE handles it — <code class="language-plaintext highlighter-rouge">BPF_CORE_READ(key, payload.data[0])</code> resolves correctly against the 6.1 vmlinux.h.</p>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -205,9 +226,11 @@
 <span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>The kernel believed it was enforcing rules. I was the one holding the keys.</p>
+<p>Note on the <code class="language-plaintext highlighter-rouge">return 0</code> override above: same caveat as chapter 7 — this is a kprobe return override and needs <code class="language-plaintext highlighter-rouge">CONFIG_BPF_KPROBE_OVERRIDE=y</code> plus the function being on the error-injection list. <code class="language-plaintext highlighter-rouge">key_task_permission</code> is not on that list in stock kernels. For the read-only observation path, return value doesn’t matter; the program runs, BPF_CORE_READ executes, the map gets the serial and description, and the syscall proceeds normally.</p>
 
-<p>Next stop: namespace illusions and ghost processes. Act II continues.</p>
+<p>Detection. The load-time detection is the same story as any BPF attach: <code class="language-plaintext highlighter-rouge">bpf()</code> audit, kprobe creation in <code class="language-plaintext highlighter-rouge">/sys/kernel/tracing/kprobe_events</code>, and tools like tracee or Falco noticing a kprobe on <code class="language-plaintext highlighter-rouge">key_task_permission</code> specifically. There is no runtime signal from the read itself — BPF_CORE_READ is a copy from kernel memory into BPF map space and leaves no audit trace.</p>
+
+<p>Dead end I hit and am noting for completeness: I spent two hours trying to attach to <code class="language-plaintext highlighter-rouge">__key_instantiate_and_link</code> to catch key creation rather than permission checks. That function isn’t exported and its parameters include a non-trivial <code class="language-plaintext highlighter-rouge">struct key_preparsed_payload</code> that I couldn’t read cleanly with CO-RE because several of its fields are unions. If you want create-time visibility, <code class="language-plaintext highlighter-rouge">security_key_alloc</code> is the better hook and didn’t hit the FWD issue for me.</p>
 
                     </div>
                 </article>
@@ -217,7 +240,7 @@
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

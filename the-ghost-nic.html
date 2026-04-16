@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -1736,40 +1739,12 @@ iptables <span class="nt">-A</span> FORWARD <span class="nt">-m</span> conntrack
       <li>eBPF maps being used to share data between different eBPF programs</li>
       <li>XDP programs attached to physical NICs in container environments</li>
       <li>Unexpected traffic patterns on host interfaces</li>
-      <li>Connections to/from containers that should be isolated
-static volatile bool exiting = false;</li>
+      <li>Connections to/from containers that should be isolated</li>
     </ul>
   </li>
 </ol>
 
-<p>// Structure for packet metadata (must match the BPF version)
-struct packet_metadata {
-    __u32 src_ip;
-    __u32 dst_ip;
-    __u16 src_port;
-    __u16 dst_port;
-    __u8 protocol;
-    __u8 flags;
-    __u16 payload_len;
-    __u32 timestamp;
-    __u32 container_id;
-};</p>
-
-<p>// Structure for connection tracking (must match the BPF version)
-struct sock_key {
-    __u32 sip;
-    __u32 dip;
-    __u16 sport;
-    __u16 dport;
-    __u32 family;
-};
-                __u32 *container = bpf_map_lookup_elem(&amp;container_ids, &amp;netns);
-                if (container)
-                    meta.container_id = *container;
-                else
-                    meta.container_id = 0xFFFFFFFF;  // Unknown container</p>
-
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
 3
 4
@@ -1798,36 +1773,100 @@ struct sock_key {
 27
 28
 29
-</pre></td><td class="rouge-code"><pre>            // Store connection in map for XDP program to access
-            bpf_map_update_elem(&amp;active_connections, &amp;key, &amp;meta, BPF_ANY);
-        }
-        break;
-        
-    case BPF_SOCK_OPS_STATE_CB:
-        if (skops-&gt;args[1] == BPF_TCP_CLOSE) {
-            // Connection closed, clean up our tracking
-            struct sock_key key = {};
-            extract_key4_from_ops(skops, &amp;key);
-            bpf_map_delete_elem(&amp;active_connections, &amp;key);
-        }
-        break;
-}
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+</pre></td><td class="rouge-code"><pre><span class="k">static</span> <span class="k">volatile</span> <span class="n">bool</span> <span class="n">exiting</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
 
-return 0; }
-            
-            // Ensure we have space for our magic marker
-            if ((void*)(magic + 1) &gt; data_end)
-                return false;
-            
-            // Check for our magic marker
-            if (*magic == MAGIC_MARKER)
-                return true;
-        }
-    }
-}
+<span class="c1">// Structure for packet metadata (must match the BPF version)</span>
+<span class="k">struct</span> <span class="n">packet_metadata</span> <span class="p">{</span>
+    <span class="n">__u32</span> <span class="n">src_ip</span><span class="p">;</span>
+    <span class="n">__u32</span> <span class="n">dst_ip</span><span class="p">;</span>
+    <span class="n">__u16</span> <span class="n">src_port</span><span class="p">;</span>
+    <span class="n">__u16</span> <span class="n">dst_port</span><span class="p">;</span>
+    <span class="n">__u8</span> <span class="n">protocol</span><span class="p">;</span>
+    <span class="n">__u8</span> <span class="n">flags</span><span class="p">;</span>
+    <span class="n">__u16</span> <span class="n">payload_len</span><span class="p">;</span>
+    <span class="n">__u32</span> <span class="n">timestamp</span><span class="p">;</span>
+    <span class="n">__u32</span> <span class="n">container_id</span><span class="p">;</span>
+<span class="p">};</span>
 
-return false; } The exploit leverages two key eBPF attachment points:
+<span class="c1">// Structure for connection tracking (must match the BPF version)</span>
+<span class="k">struct</span> <span class="n">sock_key</span> <span class="p">{</span>
+    <span class="n">__u32</span> <span class="n">sip</span><span class="p">;</span>
+    <span class="n">__u32</span> <span class="n">dip</span><span class="p">;</span>
+    <span class="n">__u16</span> <span class="n">sport</span><span class="p">;</span>
+    <span class="n">__u16</span> <span class="n">dport</span><span class="p">;</span>
+    <span class="n">__u32</span> <span class="n">family</span><span class="p">;</span>
+<span class="p">};</span>
+                <span class="n">__u32</span> <span class="o">*</span><span class="n">container</span> <span class="o">=</span> <span class="n">bpf_map_lookup_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">container_ids</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">netns</span><span class="p">);</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">container</span><span class="p">)</span>
+                    <span class="n">meta</span><span class="p">.</span><span class="n">container_id</span> <span class="o">=</span> <span class="o">*</span><span class="n">container</span><span class="p">;</span>
+                <span class="k">else</span>
+                    <span class="n">meta</span><span class="p">.</span><span class="n">container_id</span> <span class="o">=</span> <span class="mh">0xFFFFFFFF</span><span class="p">;</span>  <span class="c1">// Unknown container</span>
+                
+                <span class="c1">// Store connection in map for XDP program to access</span>
+                <span class="n">bpf_map_update_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_connections</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">meta</span><span class="p">,</span> <span class="n">BPF_ANY</span><span class="p">);</span>
+            <span class="err">}</span>
+            <span class="k">break</span><span class="p">;</span>
+            
+        <span class="k">case</span> <span class="n">BPF_SOCK_OPS_STATE_CB</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">skops</span><span class="o">-&gt;</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">BPF_TCP_CLOSE</span><span class="p">)</span> <span class="p">{</span>
+                <span class="c1">// Connection closed, clean up our tracking</span>
+                <span class="k">struct</span> <span class="n">sock_key</span> <span class="n">key</span> <span class="o">=</span> <span class="p">{};</span>
+                <span class="n">extract_key4_from_ops</span><span class="p">(</span><span class="n">skops</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+                <span class="n">bpf_map_delete_elem</span><span class="p">(</span><span class="o">&amp;</span><span class="n">active_connections</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key</span><span class="p">);</span>
+            <span class="p">}</span>
+            <span class="k">break</span><span class="p">;</span>
+    <span class="err">}</span>
+    
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="err">}</span>
+                
+                <span class="c1">// Ensure we have space for our magic marker</span>
+                <span class="k">if</span> <span class="p">((</span><span class="kt">void</span><span class="o">*</span><span class="p">)(</span><span class="n">magic</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">data_end</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+                
+                <span class="c1">// Check for our magic marker</span>
+                <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">magic</span> <span class="o">==</span> <span class="n">MAGIC_MARKER</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="nb">true</span><span class="p">;</span>
+            <span class="err">}</span>
+        <span class="err">}</span>
+    <span class="err">}</span>
+    
+    <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+<span class="err">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>The exploit leverages two key eBPF attachment points:</p>
 
 <ol>
   <li><strong>sock_ops</strong>: Attaches to socket operations within the container
@@ -1845,6 +1884,10 @@ return false; } The exploit leverages two key eBPF attachment points:
     </ul>
   </li>
 </ol>
+
+<h2 id="poc">POC</h2>
+
+<p>Companion code: <a href="/dBPF/dBPF-pocs/pocs/ch05b-ghost-nic/"><code class="language-plaintext highlighter-rouge">ch05b-ghost-nic</code></a></p>
 
                     </div>
                 </article>
@@ -1879,7 +1922,7 @@ return false; } The exploit leverages two key eBPF attachment points:
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

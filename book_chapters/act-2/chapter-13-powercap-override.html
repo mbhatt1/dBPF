@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -181,25 +184,113 @@
                     <div class="post-content">
                         <p>Act II: Kernel Intrusion</p>
 
-<p><strong>Chapter 13: Act III Begins - Beyond Software, Into Hardware</strong></p>
+<p><strong>Chapter 13: An x86-Only Primitive, Tested on aarch64</strong></p>
 
-<p>I used to trust the kernel’s power management to protect the system—CPU frequency scaling, thermal throttling, power caps. They’re the safety nets that keep hardware from destroying itself.</p>
+<p>I want to be honest about this one before describing anything. Intel RAPL and the powercap framework are x86-only. On the aarch64 linuxkit kernel I’m using as my test bed, <code class="language-plaintext highlighter-rouge">CONFIG_POWERCAP</code> is off and none of the RAPL symbols exist. My loader preflighted four targets — <code class="language-plaintext highlighter-rouge">powercap_register_control_type</code>, <code class="language-plaintext highlighter-rouge">powercap_set_max_power_uw</code>, <code class="language-plaintext highlighter-rouge">powercap_get_max_power_uw</code>, <code class="language-plaintext highlighter-rouge">thermal_zone_device_update</code> — and every single one came back absent. The primary POC cannot fire on this host. I don’t get to pretend otherwise.</p>
 
-<p>But these safeguards are just code paths in the kernel. Under cover of a stealthy kprobe, I attached an eBPF program to <a href="https://elixir.bootlin.com/linux/latest/source/drivers/powercap/intel_rapl_common.c"><code class="language-plaintext highlighter-rouge">rapl_write_power_limit()</code></a>, the function that enforces power constraints.</p>
+<p>So this chapter documents two things: what the primitive shape of a powercap override would look like on an x86 Intel host where the symbols exist, and an analog I actually ran on aarch64 to demonstrate the same userspace-illusion mechanic against a synthetic sensor.</p>
 
-<p>Every time the system tried to clamp power usage, my code forced the limit to its maximum. I even disabled the thermal throttling calls so the CPU would run at full tilt, regardless of temperature.</p>
+<p>The primitive shape, on an x86 host. The powercap framework is the generic kernel interface behind RAPL (CPU/package/DRAM TDP caps), Intel PowerClamp, and thermal-zone update notifications. The hooks of interest:</p>
 
-<p>Temperatures spiked, hardware warnings fired, but the logs only showed a strange thermal event. To the monitoring tools it looked like natural failure, not a deliberate assault.</p>
+<table>
+  <thead>
+    <tr>
+      <th>Hook</th>
+      <th>Purpose</th>
+      <th>On aarch64 linuxkit</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">kprobe/powercap_register_control_type</code></td>
+      <td>fires once per driver init (rapl, intel_pmc)</td>
+      <td>ABSENT</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">kprobe/powercap_set_max_power_uw</code></td>
+      <td>any write to <code class="language-plaintext highlighter-rouge">max_power_uw</code></td>
+      <td>ABSENT</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">kprobe/powercap_get_max_power_uw</code></td>
+      <td>any read from <code class="language-plaintext highlighter-rouge">max_power_uw</code></td>
+      <td>ABSENT</td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">kprobe/thermal_zone_device_update</code></td>
+      <td>thermal engine notifications</td>
+      <td>ABSENT</td>
+    </tr>
+  </tbody>
+</table>
 
-<p>With powercap override, I had turned a critical safety feature into my weapon. Act II stands complete; Act III awaits with the promise of total hardware dominion.</p>
+<p>On an Intel host where these resolve, the observer half of the POC attaches cleanly and streams ringbuf events tagged with PID, comm, and the raw first two arguments to each call. That gives a defender precise visibility into who is touching the power envelope and when.</p>
 
-<p>```c
-SEC(“kprobe/rapl_write_power_limit”)
-int override_rapl(struct pt_regs *ctx) {
-    // Force max power limit
-    return 0;
-}
-char LICENSE[] SEC(“license”) = “GPL”;</p>
+<p>The override half — forging a <code class="language-plaintext highlighter-rouge">set_max_power_uw</code> call from BPF, or flipping the return of <code class="language-plaintext highlighter-rouge">get_max_power_uw</code> so monitors read the wrong value — requires <code class="language-plaintext highlighter-rouge">bpf_override_return</code>, which in turn requires the target to be in the error-injection allowlist. On the x86 host I’d need to check against, none of the powercap symbols are in that allowlist by default. The exploit path that does work end-to-end on x86 is to attach a BPF LSM to <code class="language-plaintext highlighter-rouge">security_file_permission</code> for <code class="language-plaintext highlighter-rouge">/sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw</code>, return a forged value to defender processes, and have a privileged helper write the real high limit. That’s the shape. I didn’t build it, because I don’t have an x86 host in this series. Flagging it as untested-by-me is better than claiming it fires.</p>
+
+<p>What I did build: a userspace analog that reproduces the <em>motion</em> of the attack — intercept a read, rewrite the returned bytes before the syscall returns to userspace — against a surface that exists on aarch64. I wrote a trivial “sensor daemon” that writes an incrementing energy counter to a plain file at <code class="language-plaintext highlighter-rouge">ch13_sensor_energy_uj</code>. A reader process <code class="language-plaintext highlighter-rouge">cat</code>s the file. The BPF program attaches to <code class="language-plaintext highlighter-rouge">sys_enter_read</code> and <code class="language-plaintext highlighter-rouge">sys_exit_read</code>, matches the open file’s basename via the standard ch05 CO-RE walk (current → files → fdt → fd[n] → f_path.dentry → d_name.name), and on exit rewrites the user buffer with “0\n” followed by zero bytes.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+</pre></td><td class="rouge-code"><pre><span class="n">SEC</span><span class="p">(</span><span class="s">"tp/syscalls/sys_enter_read"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">tp_read_enter</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_enter</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// stash user buf + is_sensor flag keyed by pid_tgid</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="n">SEC</span><span class="p">(</span><span class="s">"tp/syscalls/sys_exit_read"</span><span class="p">)</span>
+<span class="kt">int</span> <span class="nf">tp_read_exit</span><span class="p">(</span><span class="k">struct</span> <span class="n">trace_event_raw_sys_exit</span> <span class="o">*</span><span class="n">ctx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// if is_sensor and ret &gt; 0: bpf_probe_write_user(buf, "0\n", 2)</span>
+    <span class="c1">//                          zero a few trailing bytes</span>
+    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">char</span> <span class="n">LICENSE</span><span class="p">[]</span> <span class="n">SEC</span><span class="p">(</span><span class="s">"license"</span><span class="p">)</span> <span class="o">=</span> <span class="s">"GPL"</span><span class="p">;</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>This is not a RAPL exploit. It’s a demonstration that the same primitive — tracepoint-plus-<code class="language-plaintext highlighter-rouge">bpf_probe_write_user</code> on the syscall exit path, already used in ch10 for dirent hiding — can be aimed at any file-backed sensor a defender trusts. A real energy counter read from <code class="language-plaintext highlighter-rouge">/sys/class/powercap/intel-rapl:0/energy_uj</code> goes through the same <code class="language-plaintext highlighter-rouge">sys_enter_read</code> / <code class="language-plaintext highlighter-rouge">sys_exit_read</code> path as my synthetic file. The illusion mechanic ports; only the filename matching and the fake payload change.</p>
+
+<p>What you actually see when you run it:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+4
+5
+6
+7
+8
+9
+</pre></td><td class="rouge-code"><pre># baseline (no BPF)
+$ cat ch13_sensor_energy_uj
+12345678
+
+# with BPF attached
+$ cat ch13_sensor_energy_uj
+0
+
+[ch13a] pid=1234 comm=cat orig_bytes=9 patched=1
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>The defender’s monitoring tool, if it reads the counter via <code class="language-plaintext highlighter-rouge">read(2)</code>, sees the rewritten value. A second reader that bypasses the syscall — for instance, one that mmaps the file, or that reads the sysfs attribute through a different interface path — sees the true value. On a real RAPL attack, the analog would be: userspace monitoring tools that <code class="language-plaintext highlighter-rouge">cat</code> the sysfs file see a zeroed or flat energy counter, while hardware performance counters read from MSRs directly still show the truth.</p>
+
+<p>The honest posture. The primary POC (direct kprobes on the powercap framework) cannot fire on aarch64 linuxkit because the subsystem doesn’t exist. The analog demonstrates the primitive shape using a userspace sensor. Neither claims to be a working RAPL override on this host, and I haven’t tested the LSM-over-sysfs path on an Intel host.</p>
+
+<p>Detection. For the x86 primitive: <code class="language-plaintext highlighter-rouge">bpftool prog show type kprobe | grep -iE 'powercap|rapl|thermal_zone'</code> lists attached probes. Cross-check sysfs reads against direct MSR reads (<code class="language-plaintext highlighter-rouge">rdmsr 0x611</code> for package energy on Intel) — any persistent discrepancy is the attack. For the analog: comparing a <code class="language-plaintext highlighter-rouge">read(2)</code>-based reader against one that uses <code class="language-plaintext highlighter-rouge">mmap</code> or an alternate accessor exposes the rewrite. <code class="language-plaintext highlighter-rouge">bpftool map dump</code> on the inflight map shows which PIDs are currently being targeted.</p>
+
+<p>Factual note: the chapter draft I started from described “attaching an eBPF program to <code class="language-plaintext highlighter-rouge">rapl_write_power_limit()</code>” and “forcing the limit to its maximum” so that “temperatures spiked and hardware warnings fired.” That language implied the attack had run. It had not. On my test kernel the function doesn’t exist. What ran was the analog described above.</p>
 
                     </div>
                 </article>
@@ -209,7 +300,7 @@ char LICENSE[] SEC(“license”) = “GPL”;</p>
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

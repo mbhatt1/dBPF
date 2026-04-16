@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -183,17 +186,7 @@
 
 <p><strong>Chapter 2: Breaking Out of the Box</strong></p>
 
-<p>Now that you’ve seen how to make security controls lie, let’s take the next logical step. What happens when you apply that same thinking to container isolation?</p>
-
-<p>You’ve just learned that eBPF can subvert the fundamental security mechanisms of Linux. But containers add another layer of complexity—they’re not just processes with different privileges, they’re supposed to be completely isolated environments.</p>
-
-<p>Or so everyone thinks.</p>
-
-<p>Picture this: you’re trapped in a container, staring at those filesystem walls that are supposed to keep you locked in. But what if I told you that OverlayFS—the very technology that creates those walls—can become your escape tunnel?</p>
-
-<p>We’re going to turn OverlayFS into our personal Trojan horse. While everyone’s watching the front gate (the container runtime), we’re going to slip out through the filesystem layers like a ghost walking through walls.</p>
-
-<p>This is where our story starts to get interesting. You’re not just bypassing security controls anymore—you’re escaping entire isolation boundaries.</p>
+<p>This chapter covers an OverlayFS copy-up race. A BPF program with <code class="language-plaintext highlighter-rouge">CAP_BPF</code> watches for <code class="language-plaintext highlighter-rouge">ovl_copy_up_one</code> on a target inode and emits the inode number to ringbuf. A privileged userspace racer drains the ringbuf and wins the write race to the upper-layer file before the container reads it back, injecting a modified payload. The primitive is a Class V composite per chapter 20’s taxonomy: kernel-event-triggered userspace racer. It assumes the racer already holds <code class="language-plaintext highlighter-rouge">CAP_BPF</code> and the capability to write into the OverlayFS upper directory on the host.</p>
 
 <pre><code class="language-mermaid">%%{init: {"theme": "dark", "flowchart": {"curve": "basis"}, "themeVariables": {"primaryColor": "#007bff", "primaryTextColor": "#fff", "primaryBorderColor": "#007bff", "lineColor": "#F8B229", "secondaryColor": "#006100", "tertiaryColor": "#fff"}} }%%
 graph TD
@@ -223,7 +216,7 @@ graph TD
 
 <p>And if you can influence those decisions… well, suddenly those container walls start looking pretty thin.</p>
 
-<p>The beautiful part is that from the outside, everything looks normal. The container runtime thinks everything is fine, monitoring tools show proper isolation, security scanners give you a green light. Meanwhile, you’re reading files from the host filesystem like you own the place.</p>
+<p>The race happens inside a legitimate filesystem operation, so the container runtime’s view is consistent with its own model of the world: OverlayFS reported a successful copy-up, the container read back the file it asked for. The modification is invisible at that layer because the runtime is not the component being lied to — the container’s read is.</p>
 
 <h2 id="how-we-break-out">How We Break Out</h2>
 
@@ -1193,7 +1186,7 @@ done</span>
 
 <p>The ability to silently modify files during copy-up operations creates a particularly concerning scenario for cloud environments and managed Kubernetes services where multiple customers share the same infrastructure.</p>
 
-<h2 id="how-theyll-try-to-catch-us">How They’ll Try to Catch Us</h2>
+<h2 id="detection">Detection</h2>
 
 <p>The container security teams will try to stop our OverlayFS manipulation with these defenses:</p>
 
@@ -1235,13 +1228,13 @@ done</span>
   <li><strong>Storage driver alternatives</strong> - Consider moving away from OverlayFS entirely</li>
 </ol>
 
-<h2 id="why-container-security-just-got-harder">Why Container Security Just Got Harder</h2>
+<h2 id="scope">Scope</h2>
 
-<p>This isn’t just another container escape—this is a fundamental attack on the filesystem layer that containers depend on. When you can manipulate the copy-up process itself, you’re not just breaking out of one container—you’re potentially compromising the entire container host.</p>
+<p>The primitive assumes an attacker who already holds <code class="language-plaintext highlighter-rouge">CAP_BPF</code> on the host and can write to the OverlayFS upper directory. It does not escalate from an unprivileged container process. The relevant defender controls are in chapter 22: restrict <code class="language-plaintext highlighter-rouge">CAP_BPF</code> holders, baseline loaded BPF programs, and apply integrity monitoring to OverlayFS upper layers where threat model requires it.</p>
 
-<p>The beautiful part is that this happens at the kernel level, below where most container security tools are watching. Your malicious modifications look like legitimate filesystem operations, and the container runtime has no idea what’s really happening.</p>
+<h2 id="poc">POC</h2>
 
-<p>Welcome to the world where containers become trojan horses, and eBPF is the key to the kingdom.</p>
+<p>Companion code: <a href="/dBPF/dBPF-pocs/pocs/ch02-overlayfs/"><code class="language-plaintext highlighter-rouge">ch02-overlayfs</code></a></p>
 
                     </div>
                 </article>
@@ -1276,7 +1269,7 @@ done</span>
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>

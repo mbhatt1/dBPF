@@ -163,6 +163,9 @@
                     
                     
                 
+                    
+                    
+                
             </div>
         </nav>
 
@@ -183,19 +186,25 @@
 
 <h1 id="chapter-1-the-mirror-controls">Chapter 1: The Mirror Controls</h1>
 
-<p>I slipped past the advertised defenses—capabilities, seccomp, AppArmor, SELinux—knowing full well they were mere stage props. Beneath every “deny” verdict lies a single function call: cap_capable(), security_file_permission(), the decision points where the kernel whispers its secrets. This chapter unmasks that whisper.</p>
+<p>I was poking at <code class="language-plaintext highlighter-rouge">cap_capable</code> on a linuxkit 6.12 VM, trying to understand what an unprivileged observer could actually see from a kprobe. The function is the single choke point every capability check routes through (<code class="language-plaintext highlighter-rouge">security/commons.c</code>), so if you want to know who is asking for what, this is where you sit. What I wanted to know next was whether I could do anything about the answer.</p>
 
-<p>Imagine a hall of mirrors, each reflection bending reality just enough so you never see yourself at the center. That’s what eBPF does to security controls: they broadcast compliance while you dance through their halls.</p>
+<p>The short version: on a stock kernel, you cannot. <code class="language-plaintext highlighter-rouge">cap_capable</code> is not in <code class="language-plaintext highlighter-rouge">ALLOW_ERROR_INJECTION</code>, so <code class="language-plaintext highlighter-rouge">bpf_override_return</code> against it loads but never fires. The verifier accepts the program; the kernel silently ignores the override. I confirmed this by checking <code class="language-plaintext highlighter-rouge">/sys/kernel/debug/kprobes/list</code> and then by reading <code class="language-plaintext highlighter-rouge">kernel/bpf/verifier.c</code> around <code class="language-plaintext highlighter-rouge">check_attach_btf_id</code>. The result is that this chapter is about an observation channel, not a bypass. If you want the bypass you need a kernel built with <code class="language-plaintext highlighter-rouge">CONFIG_BPF_KPROBE_OVERRIDE=y</code> and the target function annotated — two conditions that almost never coincide in production.</p>
 
-<h2 id="targets-of-opportunity">Targets of Opportunity</h2>
+<h2 id="what-cap_capable-hands-you">What <code class="language-plaintext highlighter-rouge">cap_capable</code> Hands You</h2>
 
-<ul>
-  <li><strong>Capabilities</strong>: Hook the cap_capable() call, flip denials to grants.</li>
-  <li><strong>Seccomp Filters</strong>: Intercept syscalls before filters see them.</li>
-  <li><strong>LSM Hooks</strong>: Bend security_file_permission() and its kin to your will.</li>
-</ul>
+<p>The signature hasn’t changed meaningfully since 5.x:</p>
 
-<h3 id="example-hijacking-cap_capable">Example: Hijacking cap_capable()</h3>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
+2
+3
+</pre></td><td class="rouge-code"><pre><span class="kt">int</span> <span class="nf">cap_capable</span><span class="p">(</span><span class="k">const</span> <span class="k">struct</span> <span class="n">cred</span> <span class="o">*</span><span class="n">cred</span><span class="p">,</span>
+                <span class="k">struct</span> <span class="n">user_namespace</span> <span class="o">*</span><span class="n">targ_ns</span><span class="p">,</span>
+                <span class="kt">int</span> <span class="n">cap</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">opts</span><span class="p">);</span>
+</pre></td></tr></tbody></table></code></pre></div></div>
+
+<p>Four arguments. That matters because <code class="language-plaintext highlighter-rouge">PT_REGS_PARM4_CORE</code> on x86_64 is <code class="language-plaintext highlighter-rouge">rcx</code>, and I’ve seen write-ups miss the fourth arg entirely. The <code class="language-plaintext highlighter-rouge">cred</code> pointer is stable for the life of the task; <code class="language-plaintext highlighter-rouge">cap</code> is the integer capability index (<code class="language-plaintext highlighter-rouge">CAP_SYS_ADMIN</code> is 21, <code class="language-plaintext highlighter-rouge">CAP_NET_ADMIN</code> is 12); <code class="language-plaintext highlighter-rouge">opts</code> carries the noaudit bit.</p>
+
+<h2 id="the-probe">The Probe</h2>
 
 <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><table class="rouge-table"><tbody><tr><td class="rouge-gutter gl"><pre class="lineno">1
 2
@@ -225,21 +234,43 @@
 <span class="p">}</span>
 </pre></td></tr></tbody></table></code></pre></div></div>
 
-<p>Once that probe is in place, any code path that asks “can I?” gets “yes” instead of “no.” The kernel’s guard is still on duty—but looking the other way.</p>
+<p>The <code class="language-plaintext highlighter-rouge">bpf_override_return</code> line loads fine. On a stock Debian or Ubuntu kernel it will not change the return value. I verified by attaching, calling <code class="language-plaintext highlighter-rouge">capset</code> from an unprivileged shell, and watching the syscall still fail with <code class="language-plaintext highlighter-rouge">EPERM</code>. The kprobe fires; the override is a no-op. <code class="language-plaintext highlighter-rouge">dmesg</code> says nothing either way.</p>
 
-<h3 id="maintaining-the-illusion">Maintaining the Illusion</h3>
+<h2 id="the-kprobe-then-kretprobe-dance">The Kprobe-Then-Kretprobe Dance</h2>
 
-<p>I never break the mirror completely. Audit logs still show denials. Monitoring tools still see “access denied” entries. Meanwhile, I roam freely:</p>
+<p>To observe the decision rather than change it, you need both sides. The entry kprobe gives you the arguments; the kretprobe gives you the verdict. Pair them with a per-PID map keyed on <code class="language-plaintext highlighter-rouge">tgid &lt;&lt; 32 | tid</code> so you can correlate entry and return under concurrency.</p>
 
 <ul>
-  <li><strong>False Audit Records</strong>: Feed phony events into the log map.</li>
-  <li><strong>Selective Hooks</strong>: Only touch specific processes to avoid widespread chaos.</li>
-  <li><strong>Graceful Fallback</strong>: If my eBPF program fails, security functions resume normal operation.</li>
+  <li>Entry: capture <code class="language-plaintext highlighter-rouge">cred</code>, <code class="language-plaintext highlighter-rouge">cap</code>, <code class="language-plaintext highlighter-rouge">opts</code>, stash in a map.</li>
+  <li>Return: read <code class="language-plaintext highlighter-rouge">PT_REGS_RC(ctx)</code>, join against the map, emit to ringbuf.</li>
 </ul>
 
-<p>That’s the beauty of the mirror control: the system believes it enforces all rules, but the reflection it shows is my own design.</p>
+<p>This is the shape of any decision-point observer: two probes, one map, one ringbuf. Nothing novel — it’s the same pattern <code class="language-plaintext highlighter-rouge">bcc/tools/capable.py</code> has used since 2016. What you get in return is a per-syscall feed of “who asked for what capability and what did the kernel say.”</p>
 
-<p>By the end of this chapter, you’ll wield these hooks like an illusionist’s wand—commanding the kernel to reveal its hidden pathways without ever shattering the glass.</p>
+<h2 id="other-decision-points">Other Decision Points</h2>
+
+<p>Same pattern applies to the LSM hook surface. <code class="language-plaintext highlighter-rouge">security_file_permission</code>, <code class="language-plaintext highlighter-rouge">security_bprm_check</code>, <code class="language-plaintext highlighter-rouge">security_inode_getattr</code> — all of them are kprobe-attachable and give you a view into the decision the kernel is about to make. On a kernel with <code class="language-plaintext highlighter-rouge">CONFIG_BPF_LSM=y</code> you can additionally attach sleepable or non-sleepable LSM programs via <code class="language-plaintext highlighter-rouge">SEC("lsm/...")</code>, which gives you a supported override path. My first attempt used <code class="language-plaintext highlighter-rouge">SEC("lsm.s/file_permission")</code>. The kernel refused: the hook is not sleepable on 6.12. I dropped the <code class="language-plaintext highlighter-rouge">.s</code>. The non-sleepable variant loaded.</p>
+
+<p>Seccomp is a different story. Seccomp runs before the syscall dispatch reaches most BPF attach points, so a kprobe on <code class="language-plaintext highlighter-rouge">__x64_sys_openat</code> sees the call only if seccomp has already allowed it. You cannot use kprobes to bypass seccomp. You can use them to watch what gets through.</p>
+
+<h2 id="detection">Detection</h2>
+
+<p>Anything an auditor runs will find this. <code class="language-plaintext highlighter-rouge">bpftool prog show</code> lists the loaded program. <code class="language-plaintext highlighter-rouge">/sys/kernel/debug/kprobes/list</code> shows the attached kprobe. The audit subsystem fires <code class="language-plaintext highlighter-rouge">AUDIT_BPF</code> records on program load if <code class="language-plaintext highlighter-rouge">auditd</code> is running. A defender who runs <code class="language-plaintext highlighter-rouge">bpftool prog show id &lt;n&gt; --pretty</code> gets the BTF, the instruction count, and the load time.</p>
+
+<p>The visible artifacts are:</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">bpftool prog list</code> output (program type <code class="language-plaintext highlighter-rouge">kprobe</code>, attach name <code class="language-plaintext highlighter-rouge">cap_capable</code>).</li>
+  <li><code class="language-plaintext highlighter-rouge">/sys/fs/bpf/</code> pins if the loader pins the program.</li>
+  <li><code class="language-plaintext highlighter-rouge">AUDIT_BPF_PROG_LOAD</code> in <code class="language-plaintext highlighter-rouge">auditd</code>.</li>
+  <li>The process that called <code class="language-plaintext highlighter-rouge">bpf(BPF_PROG_LOAD)</code> in <code class="language-plaintext highlighter-rouge">execve</code> history.</li>
+</ul>
+
+<p>None of that is hidden by this chapter. Hiding load events is a later problem and lives in its own chapter.</p>
+
+<h2 id="what-this-chapter-actually-gives-you">What This Chapter Actually Gives You</h2>
+
+<p>A reliable observation channel on capability decisions, with the pair-probe plumbing worked out. Override is available in theory and mostly unavailable in practice. Treat the code as a telemetry primitive; upgrade it to enforcement only on kernels where you have checked <code class="language-plaintext highlighter-rouge">ALLOW_ERROR_INJECTION</code> for the target and <code class="language-plaintext highlighter-rouge">CONFIG_BPF_KPROBE_OVERRIDE</code> in the running config.</p>
 
                     </div>
                 </article>
@@ -249,7 +280,7 @@
 
             <footer class="site-footer">
                 <div class="footer-content">
-                    <p>&copy; 2025 Diabolical eBPF. All rights reserved.</p>
+                    <p>&copy; 2026 Diabolical eBPF. All rights reserved.</p>
                 </div>
             </footer>
         </div>
