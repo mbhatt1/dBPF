@@ -539,6 +539,73 @@ I want to credit the upstream material I leaned on for the XDP mechanics:
 
 None of these describe the covert-channel direction, because none of them are attacker-oriented. The contribution of this chapter is framing the existing, well-documented primitive as a cross-namespace covert channel and walking through the BEFORE/AFTER proof structure. The mechanics are identical to the legitimate use; the ethics are different.
 
+## DEVMAP vs CPUMAP vs XSKMAP
+
+Briefly worth noting the three map types that XDP redirect helpers work with, because they are different tools for different purposes:
+
+- **DEVMAP** (`BPF_MAP_TYPE_DEVMAP`): key is an index, value is an ifindex. Used by `bpf_redirect_map` to redirect to a network device. This is what ch15 uses.
+- **CPUMAP** (`BPF_MAP_TYPE_CPUMAP`): key is an index, value is a CPU number. Used to redirect packets for processing on a different CPU (typical for packet steering / load spreading in DDoS-resistant datapaths).
+- **XSKMAP** (`BPF_MAP_TYPE_XSKMAP`): key is an index, value is an AF_XDP socket. Used to redirect packets to userspace via AF_XDP (zero-copy userspace networking).
+
+For the covert-channel primitive, DEVMAP is the right choice — we want the frame delivered to a device, not a CPU or a userspace socket. CPUMAP could be used creatively (send the covert frame to a specific CPU whose processing is being observed by another BPF program) but that is an order of magnitude more complex and not needed for the proof.
+
+An XSKMAP variant would be interesting: redirect covert frames to an AF_XDP socket owned by the attacker process, so the attacker receives them directly in userspace without going through the kernel network stack at all. This is the inverse direction of ch15 (the attacker pulls frames out of the network, rather than injects them into a namespace), and it represents a different class of covert channel — an exfiltration channel where the attacker receives data directly from userland on a physical NIC. I have not built this variant; it is a natural extension.
+
+## Error Modes I Hit During Development
+
+A few gotchas that ate development time, documented so the next implementer does not re-discover them.
+
+**adjust_head returning -EINVAL**. The first time I ran the program, `bpf_xdp_adjust_head(ctx, +4)` returned `-EINVAL` and the frame went through `XDP_PASS` unmutated. The cause was that the packet arrived with `data` already at a position where shrinking by 4 would violate the minimum headroom. Ethernet frames from veth have a specific headroom budget; my original attempt to use `adjust_head(+8)` (to also strip the 802.1Q TCI and expose a deeper inner header) hit this limit. Shrinking by 4 works. Shrinking by 8 does not on this kernel.
+
+**Pointer invalidation subtlety**. I described this above but a concrete error: an earlier draft re-read `data_end` but not `data` after `adjust_head`. The verifier rejected with:
+
+```
+R1 pointer arithmetic on pkt pointer prohibited after helper call
+```
+
+It took me an hour to figure out that the issue was pointer *register* invalidation in the verifier's analysis, not packet-buffer invalidation. Re-reading both `data` and `data_end` fixed it.
+
+**DEVMAP entry not settable before XDP attach on target**. I tried populating the DEVMAP *before* attaching XDP to the target device. The update succeeded, but the redirect later returned 0 captured frames. Reordering to "attach both devices first, then populate DEVMAP" fixed it. The reason, as best I can tell, is that the kernel checks DEVMAP entries against XDP-capability at the point of `bpf_redirect_map` execution, and the target device is only flagged XDP-capable once a program is attached to it. Populating the map before the target has an attached program results in an entry that is silently invalid until the attach happens, and my first pass's `bpf_redirect_map` ran before the re-check. Ordering matters.
+
+**SKB-mode vs DRV-mode attach flag mismatch**. On detach, if you attached with `XDP_FLAGS_SKB_MODE` you must detach with `XDP_FLAGS_SKB_MODE`. Detaching with the wrong flag returns `-EINVAL`. The loader tracks `g_xdp_flags` at attach time and uses the same flag on detach. If attach succeeded in SKB mode on ingress but in DRV mode on egress (hypothetically), the current code would use the ingress flag for both detaches, which might fail on the egress. In practice on linuxkit both end up SKB.
+
+**Setting the egress veth MTU down or carrier off**. An early aborted run had the egress veth carrier down because I forgot `ip link set veth_host2 up`. The XDP program ran, the redirect returned `XDP_REDIRECT`, but the frame was dropped at egress because the device was down. The ringbuf event shows `STRIP+REDIRECT` in this failure mode — the program executed the redirect code path — but tcpdump sees nothing. This is exactly the disagreement case I called out in the ringbuf/tcpdump section above. The BEFORE/AFTER discipline catches it (if AFTER shows 0 tcpdump, something is wrong), but the diagnosis requires understanding that a `XDP_REDIRECT` action does not guarantee delivery.
+
+## Why I Kept the Kprobe Sketch in the Book
+
+The chapter retains the kprobe-on-`__netif_receive_skb_core` snippet from the original outline, even though it does not work:
+
+```c
+SEC("kprobe/__netif_receive_skb_core")
+int ghost_vlan(struct pt_regs *ctx) { ... }
+```
+
+I kept it because the dead end is useful. A reader who sees this chapter and reaches for the chapter outline will think "kprobe on the receive path, rewrite the skb's namespace metadata, let the kernel re-receive." That intuition is natural. It is wrong for two independent reasons (verifier rejects skb writes, symbol not in error_injection list). The XDP path is the correct expression of the same primitive. The book's job is to teach that redirect-via-XDP-is-the-answer, and leaving the kprobe fantasy uncorrected in the reader's mind would be worse than keeping it visible and annotating it as the wrong path.
+
+A reader who sees only the working XDP code might wonder why I picked XDP rather than kprobe; the answer is "because kprobe doesn't work, I tried it." Showing the dead end makes the reasoning explicit.
+
+This is a broader editorial pattern across these chapters. Chapter 16's aspirational "borrow a TID" bypass is similarly annotated as not-working-on-this-kernel. The honest framing gives readers the epistemic artifact, not just the finished code.
+
+## An Aside on Performance
+
+The primitive is not performance-critical — three frames per demo — but the underlying XDP+DEVMAP datapath is capable of line-rate forwarding on 10G+ NICs. If an attacker wanted to use this for sustained covert traffic (exfiltration at meaningful bandwidth), the primitive would not be a bottleneck. The constraints are:
+
+- **XDP generic mode** caps throughput at the same order as normal stack handling. Fine for covert channels, slow for bulk transfer.
+- **XDP native mode** handles millions of packets per second per core. Bulk exfil is practical if the NIC supports it.
+- **DEVMAP batching** aggregates multiple redirects to the same target into one NAPI delivery. For sustained flows this matters; for bursty covert channels it is noise.
+
+The detection signal does not scale with throughput. `bpftool prog show` shows the program regardless of whether it has forwarded 3 frames or 3 billion. A defender who checks the attached-program list periodically catches the primitive whether the channel is used heavily or not. That asymmetry (static signal, variable payload) is a nice property for detectors — you do not need to watch the traffic, just watch the program list.
+
+## Concluding on the Threat Model
+
+To close this chapter cleanly: ch15 is a proof that XDP can ferry traffic between netns-isolated peers on a host with `CAP_BPF`. The primitive is documented, legitimate, and widely deployed in production for legitimate reasons. The misuse direction is mechanical — flip the DEVMAP target to a victim namespace, filter for a covert VID, strip, redirect.
+
+The defenders I have spoken with about this class of primitive consistently ask the same question: "why is this not already locked down?" The answer is that the primitive sits at the intersection of multiple subsystems (BPF, netns, veth) and no single subsystem's threat model covers it. XDP's threat model assumes privileged operators. netns's threat model assumes kernel-level namespace isolation, which is preempted by XDP. veth's threat model is "point-to-point virtual ethernet," which does not care what BPF programs attach to the endpoints. Each subsystem is internally consistent. The emergent property of "no cross-namespace XDP redirect" is nobody's responsibility.
+
+This is a recurring theme. The Linux kernel is a collection of subsystems with their own threat models, and the interactions between them are where primitives accumulate. Ch14 is about the interaction between syscall entry wrappers and `bpf_override_return`. Ch15 is about the interaction between XDP and netns. Ch16 is about the interaction between seccomp and kprobe observability. Ch18 is about the interaction between syscall returns and userspace identity caching. Each chapter's primitive is a gap at a subsystem boundary, and the defender needs a cross-cutting view that no single subsystem provides.
+
+That is the implicit argument of the whole book. The chapters are case studies; the pattern is what matters.
+
 ## Hook points
 
 - `SEC("xdp")` `xdp_vlan_ghost` on the ingress veth.

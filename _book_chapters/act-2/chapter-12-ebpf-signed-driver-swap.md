@@ -6,7 +6,7 @@ date: 2025-03-01
 
 **Chapter 13: Forging the finit_module Return Value**
 
-> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) and the surviving workaround variant at [dBPF-pocs/pocs/ch12-signed-driver-swap-syscall/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs).
+> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) and the surviving workaround variant at [dBPF-pocs/pocs/ch12-signed-driver-swap-syscall/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs).
 
 ## The Question and the Honest Answer
 

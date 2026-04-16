@@ -17,6 +17,14 @@ Two kretprobes, two `bpf_override_return(ctx, 0)` calls:
 
 Both symbols are in `/sys/kernel/debug/error_injection/list` on the linuxkit 6.12 aarch64 kernel I tested on, so the override lands. Symbols are verified via `/proc/kallsyms` at load time; missing symbols are tolerated (`bpf_program__set_autoload(prog, false)`).
 
+## Opening context
+
+Before digging in, a short digression about why this primitive is worth a chapter in a BPF-primitives book at all. "Forge `getuid()` to return zero" is a one-line change to a syscall handler — it is so simple that a reader might reasonably ask what is interesting about it.
+
+The interesting thing is not the mechanism. The mechanism is a kretprobe and a single `bpf_override_return` call; any BPF programmer who has seen a return override once knows how to write this. The interesting thing is what happens downstream. A single forged return on a single syscall is enough to convince `id`, `whoami`, the shell's `$UID` variable, many installer scripts, parts of `sudo -l`, many CLI tools' internal RBAC, and a long tail of userspace trust chains that the calling process is root. The primitive is mechanically trivial and operationally consequential, and the gap between those two is exactly what makes it worth a chapter.
+
+The wider story is older than BPF. This is the same class of bug as sendmail trusting a queried value instead of enforcing at the point of operation. It is the same class as sudo trusting a timestamp file that the calling user could influence. It is the same class as every "trust the query, not the cred" CVE that filled the late-1990s and 2000s. The BPF version adds mechanization: any kernel function on the error-injection list is a target, the attach is a one-line skeleton, the forge is a library helper. What used to require finding a specific bug in a specific SUID binary now requires finding a specific error-injection entry in a specific kernel's curated list, and the list is larger than the SUID binary surface ever was.
+
 ## Why this attaches, and how I confirmed it
 
 `bpf_override_return` is a helper that, from a kretprobe, substitutes a different return value for whatever the probed function was about to return. It is one of the three motions `CAP_BPF` grants, and it is gated tightly — the kernel only permits override against functions explicitly marked as override-able. The list of those functions lives at `/sys/kernel/debug/error_injection/list` and is curated by kernel developers based on which functions are safe to have their return values rewritten without corrupting kernel state.
@@ -54,6 +62,33 @@ static int kallsyms_has(const char *sym)
 ```
 
 If the symbol is absent, the loader calls `bpf_program__set_autoload(prog, false)` on the corresponding kretprobe, which tells libbpf to skip loading that specific program during the `bpf_object__load` pass. The overall load succeeds; the missing program is simply not there. This lets the loader work on a cross-section of kernels without hard-failing when one symbol is present and another is not. The cost is one kallsyms walk at startup, which is microseconds.
+
+## The error-injection list, in detail
+
+I want to spend a little more time on the error-injection list because it is the single piece of kernel policy that makes or breaks every Class I primitive in this book. The list lives at `/sys/kernel/debug/error_injection/list` when `debugfs` is mounted (it usually is on test kernels, sometimes restricted on production kernels). The file is read-only from userspace and is populated from a compile-time table in the kernel.
+
+The table is generated from `ALLOW_ERROR_INJECTION(name, etype)` macros scattered through the kernel source. Grep `kernel/` and `fs/` for `ALLOW_ERROR_INJECTION` and you get the list of functions the kernel maintainers have explicitly marked as fuzz-testable. Each entry has an `etype` (EI_ETYPE_NULL, EI_ETYPE_ERRNO, EI_ETYPE_TRUE, EI_ETYPE_FALSE, EI_ETYPE_ANY) that constrains what return values the override can substitute.
+
+For the getuid family on aarch64 Linux 6.12, the macro sits in `kernel/sys.c`:
+
+```c
+SYSCALL_DEFINE0(getuid)
+{
+    /* Only we change this so SMP safe */
+    return from_kuid_munged(current_user_ns(), current_uid());
+}
+ALLOW_ERROR_INJECTION(__se_sys_getuid, EI_ETYPE_NULL);
+```
+
+The `ALLOW_ERROR_INJECTION` macro marks `__se_sys_getuid` — the storage-extended form of the syscall wrapper — as override-able. The ABI-specific forms (`__arm64_sys_getuid`, `__x64_sys_getuid`) are generated from the same definition and inherit the permission. The `EI_ETYPE_NULL` means any value is permitted as an override; there is no constraint that the substituted return be a valid errno, for example.
+
+That `EI_ETYPE_NULL` is the critical piece. If the entry had been `EI_ETYPE_ERRNO`, the kernel would reject any `bpf_override_return` call that passed a non-errno value — `0` would be rejected because `0` is not a negative errno; positive values would be rejected; the whole primitive would fail silently. The choice of etype on the getuid entry is what makes this attack possible. It was chosen for fuzz-testing purposes — fuzzers want to substitute arbitrary return values to exercise caller error-handling paths — and it happens to also be exactly what an offensive primitive wants.
+
+The list on linuxkit 6.12 aarch64 has about 300 entries. Most are internal kernel functions. Around 50 are syscall wrappers of one form or another. The subset of syscall wrappers whose return value would be useful to forge in an attack is smaller — maybe 20 — but it includes some juicy ones: `getuid`, `geteuid`, `getgid`, `getegid`, `getresuid`, `getresgid`, `getpid`, `gettid`. Most uid/gid/pid-querying syscalls are on the list. That is by design: these are the syscalls kernel developers most want to fuzz-test error paths for.
+
+A hardened kernel could strip error-injection entries at build time. The kernel build system does not make this easy — `CONFIG_FUNCTION_ERROR_INJECTION=n` disables the feature entirely, but you cannot (as of 6.12) selectively remove entries from an otherwise-enabled list. Disabling the feature has side effects: some diagnostic tools rely on it, and `bpf_override_return` fails entirely without it. The tradeoff is "fewer attack primitives" vs "less developer tooling." Most production kernels keep the feature enabled because the tooling is useful.
+
+A stricter mitigation is to restrict `debugfs` mount points so the list file is not readable from user namespaces. This does not disable the primitive — `bpf_override_return` still works regardless of whether userspace can read the list — but it does prevent attackers from enumerating what is fuzz-able before crafting a payload. That narrows the reconnaissance channel without breaking the underlying feature.
 
 ## `ch18-token-bypass.bpf.c` line by line
 
@@ -240,6 +275,16 @@ for (size_t i = 0; i < n_targets; i++) {
 
 Two separate population paths. If you pass `--all` *and* `--tgid 1234`, both run: key `0` is set (wildcard) and key `1234` is set (explicit). `is_target()` will hit either lookup and return true, so the effective behavior is still wildcard. The combination is redundant but not wrong.
 
+## Why only on flip, not on every call
+
+A design detail in the BPF program worth flagging: the ringbuf emit runs on every call, even non-flipped ones. `emit(ret, 0, flip)` fires unconditionally; `flip` is 0 or 1 depending on whether the override landed. I considered emitting only on flip-paths to reduce ringbuf volume, but decided against it for two reasons.
+
+First, visibility. Seeing non-flipped events tells the loader's operator (and anyone reviewing the log stream) that the probe is attached and firing, even during periods when no target process is invoking getuid. "The probe attached but did not fire" and "the probe is firing but not flipping" are diagnostically distinct situations and both are useful to see.
+
+Second, deployment validation. When you first attach the probe, you want to know it is working. An event stream with zero events for five minutes could mean "no one called getuid in five minutes" or "the probe failed to attach silently." Emitting on every call lets you distinguish: if events are flowing, the probe is live; if the flip rate is zero, the targeting is off. Reduced noise is not worth the lost diagnostic signal.
+
+The cost of emitting on every call is proportional to getuid rate, which on a typical Linux system is high but not extreme. `id`, `whoami`, shell startup, various service initialization paths all call getuid; a busy system might see a few thousand calls per second spread across all processes. 256 KiB of ringbuf at ~40 bytes per event is about 6500 events of headroom, which is enough to absorb a second or so of sustained backlog before the loader has to drain. In practice the loader drains at hundreds of thousands of events per second when it is not printing each one to stdout, so the ringbuf never fills.
+
 ## The `uid=0 gid=1001` tell
 
 Here is where the scope of the illusion gets crisp. Run `id` as an unprivileged user with the probe attached in `--all` mode, and you will see:
@@ -285,6 +330,18 @@ The chapter's POC hooks only `getuid` and `geteuid` on purpose, to leave this te
 - `/proc/self/status` read rewriting via `bpf_probe_write_user` in a `sys_exit_read` tracepoint, which is a different primitive from the getuid forge and has its own issues.
 
 Each extension closes one tell and opens a new attach point for detection. There is no fully stealth version of this attack; there is only different tradeoffs between how many lies you tell and how many points of detection you paint.
+
+## A worked scenario: the CI runner attack
+
+Let me walk through one concrete attack that motivates this primitive, because "forge uid" in the abstract is not as compelling as "forge uid to achieve X."
+
+A CI system runs user-submitted jobs in a container. The container is entered with dropped capabilities — no `CAP_SYS_ADMIN`, no `CAP_DAC_OVERRIDE`, the usual hardening — but with `CAP_BPF` retained because the CI runner uses BPF-based observability to track resource usage across builds. The CI runner trusts its own provisioning: it expects the container to run as uid 1000, and an installer script inside the container makes decisions about where to place build artifacts based on `[ "$UID" = "0" ]`. If the installer thinks it is root, it writes to `/opt/shared-artifacts/`; if not, it writes to a user-local cache.
+
+The attacker submits a CI job that, at build-time, loads the ch18 BPF program with `--all` and then runs the installer script. The installer script reads `$UID`, which bash populated from `getuid()` at shell startup. `getuid()` was overridden by the BPF probe to return 0. `$UID` is `0`. The installer writes to `/opt/shared-artifacts/` with the uid-1000's DAC permissions — which are actually fine for `/opt/shared-artifacts/` because the CI runner had set that directory mode to 0777 to accommodate writes from any job. The installer deposits a malicious binary into the shared location, which persists across jobs.
+
+The next job to use the CI runner inherits the malicious binary through the shared location. The attack has succeeded in cross-job persistence through what the CI runner thought was a per-job-isolated container. The kernel did not help defend against this because the kernel's DAC checks on `/opt/shared-artifacts/` granted write access to uid 1000, which is what the task actually was. The attacker did not need root for the write; they needed the installer to believe it was root so that the installer would choose the shared-location code path.
+
+The defense is every layer simultaneously: the CI runner should not grant `CAP_BPF` to user-submitted jobs; `/opt/shared-artifacts/` should not be writable by jobs; the installer should not trust `$UID` for security decisions; the installer should cross-check uid via `/proc/self/status`; the container runtime should load a BPF LSM policy rejecting kretprobe attachment to syscall wrappers from non-root-uid processes. Any one of those closes the attack. None of them is unusual; all of them are skipped in a lot of real-world CI deployments.
 
 ## What the kernel still enforces
 
@@ -394,6 +451,16 @@ trig | === TOKEN_FORGE_PROVEN uid_forges=1 ===
 
 The `[token] FORGE` lines carry the per-call evidence: the tgid of the forging call, the comm, the syscall name, the original kernel return value, and the forced override. The `TOKEN_FORGE_PROVEN` line is the machine-greppable summary. The harness status for ch18 flips to `effect_demonstrated` the moment the proof marker matches.
 
+## A second worked scenario: the container-breakout confusion
+
+A shorter second scenario, because the first was enough but I want to show one more shape of attack.
+
+A host runs a privileged observability agent (Datadog, Cilium, pick your favorite) with `CAP_BPF` on the host. The agent attaches various BPF programs to monitor container activity. The agent does not directly use `getuid` for its own security decisions, but it writes logs that include uid information derived from BPF probe data — and those logs go to a centralized log system that correlates events across hosts.
+
+An attacker who has compromised a single container on the host (through some other vector) loads a BPF program that forges getuid to 0 for all processes on the host — wildcard mode. The host's agent now sees forged uids for every process it observes. The attack does not need the attacker's container to be privileged because the BPF attach happened inside the attacker's container using the container's own `CAP_BPF` grant (which, in many default configurations, is inherited from the host or granted explicitly by the container runtime). The host agent's log stream now says every process on the host is running as root, including processes in other containers. Alert-correlation pipelines fire: "suddenly every user process is uid 0" is the sort of thing a SOC notices. The agent's view of reality has been corrupted, and the corruption happened across containers.
+
+The defense here is specifically about not granting `CAP_BPF` to containers that do not need it. The Datadog agent needing `CAP_BPF` on the host is reasonable; a container running `apt-get install` and `make` does not need `CAP_BPF` and should not have it. Container runtimes that default to inheriting host capabilities are the problem; container runtimes that default to dropping capabilities unless explicitly granted are the defense.
+
 ## Historical lineage
 
 I want to give credit to the prior art here, because this primitive has a long pedigree and the BPF version is one more point on a decades-old curve.
@@ -435,6 +502,14 @@ Policy:
 - For forensics: `bpftool prog show` over time, diffed against a baseline, reveals every attach of this shape.
 
 Every one of these is cheap. The reason the primitive is worth reading about at all is not that it is hard to defend against — it is that an enormous body of existing code fails to do any of them, and an attacker with `CAP_BPF` gets the entire failure mode for free.
+
+## Fourth-generation concerns: the "trust-the-syscall" refactor
+
+Looking forward from the third-generation BPF version: the fourth generation of this problem is the growing reliance on syscalls as security-decision surfaces in container runtimes, microservice meshes, and userspace policy engines. When a mesh's sidecar queries its local kernel for uid/gid to make an authorization decision in the absence of a stronger identity (say, in an edge environment without mTLS certificates), the mesh is building on exactly the kind of syscall-trust that ch18 exploits.
+
+There is a good engineering argument that syscall return values should never be treated as authoritative for security by any userspace code. Kernel enforcement points exist for exactly this reason. The engineering reality is that cross-checking is expensive (two syscalls instead of one, plus parsing overhead) and most codebases do not bother. The attack surface grows every time a new userspace component reads `getuid` and makes a decision based on it. Without coordinated change in how userspace components reason about identity, the primitive class demonstrated in this chapter stays open indefinitely.
+
+This is the point at which a researcher pounds the table and says "we need a better syscall for this." We do not need a better syscall. We need consumers to stop asking questions of the kernel whose answers depend on the kernel not being lied to via primitives the same consumers' capabilities grant. That is a policy problem, not a mechanism problem, and it is the kind of problem that software ecosystems are consistently bad at solving.
 
 ## Hook points
 

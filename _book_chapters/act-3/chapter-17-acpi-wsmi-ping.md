@@ -73,6 +73,16 @@ No test harness. No loadable module. No driver that calls `request_firmware` at 
 
 At this point the principled move is to declare the chapter an honest skip and move on. That is what the harness does in its original code path — it emits `CH17_SKIP reason="no acpi nor firmware symbols"` and exits 2 rather than pretending to succeed. The chapter as shipped in the book keeps that behavior for the default entrypoint. What the workaround variant does, separately, is demonstrate the primitive shape against a surface that *is* live on this kernel, and label the result honestly so the reader can tell it apart from the real thing.
 
+## An aside on what kprobe silence actually means
+
+One more aside before moving to the analog. A kprobe attached to a symbol that is never called at runtime is, from the BPF system's perspective, indistinguishable from a kprobe attached to a symbol that will fire in five minutes. The BPF verifier loads it, the kprobe infrastructure installs the int3 / brk breakpoint into the kernel text, and the probe is "live" in the sense that the infrastructure is ready for it. But the probe has never fired, and if nothing calls the probed function, it never will.
+
+This matters for threat modelling because the naive question "can the attacker attach a probe to `request_firmware`?" is answered yes on this kernel — the symbol is exported, the attach succeeds, the verifier is happy. The more useful question is "what happens when the attack attaches a probe to `request_firmware` and nothing calls it?" The answer is, nothing. The probe sits quiet. The attacker gets no observations. No data exfils.
+
+This is a point that cuts both ways. From the defender's perspective it is a small comfort: the attack surface of a hooks-but-no-callers surface is zero in practice. From the attacker's perspective it is a reconnaissance step: the attacker has to check not just "is the symbol present" but "does anything actually call the symbol on this target." Those are different questions and they have different answers on different kernel builds. A full distro kernel with laptop drivers compiled in has frequent `request_firmware` calls. A stripped cloud-image kernel may never call it. A Docker Desktop linuxkit kernel definitely does not.
+
+The harness's approach is to make this discoverability explicit. The skip marker `CH17_SKIP reason="..."` is printed when the primitive cannot fire on the current kernel. The reader of the marker knows the attack did not run, and knows why. A silent no-op would be worse in every way: it would look like success, or it would look like a bug in the primitive rather than a property of the kernel.
+
 ## The userspace analog, scoped
 
 The workaround POC lives at `dBPF-pocs/pocs/ch17-acpi-wsmi-analog/`. It has three parts:
