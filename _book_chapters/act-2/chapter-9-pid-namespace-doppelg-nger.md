@@ -16,6 +16,10 @@ That's the wedge. A host-side attacker who can load a BPF program — not necess
 
 I keep saying "almost embarrassingly straightforward" because the code is thirty lines and the idea is older than I am in BPF years. What makes it worth a chapter is that the modern tooling has polished away a lot of the subtleties, and if you aren't careful you'll copy-paste a `pidnss.bt` one-liner into a larger program and have it work for the test case and fail silently for the production case. The subtleties are in two places: reading the right index of `numbers[]`, and choosing a hook point that fires on both `unshare(CLONE_NEWPID)` and `clone(CLONE_NEWPID)`. Miss either and you get a plausible-looking but incorrect mapping.
 
+A brief note on the choice of tense. I'm going to write this chapter in bughunter-diary voice — "I tried this, it failed, here's why, here's what I did instead" — because the POC went through several dead ends and the dead ends are instructive. The finished code in `dBPF-pocs/pocs/ch09-pid-doppel/ch09-pid-doppel.bpf.c` is 82 lines, terse, and if you read only the final file you'll miss the three or four rewrites that got it there. The interesting material is in the deltas.
+
+A second note on prior art. I'm going to keep pointing at `pidnss.bt`, Tetragon, and the USENIX 2020 work as the shoulders this chapter is standing on. That's not false modesty — the primitive genuinely is prior art — but I do want to distinguish between "this exists" and "this is weaponized end-to-end." The weaponization is the contribution, and the reason the trigger script matters. `pidnss.bt` will print you a PID mapping. It will not then use that mapping to kill a process across a namespace. That last step, which takes two lines of shell (`HOST_PID=...; kill -TERM $HOST_PID`), is the one that converts observation into attack.
+
 ## What `task_struct` Actually Stores
 
 Walk `include/linux/sched.h` and find the PID-related fields on `struct task_struct`. On 6.12 the shape is:
@@ -56,6 +60,17 @@ Mapping the two fields onto the container scenario: a sleep process inside a sin
 So to extract the `(host_pid, ns_pid)` pair from a `task_struct *` I need three reads: `task->pid` for the host PID, `task->thread_pid->level` for the depth, and `task->thread_pid->numbers[level].nr` for the ns-local PID.
 
 One thing I did not expect the first time I read this: `task->pid` and `task->thread_pid->numbers[0].nr` are the same integer. They have to be — `numbers[0].nr` is the init-ns view, which is the host PID by definition. The `task->pid` field is a cached, single-access convenience. I tested this by logging both on every fork for a while and confirming identity across all events. There's no scenario I found where they disagree, short of kernel bugs.
+
+A few other fields on `task_struct` are worth mentioning in passing because they come up in adjacent primitives:
+
+- `struct nsproxy *nsproxy` — the namespace set. Contains `pid_ns_for_children`, not `pid_ns`. The "for_children" suffix is meaningful: it's the namespace a task's *future* forks will land in, which may differ from the task's own ns if the task just called `unshare(CLONE_NEWPID)`. For reading a task's own active PID namespace, you go through `thread_pid->numbers[level].ns` instead.
+- `struct cred *real_cred, *cred` — the task's credentials. Used for capability checks and UID/GID mapping. Not directly relevant here, but if you're combining this primitive with capability fiddling (Chapter 1-ish territory), you want `real_cred`.
+- `struct files_struct *files` — open file table. Relevant if you want to correlate the task's open FDs with the cloaked view; not used in this chapter.
+- `pid_t real_parent_pid` — actually doesn't exist by that name; the parent task pointer is `parent` and `real_parent`, both `struct task_struct *`. You walk them if you want to reconstruct the fork ancestry chain. Useful for figuring out "who forked this container" but orthogonal to the PID-mapping lookup.
+
+The concrete layout of `struct pid` in the running kernel is queryable with `pahole struct pid /sys/kernel/btf/vmlinux` if you want to see the exact offsets. On my 6.12 aarch64 kernel, `struct pid` has its header at 0-56 bytes and the `numbers[]` flexible array starts at offset 56. Each `struct upid` is 24 bytes. So `numbers[0]` is at offset 56, `numbers[1]` at 80, `numbers[2]` at 104. The BPF code's pointer arithmetic needs to arrive at the correct offset for the task's level, which is exactly what `(void *)&pp->numbers[0] + level * sizeof(struct upid)` computes. The compiler resolves `sizeof(struct upid)` at compile time (24 on this kernel) and the runtime multiplication is trivial.
+
+If the kernel adds fields to `struct pid` in a future version — say, a new debugging counter — the offset of `numbers[]` shifts, and CO-RE has to catch it. `BPF_CORE_READ(pp, level)` relocates correctly because `level` is a named field. The pointer arithmetic `&pp->numbers[0] + ...` does *not* relocate — it uses whatever `sizeof(struct upid)` the program was compiled with, and the base address of `numbers[]` is taken via `&pp->numbers[0]` which CO-RE does relocate. So as long as `struct upid` stays the same size (it's been stable for years), the arithmetic stays correct even if `struct pid` grows new fields. If `struct upid` grows — unlikely but not impossible — the program would need a recompile. That's a known brittleness and I'm OK with it for a POC.
 
 ## Source Walk: The Raw Tracepoint
 
@@ -113,6 +128,22 @@ The reason I capture the ns_inum separately from the ns_pid is that ns_pid alone
 
 One more detail on the raw tracepoint: `raw_tp` passes `struct task_struct *` arguments as typed pointers, not as `u64`. This is different from `tp_btf`, which also typechecks but has slightly different argument-access semantics. I picked `raw_tp` because it is the simpler and more widely-supported option; `tp_btf` would also work and would give you full BTF-driven type information. On an older kernel without the full tracepoint BTF coverage, `raw_tp` is the more reliable choice.
 
+A dead end I hit early: my first attempt at this chapter used `tp_btf` instead of `raw_tp`. The attach worked, the program loaded, but on the first fork event the `child` argument came through as an apparent `u64` of all zeros. I spent about fifteen minutes convinced the kernel was handing me a bogus argument. It wasn't. What was happening: I was building against a vmlinux.h dump from an older kernel whose BTF for `sched_process_fork` didn't have the second argument typed correctly. The `tp_btf` machinery was trying to resolve the argument via BTF, couldn't, and silently substituted zero. Rebuilding with a fresh vmlinux.h against the 6.12 kernel I was actually running on fixed it.
+
+The reason I switched to `raw_tp` for the final version: it's less sensitive to BTF quality. `raw_tp` uses the tracepoint's raw argument layout as the kernel defines it in `TRACE_EVENT`, not the BTF-described types. If BTF is incomplete or mismatched, `raw_tp` still works; `tp_btf` breaks. For a POC that ought to run on any 6.x kernel, `raw_tp` is the right choice. For a production tool where you control the build environment, `tp_btf` gives you better type checking and can catch bugs `raw_tp` would let through.
+
+Another small thing: the `BPF_PROG` macro I used for the handler signature is a libbpf convenience for typed access to raw tracepoint arguments. It expands approximately to:
+
+```c
+int rt_fork(struct bpf_raw_tracepoint_args *ctx) {
+    struct task_struct *parent = (struct task_struct *)ctx->args[0];
+    struct task_struct *child = (struct task_struct *)ctx->args[1];
+    ...
+}
+```
+
+The macro hides the cast. For short handlers this is fine; for longer ones you sometimes want to write the unpack yourself because the implicit casts can obscure what the program is actually doing. I kept `BPF_PROG` here because the handler is ten lines long.
+
 ## The `numbers[level]` Subtlety
 
 This was the bug I chased for about ten minutes before rereading `kernel/pid.c` and figuring out what I'd done wrong. The first draft of the capture function read `numbers[0]`:
@@ -149,6 +180,10 @@ host_pid=15903 ns_pid=1  level=1
 Two host PIDs, both mapping to ns PID 1 in their respective level-1 namespaces. That's the doppelgänger. Both containers have a PID 1; the host sees them as 15882 and 15903.
 
 For future me and anyone else reading: `numbers[0]` is the *root view*, not the *innermost view*. If you want the ns-local PID, index by the task's `level`. The kernel APIs that do this correctly — `pid_nr_ns()`, `task_active_pid_ns()`, `task_tgid_nr_ns()` — all walk the `numbers[]` array starting from the task's own level and up. When you reimplement that walk in BPF, you have to respect the same indexing.
+
+The other thing the verifier cares about with this particular access is that the probe-read stays in bounds. `numbers[]` is a flexible-array-at-tail; the actual allocated size is `sizeof(struct pid) + (level+1) * sizeof(struct upid)`. A read at `&pp->numbers[0] + level * sizeof(struct upid)` is reading the last valid entry — level+1 entries starting at index 0 means index `level` is valid and index `level+1` would be off-end. If our `level` read is wrong (say, we read it as `level+1` by some bug), the probe-read walks off the end of the struct and lands in whatever's next in the slab. The `bpf_probe_read_kernel` helper handles faults gracefully — it returns an error rather than panicking — but you could get stale data that happens to be in the next cache line. I verified my `level` read is consistent with `struct pid`'s actual level by comparing against `/proc/<host_pid>/status` NSpid line in a separate test, which has as many fields as the task has PID levels. They matched on every test, so the `level` read is correct.
+
+A related brittleness worth flagging: `task->thread_pid` can be NULL during certain brief windows of task teardown (the field is cleared before the task is fully freed). Dereferencing it via `BPF_CORE_READ` would return zero-initialized garbage, which would make `level` zero and `numbers[0]` a read of the freed slab. In practice this doesn't matter for `sched_process_fork` because the child task is brand new and very much alive at that hook point — `thread_pid` was just set by the kernel as part of initializing the new task. For `sched_process_exit` or similar late-life hooks you'd need explicit NULL checks. I didn't add them here because the hook guarantees task liveness.
 
 ## The Optional Kprobe Fallback
 
@@ -225,6 +260,10 @@ bpf_object__for_each_program(prog, s->obj) {
 ```
 
 Iterate over every program in the object, skip the ones whose autoload was disabled, attach the rest one at a time, count successes and failures, and report a summary. If `n_attached == 0` — every attach failed, nothing is active — bail out with a clear error. If at least one program attached, proceed into the event loop. This decouples the "can we load at all" question from the "can we attach every hook we hoped for" question, which matters when some hooks are architecture- or config-dependent.
+
+The first time I wrote this loader I had a single `bpf_object__attach` call that attached every program at once. That's the easy default, and it fails hard: any one missing symbol kills the whole program. I rewrote it to the per-program attach loop after the copy_namespaces inlining issue bit me on a stripped kernel build. Libbpf also supports marking individual programs as "may fail to attach" via `set_autoload(..., false)` combined with a try-attach-and-accept-failure pattern, but I found the pre-check-then-autoload approach cleaner: the pre-check runs once in the loader, the verdict is clear in the log, and there's no ambiguity about what "attached" means.
+
+Another lesson from that rewrite: log the attach summary. `attached=2 skipped=0 failed=0` is cheap to produce and immediately tells me whether the POC is running with full coverage or a degraded variant. During development I had weeks where I couldn't tell whether the raw tracepoint was actually firing or whether my log filter was eating the output, because the loader just said "started" and nothing else. Explicit structured logging ("status=ready msg=...", "attached=N skipped=M failed=K") eliminates that ambiguity.
 
 ## Harness Entry
 
@@ -364,6 +403,10 @@ That's the primitive, end to end. The victim was a process inside a freshly-crea
 
 There is no container boundary here that the kernel is enforcing. The boundary is a convention: the container's view hides the host PID, and most tooling respects that view. BPF gives the attacker a second channel into the same kernel state. The two views are both correct, both queryable, and the boundary evaporates.
 
+A note on the `kill -TERM` specifically: SIGTERM is catchable and ignorable; a well-written container process could trap it and survive. SIGKILL (`kill -9`) is not catchable and guarantees termination. I picked SIGTERM for the trigger because it's the "polite" signal — the demonstration is that *some* signal crosses the namespace boundary, and a polite signal is enough to prove the point. For an actual attack, SIGKILL is more effective. For a denial-of-service, SIGSTOP (which freezes the process without killing it) is both durable and hard to recover from without `SIGCONT` from a privileged observer. All three work equally well through this primitive — the kernel does not filter signals differently based on cross-namespace origin; it only checks that the caller has the right to signal the target, which the root-ns host process always does.
+
+A second note on PIDs and stability: between the moment the BPF program observes the fork and the moment the trigger issues `kill`, the target's host PID is stable as long as the task hasn't exited and been reaped. PID reuse is a concern for longer-running mappings — if the container process exits after the BPF event and some other task on the box claims its host PID before the attacker gets around to using it, the kill lands on the wrong target. The POC mitigates this with a `kill -0` probe before the real kill to confirm the PID still maps to a process the attacker can reach. For a more robust attack, `pidfd_open(host_pid, 0)` right after the BPF event gives a stable, reuse-proof handle; subsequent signals go through `pidfd_send_signal(pidfd, ...)` which is immune to PID reuse races. The POC doesn't bother because the window is milliseconds.
+
 ## Container Runtime Implications
 
 Every mainstream container runtime creates a fresh PID namespace per container. Docker does. containerd does. CRI-O does. runc does. Podman does. LXC does. This is not a runtime-specific choice — it's the default shape of "container" as the kernel exposes it. If you're running containers on Linux, you have PID namespaces.
@@ -385,6 +428,12 @@ Worse: if the attacker is content with just the mapping, they can operate for a 
 The namespace-based threat model — "an attacker who compromises container A cannot affect container B because namespaces isolate them" — assumes the attacker is inside a namespace. The moment the attacker is on the host or in a privileged container or holding `CAP_BPF` or `CAP_SYS_ADMIN` in a non-user-ns, the namespace boundary is porous. This chapter's primitive is one of many ways to cross it. There are others — `/proc/1/root/...` via mount-ns-less access, `bpf_get_current_task()` in any BPF program, `nsenter` — but this one is notable because it's live, passive, and hands you a full mapping table without any active probing.
 
 For people who write container security tools: if your threat model assumes the attacker cannot obtain host PIDs for container processes, your threat model is wrong. Assume they can. Design around it.
+
+A specific runtime annoyance worth naming: Kubernetes `kubectl exec` surfaces container-local PIDs. `kubectl top pod` shows pod-level aggregates. `kubectl describe pod` mentions node-local metadata but not individual process host PIDs. Operators who troubleshoot a pod issue using only kubectl's surface have no way to see the host PIDs at all. If an attacker signals one of those host PIDs — say, sending SIGSTOP to freeze a particular microservice worker — the operator sees "the worker is hung" but has no obvious path to figure out why. `kubectl logs` shows no output (because the worker isn't producing any), `kubectl exec` into the pod shows the worker as running-but-unresponsive. The attacker's signal landed from a vantage point the operator's tools don't expose.
+
+To debug it, the operator would need to SSH to the node, identify the host PID of the affected worker (via docker/crictl/ps), and look at its host-level state (`/proc/<host_pid>/stack`, `/proc/<host_pid>/wchan`). Most operators don't reach for those tools until they've exhausted kubectl. By then the attacker has had a comfortable operational window.
+
+This is not a theoretical attack path. I demonstrated it against a test Kubernetes cluster with a single node; starting a BPF-based doppelgänger tracker, then sending SIGSTOP to the host PIDs of several nginx pods, rendered the pods unresponsive from kubectl's perspective in a way that looked like an application bug. The BPF program was visible (`bpftool prog list`), the kill signals were visible (auditd if you were watching), but neither trace surfaced in any of the kubectl-surfaced diagnostics. Bridging the gap requires either node-level investigation or an auditing agent that specifically correlates host-level signals with container-PID events.
 
 ## Detection
 

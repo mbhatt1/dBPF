@@ -390,3 +390,30 @@ One small appendix before the techniques. The BPF subsystem has accumulated a vo
 The book uses these terms as defined here. Where a term's usage is ambiguous in the broader ecosystem (the word "probe" is used to mean both a kprobe and any attach point), the book picks one meaning and sticks to it.
 
 With the glossary settled, the book moves to the first technique.
+
+## Appendix: on the choice of linuxkit as the target
+
+A short note on why the target environment is a linuxkit 6.12 VM rather than a physical host or a generic Ubuntu image.
+
+Linuxkit is minimal. The kernel config is readable and the attack surface is small enough that every claim can be checked against the actual binary. A technique that works on linuxkit and not on a stock Ubuntu image usually works on Ubuntu too — the difference is almost always a default-enabled security module or a distribution-specific patch that closes a specific gap. By starting from the minimal environment, the book documents the technique's bare-metal behavior; downstream, a reader can check whether their specific distribution closes the gap.
+
+Linuxkit is aarch64 on Apple Silicon because that is the machine I have on my desk. The techniques translate to x86_64 with two caveats: the register ABI for `PT_REGS_PARM*` macros is different, and the kprobe fire path has slightly different JIT characteristics. Neither caveat changes the conceptual content of any chapter. Where a chapter's code would need adjustment for x86_64, the chapter calls it out; most chapters do not need adjustment because the BPF C compiles to the same bytecode on both architectures.
+
+Linuxkit boots in seconds, which matters for the harness. The full test matrix (22 chapters, each with BEFORE/AFTER capture) runs in under a minute on a clean linuxkit VM. The same matrix on a full Ubuntu VM would take several minutes; on bare metal it would require physical access. The harness's ergonomics were a deciding factor in picking the test environment.
+
+One downside of linuxkit: it is not a production environment. A technique that works on linuxkit is not automatically applicable to a production host, because production hosts run additional tooling — security modules, auditd rules, EDR agents — that may interfere. The book's position is that linuxkit's output is the *upper bound* on what an attacker holding the stated capabilities can do; production deployments close some of the gaps, and Chapter 22's defender playbook describes which ones and how.
+
+## Appendix: versioning and drift
+
+Kernel versions change. This book's claims are specific to 6.12.54-linuxkit aarch64 as of the writing. When a claim diverges on a future kernel, the book's repository is the canonical record; the issue tracker is the place to report divergence.
+
+The most likely sources of drift:
+
+- **Error-injection allowlist changes.** Functions get added and, rarely, removed. A chapter whose override depends on `do_unlinkat` being in the list would notice immediately if the annotation were removed.
+- **Verifier behavior changes.** The verifier's acceptance surface expands over time. A program that fails verification on 6.12 may verify on 6.15. The book's claims are lower bounds.
+- **LSM hook sleepability changes.** A non-sleepable hook becoming sleepable (or vice versa) changes which program types can attach. The book's specific `SEC("lsm/...")` choices are correct for 6.12 and may need adjustment elsewhere.
+- **Helper additions.** New helpers get added in nearly every kernel release. The book does not use a helper that was not available in 6.1 LTS; techniques that use newer helpers would extend the book rather than replace it.
+
+A reader who runs the harness on a different kernel version and notices a divergence has found something worth documenting. Divergence is not a bug; it is data. The book's taxonomy accommodates divergence by describing the class of primitive rather than the specific kernel-version-dependent mechanism.
+
+With the preface complete, the first technique is the kprobe on `cap_capable`.

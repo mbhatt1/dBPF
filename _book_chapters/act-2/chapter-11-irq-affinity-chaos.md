@@ -357,6 +357,22 @@ per-CPU ringbuf totals:
 
 Three unique IRQs, 1843 total events, clearly asymmetric per-CPU totals. IRQ 29 is the virtio network input, IRQ 30 is a virtio block request queue, IRQ 27 is a timer. CPU 2 got the bulk of the network IRQs; CPU 0 got the bulk of the block IRQs. That asymmetry is the thing the observer sees that `/proc/interrupts` also shows — but the observer saw it in an eight-second window, and the per-event timing in the ringbuf would let you compute the arrival distribution, the inter-arrival histogram, the timing correlation with any other observable.
 
+## Why Observer-Only is the Right Answer (And How I Know)
+
+There is a version of this argument where I try to get clever and claim the observer is what I wanted all along, the override would have been unwise anyway, and really the observer is the better research tool. I am not going to make that argument. I wanted override. Override is more interesting. Override is the thing that, if it worked, would change what an attacker could do with a BPF program on this kernel. The observer is an instrument. The override would have been a weapon.
+
+What I will say instead is that the honest posture — "I wanted this, these three blockers killed it, here is what I built instead" — is the one you learn to adopt as soon as you have written a few chapters like this and had reviewers and readers catch you overclaiming. The temptation is always there. You spent a week on the chapter, the thing you built is real, and if you tilt the framing slightly you can make the smaller thing sound like the bigger thing. The internet is full of BPF write-ups that did exactly that, and most of them fall apart on careful reading. This chapter is not going to be one of them.
+
+The three blockers deserve to be spelled out one more time, because the interaction between them is the actual lesson:
+
+**Allowlist gating is kernel-developer-consent.** `ALLOW_ERROR_INJECTION` is an explicit annotation that says, "this function's authors have agreed that a BPF program can rewrite its return." That consent has to happen at the source-tree level, not the exploitation level. You cannot argue your way past it from outside the kernel. For `cap_capable` (chapter 1), for `irq_dispatch` (this chapter), and for `powercap_get_energy_uj` (chapter 13), the answer is the same: the annotation is not there, and without it, `bpf_override_return` is verifier-rejected at load. There is no userspace technique that changes this. The allowlist is the developers' fence, and the fence is honored.
+
+**Atomic context is a runtime constraint.** Even if the allowlist were permissive, the execution environment of a kprobe inside an IRQ handler is hostile to anything that sleeps, blocks, or schedules. BPF programs in that context have fewer helpers available; the verifier is stricter about which helpers can be called. Look at the BPF helper reference: `bpf_copy_from_user` is off-limits in non-sleepable contexts, `bpf_loop` has per-context bounds, any operation that could acquire a mutex is disallowed. The set of things you *can* do from a hard-IRQ kprobe is observation, ringbuf emission, and map updates on preempt-disabled per-CPU storage. That is enough for the observer. It is not enough for anything that wants to reconfigure the world.
+
+**Architecture boundaries are below the Linux layer.** On aarch64, the GIC distributor is the hardware arbiter of IRQ routing. The Linux IRQ subsystem is a cross-architecture abstraction that calls into arch-specific chip drivers to program the distributor. A BPF program is below the architecture-neutral layer in the sense that it runs in kernel mode, but above it in the sense that it sees the abstractions, not the chip registers. If the routing decision lives in `GICD_IROUTER` and your program cannot do MMIO, you cannot change the routing. You can change the Linux-layer view of the routing, but that view is not what the hardware consults when an IRQ fires. The hardware wins. This is architecturally the same reason you cannot intercept a USB packet from BPF before the HCI driver has seen it — the packet has happened already, in silicon, before any kernel code runs on it.
+
+All three of these are not BPF limitations specifically. They are consequences of what BPF is: an in-kernel verified programming environment for observation and policy, not a kernel debugger, not a hypervisor, and not a chip-level emulator. Anyone asking BPF to do things outside that envelope is going to discover one of the three walls, usually in that order.
+
 ## Timing Side-Channel Implications
 
 Now the part of the chapter I keep going back and forth on. The observer is small. The consequence depends entirely on what you feed it and what you are trying to learn from the feed.
@@ -376,6 +392,47 @@ I want to be clear about what I am and am not claiming. I am not claiming to hav
 The flip side is that the primitive is small. You are reading timestamps and IRQ identities. You are not rewriting anything, not re-steering anything, not injecting anything. Everything downstream — the statistical inference, the correlation, the actual attack — is ordinary analysis on the captured stream, and that work is outside the scope of a BPF program.
 
 The honest posture is: the observer is a building block, it lowers the cost of implementing the observer-half of classical side-channel attacks, it is well-suited for an attacker with a foothold in a colocated container, and it does not by itself constitute an exploit.
+
+## What You Measure When You Measure an IRQ
+
+A digression I want to include because it comes up every time I explain this primitive. The question is: what exactly is the timestamp on a ringbuf event?
+
+`bpf_ktime_get_ns` returns the system monotonic clock in nanoseconds. The resolution depends on the hardware clock source; on x86, it is the TSC (time stamp counter) read through `rdtsc` and converted to nanoseconds, which is single-digit nanoseconds of resolution. On aarch64, it is the architectural counter `CNTVCT_EL0`, which is typically 10-50 MHz — so tens of nanoseconds per tick. Either way, the resolution is far finer than inter-IRQ arrival distance at realistic rates.
+
+The meaning of the timestamp is "the moment BPF ran the helper inside the kprobe entry." That is a few nanoseconds into the dispatch path, after the hardware raised the interrupt, after the kernel's IRQ-entry code saved registers and established the stack context, after the dispatch function was called. It is not "the moment the hardware signaled." The gap between "hardware signaled" and "BPF timestamp taken" is small (a few hundred nanoseconds on modern hardware) and is roughly constant for a given (CPU, device) pair. For timing-correlation purposes, the constant offset is not a problem — you care about deltas and distributions, not absolute truth.
+
+What can skew the timestamp: the kernel can coalesce IRQs (MSI coalescing, NAPI polling), which means one dispatch event corresponds to multiple hardware events. You see a single IRQ fire, but the `irqaction` handler processes a batch. The ringbuf event reports a single timestamp per dispatch, not per batched event. For network RX, this is real — NAPI batches RX completions behind a single IRQ. If you are trying to do fine-grained packet timing, the IRQ stream is a lower-bound estimate of event count, not an exact count. The `ethtool -c <iface>` settings control the coalescing parameters; on a host configured for minimum latency (interrupts per packet), the IRQ stream is a close proxy for packets. On a host configured for throughput (many packets per IRQ), it is not.
+
+What does not skew the timestamp: the CO-RE reads themselves. The BPF_CORE_READ walk happens after the timestamp is taken, so the time spent chasing pointers into `irq_desc` does not contaminate the event. The ordering in the `emit` helper is deliberate: timestamp first, CPU ID second, then scalars, then the heavier reads. If a later read fails (say, the `action` pointer is NULL), the event still has a valid timestamp and a valid CPU ID.
+
+For correlation work — matching IRQ events against tcpdump captures, against application-level log timestamps, against other BPF observers running on the same host — the monotonic clock is the right reference. `clock_gettime(CLOCK_MONOTONIC)` in userspace is the same clock source; no conversion needed. If you want wall-clock time, add `clock_gettime(CLOCK_REALTIME)` at the moment you record the monotonic value, and store the offset.
+
+## A Note on What "Observer" Means Here
+
+Not all BPF observers are created equal. There is a gradient from "extracts telemetry that the kernel already exposes" to "extracts kernel state that the supported interfaces hide." This POC is somewhere in the middle, and the location on that gradient matters for thinking about its legitimacy.
+
+At the permissive end, BPF observers that read what `/proc` already shows are pure convenience tools. A kprobe that counts `openat` calls is in the same category as running `strace`; nothing hidden, nothing privileged, nothing that a defender's existing tooling could not already see. These are fine to write and fine to run, and they are what most of bcc's `tools/` directory looks like.
+
+At the restrictive end, BPF observers that extract kernel state the supported interfaces deliberately do not expose are effectively covert instrumentation of the kernel. Reading the contents of internal data structures that have no userspace interface at all, recording information that the kernel authors chose not to make available — this is closer to reverse engineering the kernel's internals than to using its APIs. It is legal, it is not necessarily unethical, but it is a step further from "pure telemetry" and closer to "observational exploitation."
+
+This POC sits in the middle. `/proc/interrupts` exposes some of what the probes see (counts per IRQ per CPU); the probes expose more (per-event timestamps, task contexts, driver labels, microsecond cadences). The additional information is not secret — every field we read has a stable meaning and a well-documented structure — but it is not packaged for general consumption either. The per-event stream is a richer view than the kernel maintainers decided to publish. Whether that is "observation" or "observational exploitation" depends on who you ask and what they want to do with it.
+
+I call it an observer because the primitive is read-only. No rewrite, no block, no policy decision. The data is there in the kernel; we are reading it. That is observation in the narrow sense. In the broad sense of "is this a thing ops teams would approve of on a shared host," it depends on the ops team.
+
+## Layering the Observer with Other Probes
+
+The dispatch observer gets you half of a useful picture. The other half is instrumenting the *cause* of IRQ asymmetry — the writes to `/proc/irq/<n>/smp_affinity`, the boot-time irqbalance configuration, the runtime use of `sched_setaffinity` for IRQ threads, and the hardware-layer MSI-X vector assignments.
+
+A fuller defense pipeline would include:
+
+1. **This observer** on `handle_irq_event` and `__handle_irq_event_percpu` — per-event dispatch data.
+2. **A write-side observer** on `proc_irq_set_affinity_hint` or on the `/proc/irq/<n>/smp_affinity` sysctl store path — captures who is changing affinity masks.
+3. **An fsnotify or inotify watch** on `/proc/irq/` — catches the userspace writes at the VFS layer, independent of whether the BPF probe landed.
+4. **Auditd rules** on the `ioctl` calls that some drivers use for per-device affinity configuration — catches the device-specific paths that don't go through sysctl.
+
+Each of these is its own small POC; each is cheap to build on the same CO-RE patterns this POC uses. Stacked together they give you cause-effect correlation: "process X wrote mask Y to IRQ Z, and the dispatch asymmetry changed by delta ΔZ in the following minute." That is the shape of a deployable detector, not just a demo.
+
+The POC in this chapter is the first of the four. The others live in their own chapters (not all of them written yet in this book). What I wanted to flag here is that the observer is a component, not a product. You plug it into a pipeline; the pipeline does the detection work.
 
 ## The Realistic User-Visible Attack This Observer Catches
 
@@ -406,6 +463,42 @@ The supported interface for IRQ observation on Linux is `/proc/interrupts`, full
 On the effect side, a defender who has deployed the observer as a monitor can detect affinity-pinning attacks at the symptom layer — "one CPU is getting all the IRQs, the others are getting none" — regardless of whether the pinner used `/proc/irq/smp_affinity`, an ioctl on a raw device, a BPF program, or direct MMIO. The observer is neutral to the attack mechanism and sensitive to the outcome.
 
 Auditd configuration is also a clean defense path: `auditctl -w /proc/irq -p wa` watches every write to `/proc/irq/*/smp_affinity` and records the writer's identity. Combined with the per-CPU asymmetry check from the observer, you catch both the cause and the effect.
+
+## Cross-Architecture Portability Notes
+
+A quick set of notes on what changes between architectures, because this matters for anyone trying to run the POC outside the linuxkit aarch64 VM it was developed in.
+
+On x86_64, the dispatch symbol set is close to identical. `handle_irq_event` and `__handle_irq_event_percpu` are both present on any 6.x build. The absent `handle_irq_event_percpu` variant is a naming quirk that is also absent on x86. The preflight handles it the same way. Attach should succeed on the same two of three.
+
+On older aarch64 kernels (5.4, 5.10 LTS), `__handle_irq_event_percpu` may not be present — the function was renamed during a refactor. I have not tracked down exactly when. If the preflight shows that symbol as ABSENT, falling back to `handle_irq_event` alone gets you the mid-layer view without the inner-chain detail. The data is coarser but the observer still works.
+
+On RISC-V, I have not tested. The IRQ subsystem code is shared across architectures, so the function names should be the same; the arch-specific bits are in the chip drivers below the dispatch layer. If you test this on RISC-V and find differences, the preflight will catch them cleanly.
+
+For VMs specifically, the IRQ delivery pattern depends on the hypervisor's virtual interrupt controller. On KVM with virtio devices, every device IRQ goes through a virtual GIC (on aarch64) or a virtual APIC (on x86), and the `irq_desc` you see from BPF is the guest's view. The `irqaction.name` strings are the driver labels the guest assigned. This is the setup the POC was developed against. For bare-metal hosts, the `irqaction.name` strings are the driver labels of the physical devices; most of what the POC sees on a typical bare-metal server is `eth0`, storage controllers, and timer IRQs.
+
+For nested virtualization, timestamps get weird. The host clock source and the guest clock source are not the same; `bpf_ktime_get_ns` reads the guest's view of monotonic time, and the guest's monotonic time is paravirtualized in complicated ways. For any cross-guest or cross-host correlation you want to also capture `clock_gettime(CLOCK_REALTIME)` on the analysis side to have a common reference. I have seen enough weirdness in nested-virt timing analysis to strongly recommend doing the correlation in wall-clock, not monotonic, when guests are involved.
+
+For container runtimes, nothing changes. The BPF program lives in the host kernel; the container boundary does not affect what `bpf_ktime_get_ns` returns. If you run the observer from a privileged container, you see IRQs delivered to the host — all of them. The ringbuf is attached to your own container's BPF program, but the events include all host IRQs, not just those destined for workloads in your container. For per-container IRQ observation (which is a weaker abstraction than you might want, because hardware IRQs are physical and containers are virtual), you would correlate the IRQ stream with per-container network or storage namespace identifiers — that correlation is outside the scope of this POC.
+
+## Kernel Version Behavior and Breakage Risk
+
+CO-RE gives you portability across kernel versions in terms of struct offsets. It does not give you portability across kernel versions in terms of function names or call graphs. If the 6.15 kernel renames `__handle_irq_event_percpu` again, the POC's preflight will report it ABSENT, the autoload will disable it, and the observer falls back to `handle_irq_event` alone. Graceful degradation.
+
+If the 6.20 kernel rearranges `irq_desc` to move `irq_data.irq` elsewhere, CO-RE relocations handle it — the BTF encoded in the kernel describes the new layout, the BPF loader rewrites the offsets, the program works. The only way this breaks is if a field is *deleted* — if some future kernel stops tracking the Linux IRQ number in `irq_desc.irq_data.irq` and moves it to a completely different structure. That would be a more involved refactor and would show up as a CO-RE relocation error at load, not a silent correctness bug. The error message would name the field that could not be located.
+
+If the 6.30 kernel adds a new IRQ delivery path that does not go through `handle_irq_event` at all — some new fast-path that bypasses the mid-layer — the POC would miss those IRQs. The attach succeeds, the probe fires when it fires, but the new fast-path's IRQs never touch the dispatch function. This is the failure mode you cannot catch with a preflight. You would notice it because your observed event rate would drop below a known baseline, or because `/proc/interrupts` would show counter growth that the observer did not see. The fix is to find the new fast-path and add a probe for it. This is how BPF observability drifts as kernel internals evolve: you chase the abstraction.
+
+I am flagging this because it matters for anyone who plans to deploy the observer for long-term monitoring. BPF CO-RE is good at field-layout drift; it is not magical against function-set drift. Any BPF observer that attaches by function name is implicitly taking a dependency on the function existing and being on the relevant path. Kernel developers do not guarantee either. The mitigation is: run the preflight, log the results, monitor the observer's event rate against a sanity-check counter (like `/proc/interrupts` totals), and alert if the observer goes silent on a host that used to be chatty. That tells you the kernel changed out from under you.
+
+## A Closing Thought on Scope
+
+I keep circling back to scope in these chapters because it is the thing that most separates honest work from hype. This POC's scope is: observe the IRQ dispatch path with per-event fidelity on any kernel where the target symbols exist, degrade gracefully when they do not, and surface both streaming events and summary counters to userspace.
+
+Within that scope, the POC works. The harness marker `CH11_PROVEN events=N unique=M per_event_timing=yes` fires every time I run it on a kernel that has any IRQ activity. Outside that scope, the POC does nothing. It does not block IRQs, does not rewrite affinity, does not re-steer dispatch, does not do anything that modifies the behavior of the system it runs on. An attacker who loaded this program and walked away would have changed nothing the defender cares about except the defender's visibility.
+
+The defender-side use case is where I think this program earns its keep: paired with an auditd watch on `/proc/irq/*/smp_affinity` and an alerting rule on per-CPU IRQ asymmetry, it catches the affinity-pinning covert DoS at the symptom layer. That is a real attack with real published precedents, and the observer is a cheap detector for it.
+
+The researcher-side use case — the side-channel work I spent several paragraphs discussing above — is where the primitive is most interesting. The attacker-side use case is the researcher-side one with adversarial intent; the observer is the same, the data is the same, the interpretation is different. All three audiences are going to find something useful here, and all three audiences will be operating within the same envelope of what BPF on the IRQ dispatch path can actually do.
 
 ## What This Chapter Actually Gives You
 

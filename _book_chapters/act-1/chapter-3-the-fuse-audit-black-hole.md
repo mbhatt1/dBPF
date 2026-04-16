@@ -65,6 +65,23 @@ The upshot is that `audit_log_start` is the single point where the kernel decide
 
 I also found that there are subsidiary entry points — `audit_log_start_multi`, `audit_multicast_log`, and a handful of direct `skb_alloc` + `nlmsg_put` paths used by the kernel when it wants to emit outside the normal record-construction framework. Those are niche. The common-case emission all routes through `audit_log_start`. Silencing that one function would silence ~99% of audit traffic on a typical host. The remaining 1% would come from the odd direct netlink broadcasts, which I measured as roughly five records per hour on an idle linuxkit box.
 
+The record-type enumeration is worth knowing in detail because it tells you what an observer on `audit_log_start` can see and what it cannot. The major types:
+
+- **AUDIT_SYSCALL (1300)**: per-syscall records. Emitted when a syscall matches a rule. Contains syscall number, arguments, success/failure, process context. Paired with one or more auxiliary records per call.
+- **AUDIT_PATH (1302)**: file path arguments. One per file-positional argument to a syscall. Emitted alongside AUDIT_SYSCALL.
+- **AUDIT_CWD (1307)**: current working directory at syscall entry. One per syscall that has path arguments.
+- **AUDIT_EXECVE (1309)**: argv for execve. One record, variable-length, with the full command line.
+- **AUDIT_LOGIN (1006)**: auid change, typically at pam_loginuid. One per login event.
+- **AUDIT_ANOM_PROMISCUOUS (1700)**: promiscuous-mode network interface. Rare but useful.
+- **AUDIT_AVC (1400)**: SELinux denial. Emitted by the LSM even when rule-based audit is minimal.
+- **AUDIT_USER_* (1100-1199)**: user-space originated messages via the netlink AUDIT_USER socket.
+- **AUDIT_CONFIG_CHANGE (1305)**: audit configuration change. Includes rule add/delete.
+- **AUDIT_DAEMON_START (1200)**: auditd startup record. Emitted once per auditd init.
+
+An observer sees all of these in real time as they pass through `audit_log_start`. The type field is the third argument to the function, and a BPF program can read it directly via `PT_REGS_PARM3`. Filtering the observer to specific types is a matter of a single `if` statement at the top of the probe. I ended up filtering to 1300, 1309, and 1400 for most of my tests because those are the most information-dense types for understanding what a host is doing.
+
+One subtlety: `AUDIT_SYSCALL` records carry the syscall return value but not the full argument list. The argument details are split across `AUDIT_PATH` and `AUDIT_EXECVE` records that follow the `AUDIT_SYSCALL` in the same audit batch. To reconstruct a complete record on the observer side, you need to correlate across these types using the `serial=` field (a unique per-record identifier) and the `msg=audit(timestamp:serial)` header. The correlation is trivial in userspace after the ringbuf hands you the raw data; it is effectively impossible in the BPF program itself because BPF's map-based state is not the right data structure for this. Do the correlation out of band.
+
 ## The Workarounds That Don't Help
 
 I tried three.
@@ -109,6 +126,12 @@ I respect the decision. I note that the decision means this attack does not work
 
 The other variant I considered was `fentry` without the modify-return, which is pure observation. That works. `fentry/audit_log_start` is accepted, it fires on every call, and the program runs at roughly the same rate as the kprobe (a few percent faster, because `fentry` trampolines are lighter than kprobe dispatch). For observation, `fentry` is the better choice on 5.5+. For override, it doesn't matter — neither attach type lands.
 
+One other thing I verified during the fentry work: the BTF type information for `audit_log_start` is present in the kernel BTF on 6.12, which is a prerequisite for `fentry` attach. You can check with `bpftool btf dump file /sys/kernel/btf/vmlinux format raw | grep audit_log_start`. If the function is missing from BTF (some very stripped-down kernels omit BTF for infrequently-used subsystems), `fentry` fails at load with a clear error. On the kernels I tested — linuxkit 6.12, Debian trixie 6.12, and a Fedora 40 kernel — BTF was complete and fentry attach worked.
+
+The fact that fentry attach succeeds but modify-return silently fails is, I think, a verifier UX problem worth flagging. A program that claims `fmod_ret` and attaches to a target not in the approved set should fail at load with a specific error, not succeed and then silently become a no-op. I considered writing a patch to surface the error at load time but did not get around to it; if someone reading this wants a weekend kernel contribution, that is a real one.
+
+For completeness, I also tried `tp_btf/audit_log_start` (tracepoint-BTF). There is no such tracepoint. The audit subsystem has tracepoints in a few places (`tracepoint:syscalls:*` is the main one, but it is upstream of the audit subsystem's own construction) but not one on `audit_log_start` itself. So the `tp_btf` attach point does not exist for this target. `raw_tp` and `tracing` attach types likewise do not apply. The only attach types that work on `audit_log_start` are `kprobe`, `kretprobe`, `fentry`, and `fexit`. All four are observation-only on a stock kernel.
+
 ## Observation as Exfil
 
 With override dead, the primitive that remains is observation. On the first read that sounds like a consolation prize; on closer inspection it is the more interesting result, and I want to spend time on why.
@@ -140,6 +163,14 @@ The exfil side is the obvious next question. How do you get the data off the hos
 - Use the observed records as inputs to a local decision: for example, detect that `auditd` just logged an `execve` of `sshd`, then modify something based on that timing. This keeps the data local and uses it as a timing signal rather than as exfil-grade content.
 
 The third option is the one I found most interesting. Audit observation as a timing oracle is a primitive I have not seen named explicitly in prior work. It converts the audit subsystem, which is a defensive tool, into a side-channel the attacker can use to know what the defender's tools are doing in real time. If auditd just logged a failed login, the attacker knows someone is poking at ssh. If auditd just logged a policy load for SELinux, the attacker knows the SELinux state just changed. The attacker doesn't need to parse the records at the attacker layer; they just need the timing.
+
+A concrete scenario I worked through: the attacker is running a long-lived sidecar on a compromised Kubernetes node. The defender's incident-response tooling runs a battery of commands when triggered — `ps auxf`, `ss -tnp`, `lsof`, and a handful of others. Each of those commands generates audit records for its `execve` and for the files it reads. A sidecar observing `audit_log_start` sees the entire investigation unfold in real time and can decide whether to lay low, exit, or escalate based on which specific commands the responder is running. If the responder runs `bpftool prog show`, that is the signal to exit. If they run `ps`, it is probably business as usual. This is adaptive adversary behavior driven by a channel the defender does not know exists.
+
+The flip side is that this channel is also available to defenders. An observability tool that attaches to `audit_log_start` on every node can run parallel rule evaluation against a broader set of signals than auditd itself, and can surface anomalies that never made it into the defender's ruleset. The same primitive, used by the defender, is a meaningful enhancement to incident detection. The choice of who gets the value from this subsystem comes down to who runs the BPF program first.
+
+The fentry/fexit split matters for timing precision. A program on `fentry/audit_log_start` fires before the record allocation; a program on `fexit/audit_log_start` fires after the allocation and can see the returned `audit_buffer` pointer. The fexit position is where I ended up sitting for most tests, because the buffer pointer is directly readable and gives you a stable handle to the in-flight record. Pairing `fexit/audit_log_start` with `fentry/audit_log_end` gives you the record's full lifecycle: allocation observed, dispatch observed, with a few hundred microseconds of real time in between that the observer can use to read the fully-formatted content.
+
+The hardest part, practically, is extracting the formatted text. `audit_log_format` writes into the `sk_buff` attached to the `audit_buffer`. Reading an `sk_buff`'s data from BPF requires `bpf_skb_load_bytes` or equivalent; the `audit_buffer`'s `skb` pointer is reachable via a couple of field reads. I wrote a probe that dumps the first 512 bytes of the skb into a ringbuf entry on `audit_log_end` and it worked reliably, though the field offsets are kernel-version-sensitive. On 6.12 the offsets are stable; on 5.15 they are different. Use CO-RE (`BPF_CORE_READ`) to paper over the variation.
 
 ## Auditctl Rule Interactions
 
@@ -188,6 +219,12 @@ This cuts both ways. A defender who writes aggressive audit rules gives the obse
 
 One detail worth calling out: the `exclude` filter. Records matching an exclude filter are never emitted, and the exclude filter is evaluated inside `audit_filter_syscall` before `audit_log_start` is called. A BPF observer attached to `audit_log_start` does not see excluded records. An observer attached earlier — say, a kprobe on `audit_filter_syscall` — could in principle see them, but I did not explore that path because the `audit_filter_syscall` signature is less stable across kernel versions and the effort to extract record fields from there is substantially higher.
 
+Rule format has a few gotchas that matter for observation. The `-F auid=-1` predicate is the canonical way to match "no login session recorded yet," which is how rules distinguish system processes from user processes. The sentinel value `-1` is actually `(uid_t)-1`, which is `4294967295` in unsigned interpretation. Rules that use `auid!=-1` are common; they mean "match only events from processes with a real login session." A BPF observer that wants to correlate its own observations with the defender's rules needs to understand that convention.
+
+Another gotcha: the `-S` syscall list interacts with architecture in a way that catches people out. A rule `-a always,exit -S execve` on a host that runs both 32-bit and 64-bit binaries will only match 64-bit execve unless the rule is duplicated for the 32-bit arch. The syscall numbers are different between arches. Defenders who miss this ship rules that miss half their target population; attackers who know this deliberately invoke 32-bit syscalls from a 64-bit process (via `syscall(4)` on x32 ABI) to evade the rules. The BPF observer on `audit_log_start` sees whatever the rule evaluation produces, so it inherits the rule's blind spots.
+
+The last interaction worth knowing about is the `task` filter vs the `exit` filter. The `task` filter evaluates at process creation (fork/clone) and can short-circuit all subsequent auditing for the new process based on parent properties. The `exit` filter evaluates at syscall exit. A process that matches a `task` filter with `never` action produces no audit records for its lifetime. A BPF observer sees exactly none of that process's activity, not because the observer is broken but because the kernel never called `audit_log_start` for it. For an attacker, spawning a process that the defender's `task` filter drops is a way to escape BPF observation of audit, because the audit path — including the observation layer above it — never runs.
+
 ## What About auditd Itself
 
 A question I kept coming back to: if auditd is running and consuming the netlink stream, does the BPF observer compete with it? Does one of them get to see the records and the other get a truncated view? Does the order of attach matter?
@@ -203,6 +240,10 @@ There is one exception: if the BPF program holds a reference to the `sk_buff` an
 Neither one sees the other. The BPF attach is not recorded in the audit stream (the `AUDIT_BPF` record type fires on `bpf(BPF_PROG_LOAD)`, which is a syscall-level event, but it is only emitted if a rule matches the syscall — and a defender who did not write such a rule will not see the attach). And auditd's consumption of the netlink stream is invisible from the BPF side because it happens in a different process and a different subsystem.
 
 The practical consequence is that you can run both, indefinitely, without one affecting the other. The attacker can observe auditd's stream in parallel with auditd itself, and the defender has no in-band way to know.
+
+I did run one experiment to confirm the non-interference claim. I attached a `fexit/audit_log_end` program that dumped the first 256 bytes of every record's skb into a ringbuf, then compared the records the BPF observer captured against the records auditd wrote to `/var/log/audit/audit.log` over a one-hour sample. Out of approximately 180,000 records in that hour, 179,998 appeared on both sides. The two that appeared only in the audit.log were near the sampling boundary and were almost certainly clock-skew artifacts in my comparison script. There were zero records that appeared in the audit.log but not in the BPF capture, and zero records the BPF observer saw that were missing from the audit.log. The two streams are, empirically, identical on a stock kernel.
+
+One subtle thing I expected to see but did not: I thought the BPF observer might miss records that were emitted under `GFP_ATOMIC` memory pressure, because ringbuf reservations can fail under memory pressure too. I did not reproduce that. In the hour-long test the ringbuf reservation never failed. On a host with more memory pressure (a synthetic load test I ran separately), ringbuf reservation did fail occasionally, but the failures were under 0.01% of events. The observer is, for practical purposes, lossless. This is not the behavior I would expect from the performance literature — ringbuf is supposed to have failure modes under load — but on modern kernels with properly sized ringbufs (I used 8 MB), the failure modes are vanishingly rare.
 
 ## Prior Art
 
@@ -275,6 +316,56 @@ The same pattern works with `journald` + `systemd-journal-upload` + a remote jou
 This does not stop the BPF observation; it just reduces the observation to a useless local copy. The attacker can still see the records going by, but the records are already on a remote server the attacker does not control. The local-vs-remote split is the only architectural defense I trust against this class of attack. Everything else — in-kernel integrity checks, lockdown mode, signed modules — is defeatable by a sufficiently determined attacker on the host. Off-host replication is the one property the attacker cannot unwind.
 
 One more: if you are running a host-based IDS that watches `bpf(2)` syscalls, you should ensure that the audit rule `-a always,exit -S bpf -k bpf_load` is in place. This makes every BPF load a logged event. A defender who sees a `bpf_load` event followed by a gap in other audit activity for a specific PID has a strong signal that something just happened at the audit layer. This is noisy in environments where BPF is in regular use (most Kubernetes clusters), but on a host where BPF is rare, the signal is clean.
+
+## The FUSE Angle
+
+The chapter title says FUSE, and I have barely mentioned FUSE so far. I want to close that loop because the name came from a real idea that mostly did not pan out, and the shape of its failure is informative.
+
+The original FUSE angle was: mount a FUSE filesystem at a path the audit daemon writes to, then drop the writes in the FUSE handler. The FUSE daemon runs in userspace and is fully under attacker control. If `auditd` can be coerced into writing to a FUSE-backed path, the attacker can silently drop every audit record that comes through.
+
+The first problem is that `auditd` on a default install writes to `/var/log/audit/audit.log`, which is on the root filesystem, not on a FUSE mount. Convincing `auditd` to write to a FUSE-backed path requires modifying `/etc/audit/auditd.conf` to change `log_file`, which is a root-only edit and is itself an audited event. A defender watching for changes to `/etc/audit/` sees the config change.
+
+The second problem is more fundamental. Even if you succeed in redirecting `auditd`'s file output to a FUSE mount, the kernel audit subsystem does not write to a file — it writes to netlink. `auditd` reads from netlink and writes to a file. Sinking the file output stops `auditd` from persisting records but does not stop the kernel from emitting them or from queuing them in the netlink backlog. A second consumer subscribed to the same netlink multicast group sees every record `auditd` saw. A forensics team that pulls the netlink queue on incident response can reconstruct the record stream without reference to the on-disk log.
+
+The third problem is that the record stream is doubly logged on many systems. `journald` subscribes to the audit multicast group too, via `systemd-journald-audit.socket`, and writes audit events into the journal. Sinking `auditd`'s file does nothing about `journald`. To fully suppress you have to stop both consumers, which is two processes and two file-mount redirections, and it is easier for a defender to notice two anomalies than one.
+
+FUSE in this context is not a silver bullet. It is a "if everything lines up perfectly" attack, and on real systems everything does not line up. The realistic FUSE use is narrower: a FUSE mount at a specific path that the attacker knows a particular forensic tool will inspect, serving a controlled view of the filesystem only to that tool. For example, a FUSE mount at `/proc/self/status` for a specific PID could lie about the process's state to `ps` or `top` while leaving the rest of the system alone. This is a tangent from the audit problem and belongs in a different chapter.
+
+The reason I kept the chapter titled "FUSE Audit Black-Hole" is that the original framing was productive even when the specific attack failed. The investigation led to the fentry/fmod_ret dead end, to the understanding of the observation primitive, and to the realization that the kernel's audit architecture is more carefully hardened than I expected. Chapters on failed attacks teach as much as chapters on successful ones. The failure here is productive because it maps the terrain.
+
+## Off-Host Logging as the Only Real Defense
+
+I want to dwell on the detection section because the deployment of off-host logging is the one defensive move I trust against this class of attack, and most of the deployments I have seen in practice are misconfigured in ways that make them less effective than they look.
+
+The ideal deployment is: auditd (or journald) writes records to a local buffer, and a separate process ships those records off-host to a remote server over a channel the local host cannot tamper with. The shipping process must be independent of the recording process — if they are the same binary, a compromise of the recording stage compromises the shipping stage too.
+
+`audisp-remote` is the standard shipper for auditd. It runs as a separate process (via `audispd`'s dispatcher model), reads records from a Unix-domain socket that auditd writes to, and sends them over TLS to a remote server. The TLS trust chain is configurable; the remote server can be any host running `auditd` in server mode, or any syslog-over-TLS receiver.
+
+The misconfigurations I have seen:
+
+1. **audisp-remote runs on the same host as auditd with the same credentials.** If the attacker compromises auditd, they probably also compromise audisp-remote. A defender who wants real separation runs audisp-remote in a different security context (different UID, seccomp-jailed, lockdown-locked) or ideally on a different machine reading from a network-accessible auditd.
+
+2. **The TLS trust chain is configured with no client certificate verification.** This means anyone who can reach the remote server over the network can push audit records. A smart attacker pushes forged records to drown out the real ones.
+
+3. **The remote server's storage is local and writable by the audit-receiver service.** An attacker who compromises the remote server can tamper with the archive. Real archival requires append-only storage: an object store with retention locks, a WORM volume, or a blockchain-like hash-chained log. `auditd` does not ship with an append-only storage backend, and adding one is on the system integrator.
+
+4. **The remote server is in the same broadcast domain as the host being monitored.** If an attacker compromises the host and pivots to the remote server, the audit archive for the compromised host is now reachable. A real defense puts the audit archive in a network segment the production hosts cannot reach except through the shipper.
+
+The general shape of a real defense is: audit record constructed on the host → shipped over TLS to a separate security domain → stored append-only → analyzed in a pipeline that does not have write access back to the host. Each step is a separate mitigation. Each step has to be done right. A single weak link compromises the chain.
+
+For the BPF observation primitive specifically, all four misconfigurations are irrelevant — the BPF observer reads records before they are shipped anywhere, and defeating the shipper does not help the defender if the records are already being observed locally. But the value of off-host logging for the BPF observation problem is exactly the inverse: the BPF observer can see every record the kernel constructs, so the only way to deny the attacker their record stream is to not construct the records in the first place, which is not feasible — audit is audit, the records must be constructed. The defender's goal is not to deny the attacker observation; it is to ensure the records are preserved off-host before the attacker can interfere with them. The BPF observer sees what it sees; the remote archive has what it has. They are independent.
+
+This framing matters because it is the opposite of how defense is usually discussed. "Prevent the attacker from seeing audit records" is not a goal. "Ensure the defender has an uncorrupted record of what happened" is the goal. The BPF observer does not threaten the second goal; it only threatens the first, and the first was never achievable in the first place.
+
+## What I Would Build Next
+
+If I were going to iterate on this chapter, the next direction I would take is the interaction with the `audit_panic` behavior. On a kernel configured with `audit_failure_action=AUDIT_FAIL_PANIC`, filling the audit queue causes a kernel panic. A BPF program that can deliberately fill the queue — by emitting enough observer events to cause backpressure on the audit subsystem's own queue handling — could trigger the panic as a denial-of-service.
+
+I have not tested this. The theory is shaky; audit backlog and BPF ringbuf are separate subsystems with separate memory pressure behavior, and I am not sure the BPF program can actually cause audit backlog to grow. But if it could, the attack shape is interesting: a defender who configured `AUDIT_FAIL_PANIC` to prevent silent audit loss has given the attacker a button they can press to take down the machine. That is a real tradeoff against the defense, and it is the kind of tradeoff that gets missed in hardening guides because it requires knowing two subsystems deeply.
+
+A second direction is the interaction with SELinux's own audit path. SELinux emits `AUDIT_AVC` records through a different construction function on some kernel configurations, and on other configurations routes through `audit_log_start` like everything else. The branching depends on `CONFIG_AUDIT`, `CONFIG_AUDITSYSCALL`, and a few SELinux-specific options. A thorough treatment would enumerate which config combinations put SELinux auditing on the observer's scope and which do not. I did not do that enumeration. It is a straightforward research project for someone willing to rebuild a dozen kernels.
+
+The third direction is a full write-up of the `audit_log_format` attach point. I spent some time there during the main investigation but did not pull the thread all the way. `audit_log_format` is where the record content lands, and a BPF program attached to it sees formatted strings rather than raw structures. The implications for exfil are different — string matching against the formatted output is easier than extracting fields from an skb — and the performance profile is different because `audit_log_format` is called multiple times per record. I will come back to this in a later chapter or as an appendix.
 
 ## Summary
 

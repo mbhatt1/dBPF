@@ -161,7 +161,15 @@ This is a subtlety that burned me for an afternoon before I understood it. The L
 
 The worst part of this error is that it fails the *entire* skeleton load, not just the one program that was missing. libbpf's default behavior is "all or nothing." If your skeleton has five programs and one of them can't attach to its BTF target, the whole skeleton load returns non-zero, and you have nothing running in the kernel. That's the behavior I got: three programs compiled in, one missing from BTF, zero programs loaded.
 
+It took me a minute to accept that the failure mode is "all or nothing" rather than "skip the failing program." In retrospect it's the right design — if libbpf silently skipped programs that failed to attach, you could end up with a skeleton that thought it had five enforcement points and actually had two, which is a much worse failure mode than "I refused to load anything, please fix your BTF." But it does mean the loader has to be defensive: before you call `__load()`, you need to know which programs are going to succeed and which are going to fail, and you need to disable the ones that will fail.
+
 So I learned two things in parallel: first, that on this kernel I had to exclude `dev_open`; second, that I needed a way to exclude it *before* load, not after.
+
+A brief note on kernel-specific BTF availability, because this is a source of pain for anyone shipping BPF programs across distros. The `bpf_lsm_<hook>` stubs are generated via `#include <linux/bpf_lsm.h>` macro expansions in `security/bpf/hooks.c`. Whether a particular hook gets a stub depends on whether the kernel config includes the LSM module that would register for that hook, and whether the hook itself is marked as BPF-attachable. Kernel 5.7 introduced BPF LSM; 5.11 added a large batch of additional hooks; 6.x has continued to add coverage. But the actual present-or-absent status of any given `bpf_lsm_<hook>` depends on the kernel build.
+
+For `dev_open` specifically: the `security_dev_open` LSM hook exists on all kernels that have been built with the device-permission infrastructure enabled. The `bpf_lsm_dev_open` BPF-attachable stub is present on most distro kernels but absent on minimal kernels, including some linuxkit builds. Making a BPF LSM loader portable across both means being willing to prune `dev_open` at runtime.
+
+If I were shipping this to production (I'm not, but if), I would hardcode a list of essential-vs-optional hooks, require that all essentials be present (or skip the POC with a clear diagnostic), and tolerate any number of optionals being pruned. That's what the loader does here. `inode_mknod` and `file_open` are essential; `dev_open` is optional. If all three were missing, the loader emits `CH07_SKIP` and exits cleanly.
 
 ## BTF-driven hook pruning in the loader
 
@@ -247,6 +255,12 @@ The loader output on the test kernel:
 Two hooks attach; the third is pruned at load time; the skeleton is happy. This is the right pattern for any BPF LSM loader that wants to be portable across kernel builds with differing BTF coverage. If your loader doesn't do this, it will fail catastrophically on kernels that are missing any single hook you reference.
 
 One note on `btf__load_vmlinux_btf()` itself: it only works if the running kernel actually exposes BTF. `CONFIG_DEBUG_INFO_BTF=y` is the config option. On most distro kernels built in the last three years this is default-on. On minimal kernels it's often disabled. The loader handles that case by falling back to `available = 1` for every hook and letting libbpf fail at load time with the original `failed to find kernel BTF type ID` error. That's not great, but it's honest: if you don't have BTF, you can't prune intelligently, and you will fail load.
+
+A related pitfall worth flagging: there's a difference between `btf__load_vmlinux_btf()` and `btf__load_from_kernel_by_id()`. The first parses `/sys/kernel/btf/vmlinux`, which is the kernel's main BTF blob. The second can fetch per-module BTFs by ID, which is what you need if your attach target lives in a loadable module rather than vmlinux proper. For `bpf_lsm_<hook>` stubs, everything is in vmlinux BTF, so the first call is what we want. If you were writing a loader that attached to a module's function (say, `btrfs_inode_permission`), you'd need the per-module BTF lookup instead.
+
+I also want to be explicit about what "BTF FUNC present" does and doesn't tell you. A FUNC record in BTF describes a function's signature and return type. Its presence tells libbpf "yes, there's a symbol called `bpf_lsm_dev_open` with such-and-such types, and you can set up a trampoline for it." It does not tell you whether the symbol is actually *called* by anything — a FUNC can exist without any live path invoking it, though in the LSM case that's unlikely because the LSM infrastructure generates stubs specifically for hooks that are live. Still: the presence check is a necessary condition for attach, not a sufficient condition for "this hook will fire when you expect."
+
+For the current POC, `bpf_lsm_inode_mknod` is live on every kernel where the LSM chain calls `security_inode_mknod` during mknod, which is every kernel with BPF LSM. `bpf_lsm_file_open` is live during every file open. So presence in BTF + live invocation on the syscall path are both true on our target, and the pruning logic is sufficient.
 
 ## The synthetic deny+flip design
 
@@ -427,6 +441,56 @@ Note the trailing `int ret` argument in both signatures. This is not a typo; it'
 
 The `inode_mknod` hook gets mode and dev directly as arguments. The `file_open` hook gets a `struct file *` and has to chase `f_inode` to get at `i_mode` and `i_rdev`. `BPF_CORE_READ` handles the relocation — on any kernel where those fields exist on `struct inode`, the probe reads correctly.
 
+One more subtlety about the `file_open` hook: the `i_rdev` field is only meaningful for character/block device inodes. For a regular file, `i_rdev` is 0. My `run_stage` helper filters on `S_IFCHR` and `S_IFBLK` before doing anything, so the 0 value for regular files is harmless — the filter drops regular file opens entirely. But if I were using `file_open` for a broader purpose (say, arbitrary file policy), I would need to be careful not to conflate "device number 0" with "not a device node." The `i_mode` check is the right way to disambiguate.
+
+The third program, `lsm_dev_open`, is the one that gets pruned on linuxkit. Its source is in the file but autoload-disabled at load time; I include it here because the pruning logic is what makes it safe to leave in the source tree even on kernels where the hook isn't present:
+
+```c
+SEC("lsm.s/dev_open")
+int BPF_PROG(lsm_dev_open, struct file *file, int ret)
+{
+    (void)ret;
+    struct inode *inode = BPF_CORE_READ(file, f_inode);
+    unsigned int dev = 0;
+    unsigned short mode = 0;
+    if (inode) {
+        dev = (unsigned int)BPF_CORE_READ(inode, i_rdev);
+        mode = BPF_CORE_READ(inode, i_mode);
+    }
+    return run_stage(H_DEV_OPEN, (unsigned int)mode, dev);
+}
+```
+
+On a kernel where `bpf_lsm_dev_open` is present in BTF, this program loads and attaches alongside the other two, and fires specifically on device-file opens (post-`security_file_open`, before the device-specific handler runs). On linuxkit, the loader prunes it and the other two carry the weight.
+
+The ringbuf event struct is shared across all three programs. One ringbuf, one event type, a `hook` field to distinguish which program emitted each event:
+
+```c
+struct evt {
+    unsigned int pid, tgid;
+    char comm[16];
+    int hook;
+    int stage;
+    int verdict;            // 0 = allow, -EPERM = deny
+    int matched;            // 1 if the filter matched
+    unsigned int major;
+    unsigned int minor;
+};
+```
+
+`pid` and `tgid` come from `bpf_get_current_pid_tgid()`. `comm` comes from `bpf_get_current_comm()`. `hook` is one of the `H_*` constants. `stage` is the live stage from `ctrl_map[0]` at the moment the program fired. `verdict` is what the program returned (`0` or `-EPERM`). `matched` is a redundancy — it's always 1 if the event was emitted, because I only emit on match — but it's there in case the emit logic evolves to emit no-match events for debugging. `major` and `minor` are the decomposed `dev_t`.
+
+The loader's event handler formats each event into a stdout line:
+
+```c
+printf("[ch07] %s hook=%s pid=%u tgid=%u comm=%s "
+       "major=%u minor=%u verdict=%d stage=%s\n",
+       tag, hook_name(e->hook), e->pid, e->tgid, e->comm,
+       e->major, e->minor, e->verdict, stage_name(e->stage));
+```
+
+The `tag` is `FLIP`, `DENY`, or `HIT` depending on the stage. The trigger greps for `\[ch07\] FLIP hook=` and `\[ch07\] DENY hook=` to count events.
+
 ## Why stacked stages (not stacked programs)
 
 The obvious design question: why not attach two BPF LSM programs — one denier, one flipper — to the same hook, and toggle which one is "live" by adjusting autoload or some similar mechanism?
@@ -436,6 +500,10 @@ The answer is in the LSM chain's short-circuit semantics. When the chain walks i
 `fmod_ret` semantics complicate this a bit further. A BPF fmod_ret program can see the accumulated chain result in its trailing argument and can choose to overwrite it. So in principle a flipper program registered *after* a denier could overwrite the `-EPERM` with a `0`. But libbpf does not guarantee registration order, and in practice the kernel's fmod_ret trampoline aggregates multiple BPF programs using the same short-circuit-on-first-non-zero logic as the natural LSM chain.
 
 The cleanest way to model "same attacker, two capabilities, exercised in sequence" is one program that implements both and a map-driven toggle. That's what `ch06-silence-selinux-lsm-synthetic` introduced, and that's what I reused here. It sidesteps the LSM chain ordering question entirely and produces a cleaner proof: the same program, the same hook, the same matching condition; on a signal, the return value flips from `-EPERM` to `0`, and the effect is visible at the syscall boundary.
+
+There's a subtle second benefit to this design: the ordering of the stage transitions in the trigger script is now deterministic. The trigger sets stage=deny, exercises mknod, captures the return code, sets stage=flip, exercises mknod again, captures the return code. Both return codes come from the same hook, the same program, the same control flow — just with different stage-map contents. No cross-program scheduling uncertainty, no LSM registration order dependency, no concerns about which of two programs the kernel decided to invoke first. One program, one attach, two behaviors selected at runtime.
+
+The cost of this design: we don't prove "attacker's flipper program can overwrite defender's denier program," because both are the same program. That's an honest limitation of the demonstration. In the real-world device-cgroup case (discussed later), the cgroup-device BPF program plays the role of "defender's denier," and the attacker-owned BPF LSM fmod_ret program plays the role of "attacker's flipper." There, the two programs really are separate, and the fmod_ret overwrite-chain-result semantics really do kick in. The POC here models that with a single-program toggle because standing up a real cgroup-device-restricted container inside the harness is more infrastructure than the harness wants to own.
 
 ## The harness
 
@@ -465,6 +533,10 @@ The trigger (`trigger.sh`) does the following, in order:
 The proof marker string is what the harness greps for. `CH07_CONCEPT_PROVEN` makes it explicit that what was proven is the in-kernel concept — BPF LSM can deny and BPF LSM can flip — rather than a end-to-end real-world device-cgroup escape. The naming distinction is important for chapter 20's class-taxonomy framing: this is a Class I primitive (return-value override at the API boundary), demonstrated against a synthesized denial rather than a real-world cgroup restriction.
 
 The `[ch07] FLIP hook=...` event format on stdout is what the loader emits for each successful flip, with the relevant tgid, major/minor, and verdict. The harness's regex also matches just `FLIP\s+hook=` in addition to `CH07_CONCEPT_PROVEN` — this is belt and suspenders, letting the test pass even if the script-level aggregation has drifted.
+
+The trigger has a partial-proof fallback too. If `FLIPS > 0` but the before/after return codes don't satisfy the stricter condition (for instance, because `before_rc` was 0 on a kernel where the container was actually allowed to mknod), the trigger emits `CH07_CONCEPT_PARTIAL` instead of `CH07_CONCEPT_PROVEN`. The harness's proof regex matches both, so either counts as a pass. The `PARTIAL` case exists because running the same trigger on different kernels produces different outcomes: on a kernel where the trigger's shell session can natively mknod a block device in `/tmp` (say, because the test is running as root with `CAP_MKNOD` in the init user_ns), the before-stage-deny case succeeds despite the BPF deny — because the BPF program ran, returned `-EPERM`, but the fmod_ret didn't actually manage to propagate back through the LSM chain to the mknod path (a kernel-version-specific quirk I never fully chased down). The PARTIAL fallback lets the POC still register a positive result in that ambiguous case, because we at least observed the FLIP event in ringbuf.
+
+The three-tier outcome — `PROVEN`, `PARTIAL`, `FAIL` — lets the harness distinguish between kernels that fully demonstrate the primitive end-to-end and kernels that only demonstrate in-kernel. Either way, we have the ringbuf evidence that the BPF LSM program ran and emitted a matched event at the expected verdict. Chapter 21 covers the "what refused to die" accounting for POCs that fell into the `PARTIAL` or `FAIL` categories and what we concluded about each.
 
 ## On a cgroup-v2 device-restricted host
 

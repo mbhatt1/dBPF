@@ -358,6 +358,33 @@ There is also a content-integrity defense that works against this specific race:
 
 Nothing in this chapter hides the BPF program or the consumer. Those are separate problems.
 
+## What a Defender Sees When the Race Lands
+
+I spent a morning as the defender side of my own attack: I stood up a fresh linuxkit VM, deployed the racer, triggered a handful of successful races against `/bin/bash`, and then tried to figure out what I could see about what had just happened. The exercise is useful because it tells you which forensic traces survive.
+
+The most durable trace is the upper-layer file itself. On a standard Docker overlay, the copied-up version of `/bin/bash` lands at `/var/lib/docker/overlay2/<layer>/diff/bin/bash` with the attacker's modifications. `stat` on that file shows the modification time of the race (typically within a few hundred microseconds of the copy-up event), the size (unchanged, because the race typically only flips bits rather than adding bytes), and the SUID bit if it was added. A defender who knows the expected hash of `/bin/bash` from the image manifest can diff the upper file against the lower and spot the discrepancy:
+
+```bash
+$ sha256sum /var/lib/docker/overlay2/<layer>/diff/bin/bash \
+            /var/lib/docker/overlay2/<layer>/merged/bin/bash \
+            /var/lib/docker/overlay2/<layer>/lower/bin/bash
+# The upper and merged hashes match each other.
+# The lower hash matches the image manifest.
+# The discrepancy is evidence of post-copy-up modification.
+```
+
+This works after the fact. It does not catch the attack in real time.
+
+The second durable trace is the auditd log if the defender had a watch on the overlay upperdir. The racer's `open(O_WRONLY)` and subsequent `fchmod` produce `AUDIT_PATH` and `AUDIT_SYSCALL` records that are clearly the racer and not the container, because the racer's PID is on the host side of the namespace boundary while the copy-up was triggered by a container process. A defender who correlates the two sides sees "host process X wrote to upper file Y microseconds after container process Z triggered copy-up of Y." That pattern is specific enough to be a strong signal.
+
+The third trace is the ringbuf consumer. The racer has to keep the ringbuf open to receive events. `lsof /sys/fs/bpf` shows the ringbuf map pin and which process holds the file descriptor. If the attacker pinned the map (they almost certainly did, because otherwise the program unloads when the loader exits), the pin is visible under `/sys/fs/bpf`. A defender who inventories pinned BPF objects finds the racer's map and can trace back to the program and from there to the loader PID.
+
+The fourth trace is the BPF program itself. `bpftool prog show` lists it by type (`kprobe`), attach name (`ovl_maybe_copy_up` or similar), and load time. The load time is the attacker's weakest link: it is a single timestamp that, correlated with other events in the audit log (the `bpf(BPF_PROG_LOAD)` syscall, the user session that initiated it, the subsequent ringbuf pin), lets a defender reconstruct the entire attack timeline.
+
+None of these traces is hidden by the attack. Hiding them is the subject of later chapters, specifically chapter 4 on BPF program load suppression and chapter 5 on pin hiding. For this chapter, assume the attack is forensically loud even if it is operationally quiet.
+
+There is one trace I expected to see but did not: a dmesg entry. I thought the overlay subsystem might log something when a copy-up's content changes between finish and first-read. It does not. The overlay code path has no verification step; whatever is on the upper layer at first-read is what the container sees. The absence of a kernel-side check is what makes the attack viable, and it is also what keeps the attack out of dmesg. If you are a kernel contributor looking for a defensive feature to add, a post-copy-up hash check against the lower file (under an optional mount option) would catch this attack cleanly.
+
 ## What I Got Wrong on the First Pass
 
 I want to record the missteps because they are the part future readers will learn the most from.
