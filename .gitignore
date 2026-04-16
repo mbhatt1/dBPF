@@ -1,7 +1,16 @@
-_site
+# Jekyll build output and caches
+_site/
 .sass-cache
 .jekyll-cache
 .jekyll-metadata
-vendor/bundle
-.bundlevendor
-_site/
+
+# Bundler (local config + vendored gems)
+.bundle/
+vendor/
+
+# Companion POCs repo (kept on-disk for local reference, not part of this site)
+dBPF-pocs/
+
+# OS / editor cruft
+.DS_Store
+*.bak
