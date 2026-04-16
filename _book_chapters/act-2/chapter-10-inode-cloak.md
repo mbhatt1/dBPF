@@ -14,6 +14,10 @@ What I'm contributing in this chapter is not the trick. The contribution is a mo
 
 The honest scope up front: the cloak hides files from `readdir`. It does not hide files from `stat`, `open`, `inotify`, `fanotify`, direct block-device reads, or anything that isn't `getdents64`. The file's inode is intact; its contents are unchanged; its xattrs are untouched. A File Integrity Monitor that walks the filesystem via `readdir` is blind to the hidden file. A FIM that walks inodes directly — which is to say essentially no FIM that exists in the field — would see it. That's the bug in existing FIM products that this POC exposes. Not "BPF can hide files" (which is obvious) but "every FIM in production trusts `readdir`, and `readdir` is mutable."
 
+A brief word on what counts as "new" in a security writeup. The d_reclen swallow is old. The tracepoint-and-`bpf_probe_write_user` combination is also not new; I've seen it in `ebpf-for-mac`-ish demos from 2019 and in several academic BPF-rootkit papers. What I'm claiming as a modest original contribution: the POC is built with CO-RE so it runs on any 6.x kernel with minimal configuration, the trigger produces a harness-readable proof marker, and the chapter documents the verifier pushback in enough detail that you can recreate it. If any of those feel novel, that's the novelty. If not, it's a consolidation — one place to look when you want to know how the trick works on a modern kernel.
+
+Voice note: I'm going to keep this chapter in the same bughunter-diary tone as Chapter 9. The POC went through a few rewrites — one aborted attempt at hooking `iterate_dir` instead of the syscall tracepoints, one rewrite when the verifier rejected the original loop bound, one rewrite when the first-entry edge case turned out to produce different behavior than I'd expected. The rewrites are where the lessons live.
+
 ## The getdents64 ABI, in Detail
 
 The shape of the return buffer is the whole attack surface, so it's worth being concrete. `getdents64` is declared in `include/uapi/asm-generic/unistd.h` with signature:
@@ -62,9 +66,15 @@ for (size_t off = 0; off < n; ) {
 
 Every walker does this. libc's `readdir()` does it. Go's `os.ReadDir` does it. Python's `os.listdir` does it. Rust's `std::fs::read_dir` does it. They all trust `d_reclen` to tell them how far to skip. That trust is the wedge.
 
+I checked the source for several of these to confirm. glibc's `readdir()` in `sysdeps/posix/readdir.c` uses a cached buffer and advances via `d_reclen`; it does not cross-check the filename length against the buffer size. Go's `os.ReadDir` in `src/os/dir_unix.go` calls `syscall.ReadDirent` which hands the raw bytes to `syscall.ParseDirent`, which walks by `d_reclen`. Python's implementation routes through `posix.listdir`, which in CPython's `Modules/posixmodule.c` uses the platform's `readdir_r` (on Linux, this is glibc). Rust's `std::fs::read_dir` on Linux uses libc's `readdir` under the hood. Every one is a thin wrapper over the same ABI.
+
+The small variation: some libraries stat each entry as they iterate (for `d_type` or inode details), some don't. Stating touches the filesystem through a different path (`stat` syscall, which resolves via VFS, not getdents). If the cloak swallows an entry but the walker also statted it by name separately — say, via `fstatat(dirfd, name)` after a prior readdir that wasn't cloaked — the stat succeeds, which confirms my earlier point that the cloak is readdir-only.
+
 If I can mutate the buffer between the kernel writing it and userspace reading it, I can inflate any `d_reclen` to swallow the next record. The walker will read the previous record, advance by the inflated length, and never see the swallowed record. From the walker's perspective, the swallowed name does not exist in the directory.
 
-The *timing* question is where `bpf_probe_write_user` comes in.
+The *timing* question is where `bpf_probe_write_user` comes in. The buffer is in userspace memory, so I can't modify it from a standard kernel-side hook — BPF programs running at, say, `iterate_dir` are in kernel context and looking at in-kernel data structures (dir_context). By the time the data reaches userspace it's been copied to the user buffer and any BPF hook that fires at that point has to write back into that user buffer. `bpf_probe_write_user` is the helper that does exactly that, and the syscall exit tracepoint is the right place to call it from — after the copy has happened, before userspace reads the results.
+
+An alternative I briefly considered: hook at `__x64_sys_getdents64` or `__arm64_sys_getdents64` via kprobe instead of the syscall tracepoint. The signature difference between the two is small — a kprobe on the syscall wrapper gets the same pt_regs with the same argument layout. The tracepoint is easier to use (the trace_event_raw_sys_{enter,exit} types are stable and well-documented), so I went with that. Either works; on aarch64 the specific symbol is `__arm64_sys_getdents64` and on x86_64 it's `__x64_sys_getdents64`, which makes the kprobe variant arch-specific unless you add both. The tracepoint is arch-agnostic.
 
 ## Source Walk: The Paired Tracepoints
 
@@ -218,6 +228,10 @@ return 0;
 
 Remove the stashed state from the `active` map. Every `getdents64` syscall gets its own enter/exit pair, so state is per-call, not persistent.
 
+A verifier wrinkle I hit on the first pass of this loop: the verifier was unhappy about the cast `(struct linux_dirent64 *)(dirp + (bpos - prev_reclen))`. `dirp` is a `u64` user pointer, `bpos` and `prev_reclen` are both scalars, so the arithmetic is just integer math. The cast is only used as the argument to `bpf_probe_write_user`, which takes a `void *` user pointer and does not dereference it in BPF context. The verifier nonetheless complains if it thinks we might dereference the pointer locally — for example, if the code reads `prev->d_reclen` after the cast. I avoided the dereference by reading the struct's bytes into a local `struct linux_dirent64 de = {}` via `bpf_probe_read_user` at the top of each iteration and working from `de`, never following the `prev` pointer in BPF.
+
+The verifier is basically right to be suspicious: arbitrary pointer arithmetic into user memory is the classic vector for BPF escapes. If I could get the verifier to accept a dereference of `prev->d_reclen` and then trick it into letting me write through a pointer derived from user-controlled input, I'd have a write-where primitive. The verifier's refusal to let me dereference arbitrary `u64`-derived pointers is what closes that hole. Probe-read-into-stack, probe-write-from-stack is the only pattern the verifier accepts for user memory, and it's correct to force that pattern.
+
 ## The First-Entry Edge Case
 
 If the hit is the first record in the buffer, there's no previous record to inflate. This is where the fallback — zeroing `d_ino` — comes in.
@@ -239,6 +253,12 @@ But if an attacker is cloaking a file they don't control the placement of, they 
 A stronger fallback would be to delay emission: if the first record is a hit, stash its bytes in a BPF map, continue walking, and on the second (visible) record's emission copy the swallowed record's bytes into the buffer position of the second record, then mutate the second record's `d_reclen` backward to span from the buffer start. That's implementable but fiddly, and it requires writing into memory that might be re-paged. I didn't implement it; the trade-off between complexity and coverage didn't seem worth it for the ~5% of cases where the fallback triggers.
 
 Another approach: don't hide files whose name sorts first in the directory. Operationally, attackers naming files `.backdoor` or `.ssh_audit` tend to end up with predecessors (`.`, `..`, and other dotfiles) anyway, so the edge case is already rare.
+
+I tested the first-entry path specifically by creating a directory with just two files — `.aaaaa` (to be cloaked) and `bbbbb` (visible). The readdir order on tmpfs was `.`, `..`, `.aaaaa`, `bbbbb`. `.aaaaa` was not the first entry because `.` and `..` came first. I had to explicitly create a flat directory with `.aaaaa` and nothing else (well, nothing else readdir-visible) to hit the first-entry branch. That's artificial enough that in realistic attacker scenarios I'd expect the swallow path to hit almost always and the fallback to hit rarely.
+
+One more edge case in the same family: what if two hidden files are adjacent with no visible file between them? The code handles this: on the first hidden hit, we swallow it into whatever `prev` was (some earlier visible record). On the second hidden hit, `prev` is still pointing at that same earlier visible record (because we don't update `prev` on a hit), and we extend its `d_reclen` by the second hidden record's length. The earlier visible record now spans three records' worth of bytes. The walker skips all three as one. This works for arbitrary runs of consecutive hidden files as long as there's a visible record before the run.
+
+What doesn't work: a single hidden file with no visible file before it and visible files after. The first-entry fallback zeroes `d_ino` of the hidden record, but the record's `d_reclen` is unchanged — the walker still sees it, just with a zero inode. Some tools drop zero-inode entries; many don't. A `readdir()` loop in C that iterates with `struct dirent *` will yield the entry with `d_ino == 0` and `d_name == ".aaaaa"`, and the caller has to explicitly check for `d_ino == 0` to skip it. `ls` with default options does not check. `find` does not check. The fallback is therefore weak exactly where the primitive matters most — for a directory where the hidden file is the only dot-prefixed entry among a sea of normal names, the hidden file may remain visible to standard tools despite our fallback.
 
 ## Verifier Bounds: Why 64 Entries
 
@@ -265,6 +285,10 @@ This is less bad than it sounds, because the kernel breaks large directories int
 Where the bound does bite: if the user provides a very large buffer (e.g. `getdents64(fd, buf, 1024*1024)`), the kernel fills as much as it can in one call, potentially hundreds of entries. Those past entry 64 are not cloaked in that single call. If the user re-reads from the same fd, the kernel resumes where it left off, giving us a fresh chance. But `ls -f`, which is explicitly designed to make directory listing fast by disabling stat and using large buffers, can defeat the bound in pathological cases.
 
 The `make` file doesn't expose the bound as a tunable. A defender who wanted to harden against this specific attack could iterate through large directories in small buffers deliberately, forcing the attacker to cloak every call — but even that would work, just with higher overhead. The fundamental limit is the verifier, not the attack.
+
+There's a family of techniques for dodging the verifier's loop bound — tail calls, bpf_loop() helper (available on 5.17+), chained programs via `BPF_MAP_TYPE_PROG_ARRAY` — that could push the bound higher. I didn't use them because the POC is trying to stay readable. `bpf_loop()` in particular would be the clean way to do it on 6.12: it accepts a runtime bound (up to 1M) and lets you pass a callback that runs once per iteration, with the callback's loop-invariant state stored in a context struct. Rewriting the dirent walk as a `bpf_loop` callback would lift the bound to effectively arbitrary per-syscall and make the cloak robust to pathological directory sizes. It's maybe 30 extra lines; I traded the cleanliness for the simpler unrolled form.
+
+The verifier, more generally, pushes BPF program design toward "few short operations per helper call, many helper calls" rather than "one long loop." The philosophy is that every helper call is a safety-checked entry point, and between helper calls the verifier can prune equivalent program states aggressively. A single long loop is harder to prune because the state space branches every iteration. For BPF offense writers this means you should design primitives that fit in short straight-line programs and compose via maps and chained programs, not via monolithic loops. It's a constraint that actually makes the code better — easier to reason about, easier for the verifier to accept, easier to audit — but it takes a while to internalize if you're coming from conventional kernel-module writing.
 
 ## Kernel Taint Again
 

