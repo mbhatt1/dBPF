@@ -34,6 +34,10 @@ The position also matters for what the XDP program can do. An XDP program runs b
 
 The cost of this choice is that the XDP program does not have the kernel's IP/UDP parser available. It has only the raw bytes. The program must parse the Ethernet header, the IP header, and the UDP header by hand, and it must convince the verifier that every memory access is bounded. The bulk of the BPF source file is exactly this bounds-checking work. What the program gains in return is that its verdict precedes every other observer.
 
+One further architectural point deserves emphasis. The XDP hook and the AF_PACKET tap are not at the same layer, but they also are not at adjacent layers — there is a specific call sequence that places AF_PACKET strictly downstream of XDP. In `net/core/dev.c`, the function `__netif_receive_skb_core` walks through the receive pipeline in order: first the generic XDP hook (in skb-mode), then the `dev_stat_inc(NET_RX_DROPPED)` counter updates for an `XDP_DROP` return, then the `ptype_all` walk that dispatches to AF_PACKET listeners, then the `ptype_base` walk that dispatches to protocol handlers, then the tc ingress chain. The XDP-drop short-circuit is a `goto drop` that skips every subsequent step. This is source-visible structure, not a quirk: the pipeline order is the kernel's supported contract. A defender's detection strategy that depends on AF_PACKET visibility is defeated by this ordering, not by any covert trick. The XDP program uses a publicly documented hook at a publicly documented position.
+
+A related subtlety is that native XDP (drv-mode) and generic XDP (skb-mode) are at different positions, but both precede AF_PACKET. Native XDP runs in the driver's receive handler before `netif_receive_skb` is called; generic XDP runs inside `netif_receive_skb` at the top, before the `ptype_all` walk. The difference affects performance (native XDP avoids the `sk_buff` allocation entirely; generic XDP runs after the allocation but before any other use of the `sk_buff`) but does not affect the invisibility property. Both modes are upstream of AF_PACKET, and both produce `XDP_DROP` semantics that defeat `tcpdump`. This matters because `veth` is generic-only on many kernels, and the POC needs the invisibility property on `veth`.
+
 ## Source walk: progressive bounds checks
 
 The BPF source file `ch05b-ghost-nic.bpf.c` is 69 lines of C. The core function is `xdp_ghost`, which is attached via `SEC("xdp")`. The function signature is the standard XDP signature:
@@ -111,6 +115,14 @@ The cumulative effect of the five bounds checks plus the ethertype, protocol, po
 Each of the bounds checks is verifier-mandated. Removing any one of them produces a specific load-time error. Removing the Ethernet bounds check gives "invalid access to packet" on the `eth->h_proto` read. Removing the IP bounds check gives the same error on the `ip->protocol` read. Removing the `ihl` minimum check gives "unbounded memory access" on the `(void *)ip + ihl` computation, because the verifier cannot prove the resulting pointer is in bounds without a lower bound on `ihl`. Removing the UDP bounds check gives "invalid access to packet" on the `udp->dest` read. Removing the payload length check gives "invalid access to packet" on the `payload[0]` read. The checks are not style; they are a proof that the verifier requires.
 
 The order of the checks is also load-bearing. The verifier's proof tracking is linear through the program. A check that happens after a dereference cannot satisfy the verifier's obligation for that dereference. The program must prove bounds before it uses them, in source order. Reordering the checks to put them all at the top in one block and then doing all the reads in a second block is a common style but the verifier accepts the interleaved form used here with equal enthusiasm. The key is that each individual read is preceded, in control-flow order, by a check that proves it is in bounds.
+
+The `bpf_htons(0x0800)` constant deserves a brief aside because it is a common source of confusion. The ethertype field in the Ethernet header is stored in network byte order, which is big-endian. The constant `0x0800` is the host-byte-order representation of IPv4's ethertype. `bpf_htons` converts the constant to network byte order at compile time — the verifier sees it as a plain constant, not a helper call. On a big-endian host, `bpf_htons(0x0800)` is the identity; on a little-endian host, it is a byte swap. The macro expands to `__builtin_bswap16(0x0800)` on little-endian and to `0x0800` on big-endian, with the compiler constant-folding the result. Comparing `eth->h_proto` directly against `0x0800` without the macro works on big-endian hosts (aarch64 big-endian, SPARC) and fails on little-endian hosts (x86_64, aarch64 little-endian, which is the common case). The BPF convention is to always convert with `bpf_htons` or `bpf_ntohs`; the conversion is free.
+
+The `ip->ihl * 4` computation is the one arithmetic operation in the header parse and deserves its own verifier note. The field `ihl` is a 4-bit unsigned quantity (0–15). The multiplication by 4 gives a value in [0, 60], which the verifier tracks as a bounded integer. The subsequent `(void *)ip + ihl` pointer arithmetic is acceptable to the verifier because the bound on `ihl` is known. If the program tried to use `ip->tot_len` (a 16-bit field with range [0, 65535]) in pointer arithmetic without masking, the verifier would reject the program because the bound is too loose for the packet pointer's available range. This is the general shape of verifier-acceptable pointer arithmetic: the offset must have a small, provably bounded range, and the resulting pointer must be demonstrably within `[data, data_end]`.
+
+A verifier error message worth recognizing for this POC is "math between pkt pointer and register with unbounded min value is not allowed." This surfaces when a pointer is offset by a value whose lower bound the verifier cannot prove is non-negative. The POC avoids this by using unsigned integer types throughout and by the implicit lower bound of zero on `ihl * 4`. A sloppier version that used signed arithmetic, or that computed offsets from untrusted network data without clamping, would produce this error.
+
+The unrolled-loop pragma on the command-copy loop deserves revisiting here because it is tied to the verifier's acceptance of the bounds check inside the loop body. Without `#pragma unroll`, the compiler emits a loop with a trip count that depends on the first NUL in the source data. The verifier would need to prove at each iteration that `cmd_src + i + 1 <= data_end`, and because `i` is loop-dependent, the proof obligation compounds. Modern verifiers (5.3+) support bounded loops and can handle this, but the unrolled form is unambiguously correct at every BPF bytecode offset, which avoids any reliance on the bounded-loop feature. For a POC that aims to load on 5.x through 6.x without modification, the unrolled form is the portable choice.
 
 ## The command exfil
 
@@ -247,6 +259,51 @@ veth_g0(13) generic id 52
 
 For drv-mode, the output shows the interface's driver identifier. The `id 52` is the BPF program ID that `bpftool prog show` can cross-reference. A defender who dumps `bpftool net show` periodically catches every XDP attachment system-wide.
 
+The loader's signal-handling strategy deserves a brief note because it is what makes the detach cleanup reliable. The handler is installed early, before `open_and_load`:
+
+```c
+struct sigaction sa = { .sa_handler = on_signal };
+sigemptyset(&sa.sa_mask);
+sa.sa_flags = 0;
+if (sigaction(SIGINT, &sa, NULL) < 0 || sigaction(SIGTERM, &sa, NULL) < 0) { ... }
+```
+
+`sa.sa_flags = 0` explicitly clears `SA_RESTART`. The consequence is that system calls interrupted by a signal do not automatically restart; instead, they return `-1` with `errno == EINTR`. For `ring_buffer__poll`, this manifests as a `-EINTR` return, which the main loop explicitly handles:
+
+```c
+while (!stop) {
+    int n = ring_buffer__poll(rb, 200);
+    if (n < 0) {
+        if (n == -EINTR)
+            break; /* signal during poll → fall through to cleanup */
+        fprintf(stderr, "[ghost] ring_buffer__poll: %s\n", strerror(-n));
+        break;
+    }
+}
+```
+
+Without the `SA_RESTART`-clear plus the explicit `-EINTR` check, a SIGINT during poll would loop indefinitely until the next ring-buffer event arrived (which for a ringbuf with no traffic would be the 200ms timeout, so not infinitely — but noticeably laggy). The explicit handling makes Ctrl-C responsive.
+
+The cleanup path uses `goto out` from every error location, with `attached`, `rb`, and `skel` guarding the conditional cleanups:
+
+```c
+out:
+    if (attached) {
+        int derr = bpf_xdp_detach(g_ifindex, g_xdp_flags, NULL);
+        ...
+    }
+    if (rb)
+        ring_buffer__free(rb);
+    if (skel)
+        ch05b_ghost_nic_bpf__destroy(skel);
+    fprintf(stderr, "[ghost] shutdown (rc=%d)\n", rc);
+    return rc;
+```
+
+This pattern — a single cleanup label reached by `goto` from every error, with each resource guarded by a boolean flag set when it was acquired — is the C idiom for RAII-like cleanup. The alternative (nested `if` blocks with cleanup in each) is harder to verify correct and more prone to missed cleanups when a new error path is added. The goto-to-cleanup idiom is what the Linux kernel itself uses for error handling in most functions. The loader follows the convention.
+
+`g_ifindex` and `g_xdp_flags` are file-scope statics rather than stack locals because the signal handler comments mention they might, in a future revision, be read by an async-signal-safe detach path. In the current revision the handler just flips the `stop` flag, but the file-scope declaration leaves the option open without requiring a future refactor. This is a small forward-compatibility choice worth noting because it is the kind of thing that would be easy to break in an edit.
+
 ## Harness behavior
 
 The harness entry for this POC lives in `dBPF-pocs/harness/proof.py` at line 83:
@@ -305,6 +362,10 @@ What has changed is the verifier's strictness. On 4.x kernels, a program that di
 The `bpf_xdp_attach` and `bpf_xdp_detach` libbpf functions were introduced in libbpf 0.7 as wrappers around the older `bpf_set_link_xdp_fd` helper. The older function is still present and works identically. The newer `BPF_LINK_CREATE`-based attach (used internally by `bpf_xdp_attach`) is preferred on 5.7+ kernels because the resulting link object supports the `BPF_F_REPLACE` flag for atomic program swaps.
 
 Ringbuf (`BPF_MAP_TYPE_RINGBUF`) was introduced in 5.8. On earlier kernels, a similar pattern uses perf event arrays (`BPF_MAP_TYPE_PERF_EVENT_ARRAY`) with `bpf_perf_event_output`. The perf-event-array path is more complicated to set up and has higher per-event overhead; ringbuf is the current-best option and is used here.
+
+The veth driver's XDP support was added in 4.19 (commit `948d4f214fde`, December 2018) for the transmit-side redirection case and expanded in 5.2 to cover the receive path more generally. Between 4.19 and 5.2, attaching an XDP program to veth in drv-mode succeeded only when the peer interface also had an XDP program attached; attaching to one side of a pair without the other was silently downgraded to a no-op. The symptom was that `XDP_DROP` returned from the program would not actually drop the frame — the frame would continue up the stack and `tcpdump` would see it. This behavior was fixed in 5.2, but kernels older than 5.2 still exhibit the bug in their drv-mode veth path. The skb-mode fallback avoids the bug by not relying on driver-specific code. For any kernel older than 5.2 or for any veth-based test setup where driver support is uncertain, forcing skb-mode via `-S` is the robust choice.
+
+The `bpf_ntohs` helper in the event-emission path deserves a cross-kernel note. `bpf_ntohs` is actually a compile-time macro in `bpf_endian.h`, not a BPF helper function. It expands to `__builtin_bswap16` on little-endian hosts and to identity on big-endian hosts, the same as its userspace cousin. The verifier sees the result as a plain arithmetic operation on a value the BPF program already read from the packet. This is why it works without being on the helper allowlist — it is not a helper. The same is true of `bpf_htons`, `bpf_ntohl`, and `bpf_htonl`. The verifier's helper whitelist applies only to functions like `bpf_ringbuf_reserve`, `bpf_ringbuf_submit`, `bpf_get_current_pid_tgid`, and the handful of other entries in `kernel/bpf/helpers.c` and its siblings. Byte-order conversions are pure compiler intrinsics and require no runtime support.
 
 ## Detection
 
@@ -378,6 +439,14 @@ The XDP tutorial project maintained by the XDP working group at `github.com/xdp-
 The covert-channel aspect of the primitive (drop after identifying a magic prefix) does not appear in the legitimate XDP literature because legitimate uses do not want to hide packets from observers. The adaptation of existing XDP plumbing to a receive-but-do-not-deliver pattern is what distinguishes this primitive from the load-balancer/IDS/DDoS applications. The underlying mechanics — attach, parse, drop, emit-to-ringbuf — are the same.
 
 The academic literature on kernel covert channels predates XDP by decades. The early work (Wray 1991, Kang et al. 1995) focuses on timing channels and storage channels in multilevel secure systems. More recent work (Percival 2005, Liu et al. 2015) examines cache-based side channels. The XDP-based receive channel is a newer primitive in this lineage; it is closest in shape to the "covert receiver" patterns that use raw sockets to see frames that would otherwise be filtered. The XDP variant improves on raw-socket receivers by also being invisible to other observers on the same host, which the raw-socket variant is not.
+
+The research literature on XDP itself has grown steadily since 2018. Høiland-Jørgensen et al.'s "The eXpress Data Path" (CoNEXT 2018) is the canonical introduction, with performance measurements on commodity hardware showing single-digit-microsecond per-packet overhead for XDP programs of the kind this POC uses. Miano et al.'s "Creating Complex Network Services with eBPF" (ANRW 2019) covers multi-program XDP pipelines that compose drop, redirect, and pass verdicts. Vieira et al.'s "Fast Packet Processing with eBPF and XDP" (ACM Computing Surveys, 2020) is a survey of the design space. Readers interested in the performance and semantics of XDP in more depth than this chapter provides should start there.
+
+The defensive-side literature on XDP detection is less mature. Most enterprise EDR products added BPF program inventory as a feature between 2021 and 2023. CrowdStrike's Falcon sensor added BPF visibility in a 2022 release; Microsoft Defender for Endpoint added it in the same timeframe. The detection strategies these tools implement are variants of the `bpftool`-based inventory described in the detection section above, scaled to an agent that runs continuously and reports deltas to a central collector. The academic-detection literature is sparse: there are a handful of research-prototype detectors (e.g., Jia et al., "Programmable In-Kernel Malware Detection with BPF," DSN 2023) but no established defensive stack that treats XDP attachment as a signal the way the commercial tools now do.
+
+The interaction with container networking is worth a paragraph of its own. In the Kubernetes ecosystem, every pod has a veth pair: one end lives in the pod's network namespace, the other lives in the host's root namespace. Cilium installs XDP programs on the host-side veth for load balancing and policy enforcement. Calico in VPP mode does something similar. Other CNI plugins (the default bridge CNI, Flannel, Weave) do not use XDP. A defender operating on a Kubernetes node asks two questions: what CNI is installed, and does the CNI use XDP? If the CNI uses XDP, a baseline of expected XDP program names on each veth is the starting point. If the CNI does not use XDP, any XDP attachment on a veth is anomalous. For the POC's specific case — an XDP program attached to a veth on a host without Cilium/Calico/VPP — the attachment is anomalous by definition.
+
+The adversary-simulation community has been slower to pick up XDP-based covert channels than the defender community has been to pick up XDP detection. The MITRE ATT&CK framework, as of the 2024 revision, does not have a specific sub-technique for XDP-based receivers; the closest entry is T1205 (Traffic Signaling), which covers magic-byte-triggered receivers generically. Extending T1205 with an XDP-specific sub-technique would be a useful contribution to the framework; the distinguishing property of the XDP variant is the invisibility to AF_PACKET/netfilter/tc-ingress observers that the generic traffic-signaling technique does not have. Until and unless the framework is extended, defenders following ATT&CK guidance as a baseline should know that T1205 as currently documented does not cover this variant.
 
 ```c
 // The core match-and-drop, from ch05b-ghost-nic.bpf.c.

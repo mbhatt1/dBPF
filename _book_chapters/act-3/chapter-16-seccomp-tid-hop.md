@@ -4,7 +4,7 @@ title: "Chapter 16: Seccomp TID Hop"
 date: 2025-04-20
 ---
 
-**Chapter 16: Observing `__secure_computing` From a Peer Process**
+# Chapter 16: Observing `__secure_computing` From a Peer Process
 
 > **See also**: [Blog post]({{ site.baseurl }}/seccomp-tid-hop.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch16-seccomp-tid-hop) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
@@ -381,7 +381,7 @@ Standard shape. `hooks=["__secure_computing"]` prompts the harness to check the 
 
 Unlike ch14's `mode="trigger-runs-loader"`, ch16's default mode runs the trigger which in turn manages the loader. The distinction is mostly bookkeeping — same end result.
 
-## What Would Weaponize This on a Custom Kernel
+## What Would Turn the Observer into an Override on a Custom Kernel
 
 Two paths.
 
@@ -389,7 +389,7 @@ Two paths.
 
 **Path 2: fmod_ret trace**. `fmod_ret` is a BPF attach type that overrides the return of a function, but it is restricted to functions in a specific allow-list (different from error-injection, with different entry criteria). If `__secure_computing` were in that allow-list, an `fmod_ret` program could override the return. On stock 6.12 it is not, and the list is curated by kernel maintainers with no obvious path for ad-hoc additions.
 
-Neither path is mainline. The observer form is what you get on a stock kernel; the weapon form requires a custom kernel or a maintainer-sanctioned attach-type expansion.
+Neither path is mainline. The observer form is what you get on a stock kernel; the override form requires a custom kernel or a maintainer-sanctioned attach-type expansion.
 
 ## Detection
 
@@ -455,7 +455,7 @@ The probe runs during the syscall entry path, which means it runs with preemptio
 
 First, performance matters. A BPF program that does a lot of work per event multiplies the per-syscall overhead of every seccomp-filtered task. The ch16 observer is minimal (a few map operations and a ringbuf reserve) but even that is measurable under heavy syscall loads. A production-grade observer would probably use perf_event_array rather than ringbuf for lower-overhead eventing, and would skip the entry-side ringbuf event to halve the overhead.
 
-Second, reliability matters. A BPF program that faults or tail-loops in the syscall entry path would wedge every seccomp-filtered task on the host. The verifier's termination proofs are important here; without them, a BPF program with a runaway loop could deadlock the kernel. The verifier's insistence on provable termination is defense against exactly this kind of accidentally-weaponized observer.
+Second, reliability matters. A BPF program that faults or tail-loops in the syscall entry path would wedge every seccomp-filtered task on the host. The verifier's termination proofs are important here; without them, a BPF program with a runaway loop could deadlock the kernel. The verifier's insistence on provable termination is defense against exactly this kind of accidentally-hazardous observer.
 
 ## Integration With Audit and Tracing
 
@@ -505,7 +505,7 @@ The observer's portability depends on three things.
 
 3. **kprobe support for the symbol**. Kprobes can attach to most kernel text symbols; `__secure_computing` is a normal kernel function and is kprobe-eligible on every kernel I have tested.
 
-The observer form works on any stock 6.x kernel. It has worked on 5.x kernels too (though I have not tested recently). The weapon form would additionally require `__secure_computing` to be in the error-injection list, which as discussed is not mainline.
+The observer form works on any stock 6.x kernel. It has worked on 5.x kernels too (though I have not tested recently). The override form would additionally require `__secure_computing` to be in the error-injection list, which as discussed is not mainline.
 
 ## A Personal Observation on the "Bypass" Framing
 
@@ -517,9 +517,9 @@ This matters for how defenders think about the primitive. A "bypass" is a bug to
 
 I have seen this chapter's primitive described as "seccomp bypass" in some write-ups that read only the chapter title. The body makes the distinction clearer, but titles propagate further than bodies. "TID Hop" is loose language inherited from the original outline. If I had the chapter to rename from scratch, "Seccomp Side Channel" might be more accurate. The current title is in place for consistency with the table of contents.
 
-## When the Observer Becomes a Weapon
+## When the Observer Becomes an Override
 
-To be specific about the custom-kernel weapon path: on a kernel where `__secure_computing` is annotated with `ALLOW_ERROR_INJECTION(..., ERRNO)`, the change to weaponize the observer is literally one line in the kretprobe:
+To be specific about the custom-kernel override path: on a kernel where `__secure_computing` is annotated with `ALLOW_ERROR_INJECTION(..., ERRNO)`, the change to turn the observer into an override is literally one line in the kretprobe:
 
 ```c
 if (override_attempted && ret != 0) {
@@ -591,7 +591,7 @@ Across a sustained run, these pairs dominate the ringbuf. Every Redis syscall pr
 
 Forensic reconstruction from this stream: group events by (pid, tgid), order by timestamp, pair entry/return. The sequence of returns is the filter's decisions on that task's syscall stream. Overlay an out-of-band syscall trace (or a known startup sequence) and you reconstruct which decisions corresponded to which syscalls.
 
-## Why I Built the Observer Even Without the Weapon
+## Why I Built the Observer Even Without the Override
 
 An honest question: if the override does not work on stock kernels, why ship the observer at all?
 
@@ -599,9 +599,9 @@ Three reasons.
 
 First, the observer *is* the useful primitive for defenders. A blue team running ch16 on their own hosts learns what seccomp filters are active, which syscalls each filter rejects, and which filters have gaps. This is valuable defensive information even without any attacker context. A filter that allows too many syscalls can be tightened; a filter that causes excessive kills can be loosened or adjusted.
 
-Second, the observer documents the primitive for future kernels. If a kernel maintainer adds `__secure_computing` to the error-injection list (for unrelated reasons — fault injection testing, say), the observer becomes a weapon overnight without any further work. Shipping the observer now makes the weapon form a one-line diff rather than a full research project.
+Second, the observer documents the primitive for future kernels. If a kernel maintainer adds `__secure_computing` to the error-injection list (for unrelated reasons — fault injection testing, say), the observer becomes an override overnight without any further work. Shipping the observer now makes the override form a one-line diff rather than a full research project.
 
-Third, the observer is the honest research artifact. The original outline called for a TID-hop weapon; the research discovered the weapon was closed on stock kernels; the faithful thing to ship is the observer plus the explanation of why the weapon is closed. Suppressing the chapter because the weapon didn't work would be equivalent to reporting only the research that succeeded — a practice I am actively trying to avoid in this book.
+Third, the observer is the honest research artifact. The original outline called for a TID-hop override; the research discovered the override was closed on stock kernels; the faithful thing to ship is the observer plus the explanation of why the override is closed. Suppressing the chapter because the override didn't work would be equivalent to reporting only the research that succeeded — a practice I am actively trying to avoid in this book.
 
 ## Comparing ch16 to ch1's `cap_capable` Observer
 
@@ -609,11 +609,11 @@ Chapter 1 set up the "observer on a privileged decision point" pattern. `cap_cap
 
 Chapter 16 is the same shape, different target. `__secure_computing` is the choke point for seccomp decisions; a kprobe there sees every decision; the override would work if the annotation were present; on stock kernels the annotation is missing.
 
-The recurring shape: find the decision-point function, attach a kprobe+kretprobe pair, collect events, note that the override would weaponize the probe if the function were annotated. In both cases the annotation is the gating factor, and the observer form is the shippable artifact.
+The recurring shape: find the decision-point function, attach a kprobe+kretprobe pair, collect events, note that the override would convert the probe into an effect if the function were annotated. In both cases the annotation is the gating factor, and the observer form is the shippable artifact.
 
-Chapter 18 breaks the pattern by picking a target (`__arm64_sys_getuid`) that *is* annotated, so the weapon form works end-to-end. Those three chapters — 1, 16, 18 — map the space: two observers-only (cap_capable, secure_computing) and one full weapon (getuid). The asymmetry is not arbitrary; it reflects which symbols the kernel maintainers chose to annotate, and the logic of their choices (syscall entry wrappers often annotated, internal kernel functions often not) constrains which primitives are available.
+Chapter 18 breaks the pattern by picking a target (`__arm64_sys_getuid`) that *is* annotated, so the override form works end-to-end. Those three chapters — 1, 16, 18 — map the space: two observers-only (cap_capable, secure_computing) and one full override (getuid). The asymmetry is not arbitrary; it reflects which symbols the kernel maintainers chose to annotate, and the logic of their choices (syscall entry wrappers often annotated, internal kernel functions often not) constrains which primitives are available.
 
-Reading the three chapters as a set makes the research methodology explicit: *pick a decision point, see if it is annotated, if yes write a weapon, if no write an observer and document what would open the weapon form*. That is the entire template. Every chapter in the collection fits somewhere in this pattern or a close variant.
+Reading the three chapters as a set makes the research methodology explicit: *pick a decision point, see if it is annotated, if yes write an override, if no write an observer and document what would open the override form*. That is the entire template. Every chapter in the collection fits somewhere in this pattern or a close variant.
 
 ## Extensions I Considered but Did Not Build
 

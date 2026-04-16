@@ -4,7 +4,7 @@ title: "Chapter 15: NetNS VLAN Ghost"
 date: 2025-04-15
 ---
 
-**Chapter 15: Cross-Namespace Redirect via XDP and DEVMAP**
+# Chapter 15: Cross-Namespace Redirect via XDP and DEVMAP
 
 > **See also**: [Blog post]({{ site.baseurl }}/netns-vlan-ghost.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch15-netns-vlan-ghost) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 

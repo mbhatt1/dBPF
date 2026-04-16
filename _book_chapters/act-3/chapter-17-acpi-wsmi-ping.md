@@ -4,7 +4,7 @@ title: "Chapter 17: ACPI WSMI Ping"
 date: 2025-05-07
 ---
 
-**Chapter 17: Where the ACPI Interpreter Isn't**
+# Chapter 17: Where the ACPI Interpreter Isn't
 
 > **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) and the surviving workaround variant at [dBPF-pocs/pocs/ch17-acpi-wsmi-analog/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs).
 
@@ -365,7 +365,7 @@ Finish populating the scratch event, reserve a ringbuf slot, memcpy the scratch 
 
 ## The verifier story behind the XOR-OR comparator
 
-I mentioned the XOR-OR reduction in passing; it deserves a full paragraph because the journey of getting it past the verifier is instructive.
+I mentioned the XOR-OR reduction in passing; it deserves a full paragraph because the process of getting it past the verifier is instructive.
 
 My first attempt was a `strncmp`-like loop:
 

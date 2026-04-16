@@ -4,7 +4,7 @@ title: "Chapter 18: eBPF Token Bypass"
 date: 2025-05-09
 ---
 
-**Chapter 18: Forging `uid=0` at the Syscall Return**
+# Chapter 18: Forging `uid=0` at the Syscall Return
 
 > **See also**: [Blog post]({{ site.baseurl }}/ebpf-token-bypass.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch18-token-bypass) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 

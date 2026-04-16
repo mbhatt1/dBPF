@@ -10,7 +10,7 @@ date: 2025-02-01
 
 I started on this one after noticing, on a linuxkit 6.12 test VM, how much work `ovl_copy_up_one` actually does between the moment it allocates the upper inode and the moment the merged dentry becomes visible. That window is the thing. I wanted to measure it, and then I wanted to see whether a userspace racer could fit inside it.
 
-Up front: the BPF side of this chapter is an observation channel. The override call is there in the code, but `ovl_copy_up_one` is not in `ALLOW_ERROR_INJECTION` on stock 6.12, so the override is a no-op the same way it is in chapter 1. What the probe gives you is a reliable signal — a ringbuf event saying "copy-up is happening now, at this path, for this inode." The weaponization is a userspace racer that consumes those events and tries to touch the upper file before overlayfs finishes wiring it in.
+Up front: the BPF side of this chapter is an observation channel. The override call is there in the code, but `ovl_copy_up_one` is not in `ALLOW_ERROR_INJECTION` on stock 6.12, so the override is a no-op the same way it is in chapter 1. What the probe gives you is a reliable signal — a ringbuf event saying "copy-up is happening now, at this path, for this inode." The effect comes from a userspace racer that consumes those events and tries to touch the upper file before overlayfs finishes wiring it in.
 
 ## OverlayFS, Briefly
 
@@ -399,4 +399,4 @@ The last mistake was thinking the `bpf_d_path` resolution in BPF was free. It is
 
 ## Summary
 
-Observation channel: reliable. Override: unavailable on stock kernels. Weaponization: userspace racer against a 50–140 µs window with a success rate that depends heavily on scheduling. Prior art: the copy-up TOCTOU shape has been discussed on the overlayfs list since at least 2019; what's here is a reproducible BPF-driven observer and honest numbers for the race.
+Observation channel: reliable. Override: unavailable on stock kernels. End-to-end effect: userspace racer against a 50–140 µs window with a success rate that depends heavily on scheduling. Prior art: the copy-up TOCTOU shape has been discussed on the overlayfs list since at least 2019; what's here is a reproducible BPF-driven observer and honest numbers for the race.
