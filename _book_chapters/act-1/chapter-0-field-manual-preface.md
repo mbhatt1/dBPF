@@ -12,7 +12,7 @@ This book documents what `CAP_BPF` plus `CAP_PERFMON` (or `CAP_SYS_ADMIN`) actua
 
 The reason I wrote it is that the gap between "CAP_BPF is a privileged capability" and "here is what a process holding CAP_BPF can actually do" keeps producing surprised operators. Modern observability agents routinely request the capability, and the consequences of granting it are more direct than the docs tend to spell out.
 
-Each chapter ships with a reproducible trigger that runs under the Docker harness in `dBPF-pocs/`. Every claim has a BEFORE line and an AFTER line printed on stdout, plus a machine-grep-able marker like `CH01_WEAPON_PROVEN flips=N` or `PWNED path=...`. The harness records both. Failures — verifier rejections, missing BTF symbols, inactive enforcement points — are documented honestly inside the chapter and tallied in chapter 21.
+Each chapter ships with a reproducible trigger that runs under the Docker harness in `dBPF-pocs/`. Every claim has a BEFORE line and an AFTER line printed on stdout, plus a machine-grep-able marker like `CH01_WEAPON_PROVEN flips=2 signals=2` or `CH08_WEAPON_PROVEN exfil_count=13`. The harness records both. Out of 31 PoC variants covering all 18 technique chapters, 25 produce a PROVEN marker on the test matrix (20 on Docker Desktop linuxkit 6.12, 5 more on a Fedora 42 QEMU VM with BPF LSM and SELinux). The remaining 6 are honest skips: each has a verified root cause (kernel architecture, missing hardware, BTF limitation) and each chapter's skip has at least one working base or analog variant that does fire. Failures are documented honestly inside each chapter and tallied in Chapter 21.
 
 The intended audience is operators deciding whether to grant `CAP_BPF` to a workload and what guardrails to configure when they do. The second audience is researchers who want a reproducible baseline to extend.
 
@@ -73,13 +73,12 @@ The program-type-to-capability mapping is enforced in `kernel/bpf/syscall.c` in 
 
 A concrete mapping, for reference. These are the program types this book uses, and the minimum capability grant for each:
 
-- `BPF_PROG_TYPE_KPROBE` — `CAP_BPF + CAP_PERFMON`. Chapters 1, 2, 3, 8, 9, 11, 12, 14.
-- `BPF_PROG_TYPE_TRACEPOINT` — `CAP_BPF + CAP_PERFMON`. Chapters 4, 7.
-- `BPF_PROG_TYPE_PERF_EVENT` — `CAP_BPF + CAP_PERFMON`. Chapter 6.
-- `BPF_PROG_TYPE_TRACING` (fentry/fexit/lsm) — `CAP_BPF + CAP_PERFMON`, and in some configs `CAP_SYS_ADMIN` for the LSM subtype. Chapter 13, and the non-sleepable LSM path in Chapter 1.
+- `BPF_PROG_TYPE_KPROBE` — `CAP_BPF + CAP_PERFMON`. Chapters 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 14.
+- `BPF_PROG_TYPE_TRACEPOINT` — `CAP_BPF + CAP_PERFMON`. Chapters 4, 9, 13 (analog), 16, 17 (analog).
+- `BPF_PROG_TYPE_RAW_TRACEPOINT` — `CAP_BPF + CAP_PERFMON`. Chapter 9 (fork tracepoint).
+- `BPF_PROG_TYPE_TRACING` (fentry/fexit/lsm) — `CAP_BPF + CAP_PERFMON`, and in some configs `CAP_SYS_ADMIN` for the LSM subtype. LSM variants: Chapters 1, 2, 3, 6, 7, 12.
 - `BPF_PROG_TYPE_XDP` — `CAP_BPF + CAP_NET_ADMIN`. Chapters 5b, 15.
-- `BPF_PROG_TYPE_SCHED_CLS` (tc-bpf) — `CAP_BPF + CAP_NET_ADMIN`. Chapter 17.
-- `BPF_PROG_TYPE_CGROUP_SKB`, `BPF_PROG_TYPE_CGROUP_SOCK` — `CAP_BPF + CAP_NET_ADMIN`. Chapter 16.
+- `BPF_PROG_TYPE_CGROUP_SKB`, `BPF_PROG_TYPE_CGROUP_SOCK` — `CAP_BPF + CAP_NET_ADMIN`. Chapter 5.
 
 The `CAP_NET_ADMIN` dependency for network-layer programs is frequently forgotten. A process with only `CAP_BPF + CAP_PERFMON` can load a kprobe but cannot attach an XDP program to an interface. The attachment is done via netlink, and the netlink socket binding is gated on `CAP_NET_ADMIN` in the target network namespace. This is why XDP-based techniques are narrower in practice than kprobe-based ones: the capability cost is higher.
 
@@ -181,7 +180,7 @@ cat /sys/kernel/debug/error_injection/list | head
 # ...
 ```
 
-The relevance to this book is that `bpf_override_return` — the helper that lets a kretprobe change the return value of the function it attaches to — only lands on functions in that list. The verifier accepts the program regardless; the override-check happens at runtime when the kretprobe fires. If the target function is not in the allowlist, the helper returns without modifying the return register, and the kernel logs nothing. This is the failure mode I hit against `cap_capable` in Chapter 1.
+The relevance to this book is that `bpf_override_return` — the helper that lets a kretprobe change the return value of the function it attaches to — only lands on functions in that list. The verifier accepts the program regardless; the override-check happens at runtime when the kretprobe fires. If the target function is not in the allowlist, the helper returns without modifying the return register, and the kernel logs nothing. This was the original failure mode I hit against `cap_capable` in Chapter 1 — until I discovered that `bpf_send_signal`, which is not gated by the allowlist, delivers a real effect from the same hook point.
 
 The annotated set is skewed toward syscall entries. `do_unlinkat`, `do_mkdirat`, `do_renameat2` — these are all annotated because they are places where error injection makes sense as a test primitive. The filesystem will cope with an `-ENOMEM` from `do_unlinkat` because that is a return value the caller already has to handle. Annotating a function where failure is not a supported path would cause test infrastructure to produce spurious bug reports.
 
@@ -216,29 +215,33 @@ The list is append-only in practice. Once a function is annotated, removing the 
 
 ## The taxonomy, foreshadowed
 
-Chapter 20 formalizes the five-class taxonomy of primitives that actually fired on this kernel. Each class has a characteristic shape and a characteristic failure mode. Knowing the shape is useful for knowing which chapters to read together.
+Chapter 20 formalizes the seven-class taxonomy of primitives that actually fired on this kernel. Each class has a characteristic shape and a characteristic failure mode. Knowing the shape is useful for knowing which chapters to read together.
 
-**Class 1: Return override.** A kretprobe on a function in `ALLOW_ERROR_INJECTION` uses `bpf_override_return` to change the function's return value. The primitive is narrow — the function has to be in the allowlist — and the failure mode is silent when the allowlist check fails. Chapters 11 and 12 fire this against filesystem entry points.
+**Class 1: Return override.** A kretprobe on a function in `ALLOW_ERROR_INJECTION` uses `bpf_override_return` to change the function's return value. The primitive is narrow — the function has to be in the allowlist — and the failure mode is silent when the allowlist check fails. Chapters 3, 14, 16, and 18 fire this against syscall entry points and audit infrastructure.
 
-**Class 2: Buffer rewrite.** A fentry or LSM program with sleepable context rewrites a buffer in the caller's address space before the caller reads it. The primitive is broad in principle and narrow in practice, because the verifier is strict about which buffers are writable from which attach points. Chapter 13 fires this against `vfs_read` output.
+**Class 2: Buffer rewrite.** A kprobe or fentry program uses `bpf_probe_write_user` to rewrite a buffer in the caller's address space before the caller reads it. Chapter 5 fires this against `vfs_read` output to falsify cgroup stats; Chapter 10 fires it against `getdents64` to hide directory entries; Chapters 13 and 17 (analog variants) fire it to spoof sensor readings and firmware requests.
 
-**Class 3: Out-of-band copy.** A probe on any decision function captures the decision's inputs and outputs and streams them to a ringbuf for a userspace consumer. No override required; pure observation. This is the shape Chapter 1 and most of Act 2 use.
+**Class 3: Out-of-band copy.** A probe on any decision function captures the decision's inputs and outputs and streams them to a ringbuf for a userspace consumer. This goes beyond passive observation when the exfiltrated data includes kernel-internal secrets: Chapter 8 reads actual key payload bytes from `key->payload.data[0]` via `bpf_probe_read_kernel`, exfiltrating credentials that are never visible to the key's owning process. Chapter 4 uses a tail-call chain to extract creds from the `write()` path while seccomp sees only a single benign syscall.
 
-**Class 4: XDP.** An XDP program attached to an interface observes, rewrites, or exfiltrates packets before they reach the kernel's network stack. The primitive is independent of the capability stack most of this book uses, because XDP attaches at a lower layer. Chapters 5b and 15 fire this.
+**Class 4: XDP.** An XDP program attached to an interface observes, rewrites, or exfiltrates packets before they reach the kernel's network stack. The primitive is independent of the capability stack most of this book uses, because XDP attaches at a lower layer. Chapter 5b drops packets to create a covert channel; Chapter 15 strips VLAN tags and redirects packets across network namespaces.
 
-**Class 5: Ringbuf-as-trigger.** A userspace consumer reads events from a BPF ringbuf and reacts — spawning a process, writing a file, making a network call. The BPF program is the sensor; the reaction is in userspace. This is how every chapter turns a kernel-side observation into an actual effect. Chapter 3 is the archetype.
+**Class 5: Process control.** `bpf_send_signal` delivers a signal to the current task from kprobe or tracepoint context. This turns observation into real-time interference: Chapter 1 sends `SIGUSR1` to processes on every capability denial, proving the BPF program can act on a target at the exact moment a security decision is made. Chapter 4 sends `SIGUSR1` back to a process that triggered an exfiltration, proving bidirectional control through a single `write()` syscall. Chapter 7 sends `SIGUSR2` on device-cgroup denials. Chapter 9 sends `SIGUSR1` to processes entering new PID namespaces, demonstrating cross-namespace targeting.
 
-The primitive classes are not mutually exclusive within a chapter. A chapter that observes a syscall and then has a userspace reaction is using Class 3 and Class 5 together. A chapter that overrides a return and also streams observations to userspace is using Class 1 and Class 5 together. The taxonomy is over primary primitives; a chapter's secondary primitives are called out in the chapter's header.
+**Class 6: LSM override.** On kernels booted with `lsm=bpf,...`, a `SEC("lsm/...")` program with `fmod_ret` return semantics overrides LSM hook decisions. This is the first-class override primitive, not gated by the error-injection allowlist. Chapter 2's LSM variant denies overlay copy-up; Chapter 3's fentry variant suppresses syslog reads; Chapter 6's synthetic variant demonstrates deny-then-flip on SELinux-like hooks; Chapter 7's LSM variant flips device-cgroup denials.
 
-A primitive's class is also a rough predictor of its detection difficulty. Class 1 (return override) is the easiest to detect: the target function is in a short allowlist, and a defender watching for kretprobe attachments to that allowlist will catch it. Class 3 (out-of-band copy) is harder: any decision function is a valid target, and the attachment looks like legitimate observability tooling. Class 4 (XDP) is the hardest on an interface-by-interface basis, because XDP attachment is a normal operation for network tooling and the defender cannot tell by attachment alone what the XDP program is doing. The detection-difficulty gradient drives Chapter 22's recommendation priority.
+**Class 7: Timing side-channel.** Chapter 11 measures inter-IRQ timing deltas and bins them into a per-CPU histogram, proving that IRQ arrival patterns leak information about system activity (network traffic, disk I/O, user input). The histogram is the measurement instrument; the leak is inherent in the hardware.
+
+The primitive classes are not mutually exclusive within a chapter. Chapter 4 uses Class 3 (exfiltration via tail-call) and Class 5 (signal back to caller) in a single `write()` syscall. Chapter 1 uses Class 5 (signal on cap denial) alongside Class 3 (ringbuf streaming of every capability decision). The taxonomy is over primary primitives; a chapter's secondary primitives are called out in the chapter's header.
+
+A primitive's class is also a rough predictor of its detection difficulty. Class 1 (return override) is the easiest to detect: the target function is in a short allowlist, and a defender watching for kretprobe attachments to that allowlist will catch it. Class 3 (out-of-band copy) is harder: any decision function is a valid target, and the attachment looks like legitimate observability tooling. Class 4 (XDP) is hard on an interface-by-interface basis, because XDP attachment is a normal operation for network tooling. Class 5 (process control via `bpf_send_signal`) is notable for being invisible to the target — the signal arrives as if from the kernel, with no trace of BPF origin in the signal metadata. Class 6 (LSM override) requires BPF LSM to be in the kernel's boot-time LSM list, making it the most deployment-dependent class. The detection-difficulty gradient drives Chapter 22's recommendation priority.
 
 Each chapter is tagged with which class its primary primitive belongs to. The failure-mode chapters (21) are tagged by which class failed.
 
-The taxonomy is not a partition of all possible BPF techniques. It is a partition of the techniques that fired on this specific kernel in this specific configuration. Other classes exist — cgroup-based filtering, socket-reuseport load balancing, BPF-based tracing for performance — and they are not represented here because they did not produce a primitive that a capability-holding attacker would use for a meaningful effect. Chapter 20 discusses the boundary between "in the taxonomy" and "out of the taxonomy" in more detail. For now, the five classes are sufficient as a reading guide.
+The taxonomy is not a partition of all possible BPF techniques. It is a partition of the techniques that fired on this specific kernel in this specific configuration. Other classes exist — cgroup-based filtering, socket-reuseport load balancing, BPF-based tracing for performance — and they are not represented here because they did not produce a primitive that a capability-holding attacker would use for a meaningful effect. Chapter 20 discusses the boundary between "in the taxonomy" and "out of the taxonomy" in more detail. For now, the seven classes are sufficient as a reading guide.
 
-A practical consequence of the taxonomy is that the chapters within a class share code. The two override chapters (11, 12) use nearly identical BPF skeletons, differing only in which syscall entry they attach to and what override value they produce. The XDP chapters (5b, 15) share the same tc/XDP plumbing. The ringbuf-as-trigger chapters share a common userspace consumer shape. Readers can skim within a class once they have read one chapter in that class carefully.
+A practical consequence of the taxonomy is that the chapters within a class share code. The return-override chapters (3, 14, 16, 18) use nearly identical BPF skeletons, differing only in which function they attach to and what override value they produce. The signal chapters (1, 4, 7, 9) share `bpf_send_signal` + rate-limiting + ringbuf confirmation. The XDP chapters (5b, 15) share the same XDP plumbing. Readers can skim within a class once they have read one chapter in that class carefully.
 
-The other practical consequence is that the defender's job is class-shaped. Detecting a Class 3 primitive (out-of-band copy) means watching for kprobe attachments to decision functions; the specific target function is secondary. Detecting a Class 1 primitive (return override) means watching for kretprobe attachments to functions on `/sys/kernel/debug/error_injection/list`; again, the specific target is secondary. Chapter 22's defender playbook is organized by class for this reason.
+The other practical consequence is that the defender's job is class-shaped. Detecting a Class 3 primitive (out-of-band copy) means watching for kprobe attachments to decision functions; the specific target function is secondary. Detecting a Class 1 primitive (return override) means watching for kretprobe attachments to functions on `/sys/kernel/debug/error_injection/list`; again, the specific target is secondary. Detecting Class 5 (process control) means watching for BPF programs that call `bpf_send_signal` — visible in `bpftool prog dump xlated` output. Chapter 22's defender playbook is organized by class for this reason.
 
 ## Non-claims
 
@@ -254,7 +257,7 @@ Start with the chapter you are worried about. The chapters are independent enoug
 
 **If you are an operator** deciding whether to grant `CAP_BPF` to a workload: read Chapter 0 (this one), skip to Chapter 22 for the defender playbook, then walk Chapters 1 through 18 in order. The operator reading order prioritizes detection and baseline-diff recipes over attack detail. By the time you finish Chapter 22, you should have a concrete list of `bpftool`, `auditd`, and `/sys/kernel/debug/` signatures that your monitoring stack needs to cover.
 
-**If you are a researcher** extending the taxonomy: read Chapter 0, then Chapter 20 for the five-class framing, then Chapters 1 through 18 in whatever order the taxonomy suggests, then Chapter 21 for the failure catalog. The researcher reading order treats the chapters as data points in a classification and prioritizes the framing over the individual techniques.
+**If you are a researcher** extending the taxonomy: read Chapter 0, then Chapter 20 for the seven-class framing, then Chapters 1 through 18 in whatever order the taxonomy suggests, then Chapter 21 for the failure catalog. The researcher reading order treats the chapters as data points in a classification and prioritizes the framing over the individual techniques.
 
 **If you are on a red team** with an engagement in flight: pick the chapter whose primitive matches your goal, check Chapter 21 to see if that primitive's failure-mode applies to your target kernel, then read the chapter. The red-team order is the only one that treats the book as a reference manual rather than a narrative.
 
@@ -347,9 +350,9 @@ To set expectations for the honesty this book attempts, here is a representative
 
 A technique looks like it should work. The verifier accepts the program. The kernel attaches the probe. The trigger fires. `bpftool prog show` confirms the program is loaded. The ringbuf produces events. And yet the side effect the technique was supposed to produce does not occur.
 
-This is the shape of the `cap_capable` override in Chapter 1. It is also the shape of the `security_*` overrides I tried and deleted before they became their own chapters. It is the shape of the `sys_call_table` rewrite path that has been closed in 5.x-era kernels. Each of these failures has a specific cause, and the specific causes are what Chapter 21 catalogs.
+This was the shape of the original `cap_capable` override attempt in Chapter 1 — `bpf_override_return` loaded but silently no-oped because `cap_capable` is not in `ALLOW_ERROR_INJECTION`. The chapter's response was to find a different primitive at the same hook point: `bpf_send_signal(SIGUSR1)`, which delivers a real signal to the target process from kretprobe context without needing the error-injection allowlist. The override was blocked; the signal was not. This pattern — adapt the primitive when the obvious path is closed — recurs throughout the book. It is also the shape of the `security_*` overrides that evolved into BPF LSM `fmod_ret` programs, and of the `sys_call_table` rewrite path that has been closed in 5.x-era kernels. Each of these adaptations has a specific trigger, and Chapter 21 catalogs the ones that did not find an alternative.
 
-The honest form of this book's claim is therefore narrower than "CAP_BPF grants enormous power." The honest form is: CAP_BPF grants the exact power listed in the five-class taxonomy, subject to the failure modes listed in Chapter 21. Some techniques that sound powerful are silently no-ops. Some techniques that sound restricted are fully operational. The distinction is not obvious from the docs; the distinction is why the harness exists.
+The honest form of this book's claim is therefore narrower than "CAP_BPF grants enormous power." The honest form is: CAP_BPF grants the exact power listed in the seven-class taxonomy, subject to the failure modes listed in Chapter 21. Some techniques that sound powerful are silently no-ops. Some techniques that sound restricted are fully operational. The distinction is not obvious from the docs; the distinction is why the harness exists.
 
 A defender's operational takeaway is: do not assume a technique does or does not work based on its description. Run it in a staging environment that matches your production kernel and check the harness output. The techniques are reproducible; the failures are also reproducible. Both are useful information.
 
@@ -420,4 +423,4 @@ The most likely sources of drift:
 
 A reader who runs the harness on a different kernel version and notices a divergence has found something worth documenting. Divergence is not a bug; it is data. The book's taxonomy accommodates divergence by describing the class of primitive rather than the specific kernel-version-dependent mechanism.
 
-With the preface complete, the first technique is the kprobe on `cap_capable`.
+With the preface complete, the first technique is the kprobe on `cap_capable` — and the `bpf_send_signal` primitive that turned it from an observation channel into a process-control weapon.

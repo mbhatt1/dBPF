@@ -1,0 +1,12 @@
+#cloud-config
+password: dbpf
+chpasswd:
+  expire: false
+ssh_pwauth: true
+disable_root: false
+runcmd:
+  - grubby --update-kernel=ALL --args="lsm=lockdown,capability,yama,selinux,bpf enforcing=0 selinux=1"
+  - touch /.autorelabel
+  - dnf install -y --setopt=install_weak_deps=False clang llvm lld make gcc libbpf-devel elfutils-libelf-devel bpftool iproute keyutils keyutils-libs-devel libcap-ng-utils kmod procps-ng audit python3 sudo selinux-policy-targeted policycoreutils
+  - touch /tmp/setup_done
+  - reboot
