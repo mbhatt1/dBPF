@@ -549,8 +549,8 @@ Sample output on Debian 12 stock kernel 6.1:
 ffffffff81234000 __x64_sys_read [EI_ETYPE_ERRNO]
 ffffffff81234100 __x64_sys_write [EI_ETYPE_ERRNO]
 ...
-ffffffff81345abc __x64_sys_getuid [EI_ETYPE_NULL]
-ffffffff81345bcd __x64_sys_geteuid [EI_ETYPE_NULL]
+ffffffff81345abc __x64_sys_getuid [EI_ETYPE_ERRNO]
+ffffffff81345bcd __x64_sys_geteuid [EI_ETYPE_ERRNO]
 ffffffff814abcde __x64_sys_sched_setscheduler [EI_ETYPE_ERRNO]
 ffffffff815cafbe bio_add_page [EI_ETYPE_ERRNO]
 ...

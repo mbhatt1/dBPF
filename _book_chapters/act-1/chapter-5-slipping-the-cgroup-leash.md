@@ -12,7 +12,7 @@ The cgroup accounting path on Linux is two-sided. On one side, the scheduler tra
 
 ## The readback path is the target
 
-`cgroup_account_cputime` in `kernel/sched/core.c` updates the scheduler's internal counters. That function is not hooked. No BPF helper exists to `bpf_update_cgroup_cpu_stat(cgrp, fake)` the way earlier drafts of this chapter imagined. The kernel's scheduler is the source of truth for cgroup accounting, and it stays the source of truth throughout the attack.
+`cgroup_account_cputime` (an inline in `include/linux/cgroup.h`, called from `kernel/sched/fair.c`) updates the scheduler's internal counters. That function is not hooked. No BPF helper exists to `bpf_update_cgroup_cpu_stat(cgrp, fake)` the way earlier drafts of this chapter imagined. The kernel's scheduler is the source of truth for cgroup accounting, and it stays the source of truth throughout the attack.
 
 What the POC does is shorter and more boring. It waits for a process to open `cpu.stat`, waits for the subsequent `read()` to complete, then overwrites the returned bytes in userspace memory with a constant string of zeros before the reader's `read()` returns. The kernel read path ran. The scheduler provided the real numbers. The kernel-side tracefs virtual file synthesized them into the ASCII output. Those bytes were copied to the user buffer. Between that copy and the reader regaining control, a BPF program running in the `sys_exit_read` tracepoint overwrote the user buffer.
 
@@ -194,8 +194,8 @@ int tp_exit_read(struct trace_event_raw_sys_exit *ctx)
     if (bpf_probe_write_user(p->ubuf, zeros, n) != 0) return 0;
 
     struct evt e = {
-        .pid = id >> 32,
-        .tgid = id & 0xffffffff,
+        .pid = id & 0xffffffff,
+        .tgid = id >> 32,
         .patched = 1,
         .bytes = n,
     };
@@ -273,19 +273,19 @@ Second, the stack budget. The on-stack `name` buffer plus the `pending` struct i
 
 Third, the CO-RE chain. `BPF_CORE_READ(task, files, fdt, fd[fd])` only works if the running kernel's BTF has the right offsets for each of `struct files_struct`, `fdtable`, and the array index. On kernels where `CONFIG_DEBUG_INFO_BTF=y` is missing, CO-RE relocation fails and the program refuses to load with `libbpf: load BPF skeleton: -22`. The linuxkit 6.12 aarch64 kernel has BTF; production distro kernels generally have it; embedded / appliance kernels sometimes do not. The POC fails gracefully with a clear error when BTF is unavailable.
 
-## Kernel taint as a tell
+## Kernel warning as a tell
 
-`bpf_probe_write_user` sets the `TAINT_USER` bit (bit 9, value 512) in the global kernel taint word on first use by a program. The taint is persistent — there is no untaint path. `cat /proc/sys/kernel/tainted` returns a non-zero value for the lifetime of the kernel after any program has called `bpf_probe_write_user` even once.
-
-In addition, the kernel emits a `KERN_WARN`-level dmesg line the first time each program calls the helper:
+`bpf_probe_write_user` triggers a `pr_warn_ratelimited` message at program load time when the verifier sees that the program uses the helper. The warning is emitted by `bpf_get_probe_write_proto()` in `kernel/trace/bpf_trace.c` and reads:
 
 ```
-kernel: BPF: [ch05-cgroup-leash]: program used bpf_probe_write_user(); this may rewrite userspace memory
+kernel: <loader-comm>[<pid>] is installing a program with bpf_probe_write_user helper that may corrupt user memory!
 ```
 
-The message is hardcoded in `kernel/bpf/verifier.c` and cannot be suppressed short of patching the kernel. A defender grepping dmesg or running `awk 'BEGIN{t=0+system("cat /proc/sys/kernel/tainted")} END{if (t & 512) exit 1}'` catches the taint at zero cost. An unhardened fleet rarely watches for this; a hardened fleet includes the taint word in the SIEM.
+The message fires once per loader process (rate-limited), not once per helper invocation. It cannot be suppressed short of patching the kernel. A defender grepping dmesg catches the load event at zero cost. An unhardened fleet rarely watches for this; a hardened fleet includes the dmesg pattern in the SIEM.
 
-The taint is a global signal. It tells you that *some* program on this host has used `bpf_probe_write_user` at some point, not which program and not on what buffer. Identifying the responsible program requires correlating with `bpftool prog list` and the auditd `BPF_PROG_LOAD` records.
+Note: on kernels older than approximately 5.13, the load path also called `add_taint(TAINT_USER, LOCKDEP_STILL_OK)`, setting `TAINT_USER` (bit 6, value 64) in the global kernel taint word. That taint call was removed in later kernels. On 6.12 the taint word is not set by this helper; only the dmesg warning remains. A fleet monitoring `cat /proc/sys/kernel/tainted` for the `TAINT_USER` bit will not catch `bpf_probe_write_user` on 6.12. dmesg and `bpftool prog list` are the reliable signals.
+
+The dmesg warning is a global signal. It tells you that *some* process on this host loaded a program using `bpf_probe_write_user`, not which invocations occurred and not on what buffer. Identifying the responsible program requires correlating with `bpftool prog list` and the auditd `BPF_PROG_LOAD` records.
 
 ## Harness behavior
 
@@ -431,7 +431,7 @@ The more interesting consequence is the resource limit misfire. Suppose `myservi
 
 The attack surface here is underappreciated in the public literature. Most writeups about `bpf_probe_write_user` on cgroup files focus on external monitoring agents — Prometheus, Datadog, cAdvisor. Those are the visible targets. systemd is the invisible target: it is reading the same files, it is making operational decisions based on those files, and it is not commonly instrumented for anomaly detection on its own accounting queries.
 
-A defender who wants to detect this specific targeting needs to either cross-reference systemd's unit accounting against a non-cgroup-file source (such as per-task `/proc/[pid]/stat` aggregated by cgroup membership) or monitor for the kernel taint word. The taint approach is simpler and catches the attack regardless of which file is being targeted.
+A defender who wants to detect this specific targeting needs to either cross-reference systemd's unit accounting against a non-cgroup-file source (such as per-task `/proc/[pid]/stat` aggregated by cgroup membership) or monitor dmesg for the `bpf_probe_write_user` warning. The dmesg approach is simpler and catches the attack at program load time regardless of which file is being targeted.
 
 ## Prior art
 
@@ -460,15 +460,13 @@ A partial overwrite is simpler but creates an inconsistency that a careful reade
 
 This consistency-check detection is the one that distinguishes sophisticated defenders from naive ones. A naive monitoring agent reads each field independently and reports them independently. A sophisticated one cross-checks related fields. The BPF primitive does not break the cross-check unless the attacker overwrites every field consistently, which requires knowing the exact file format and the exact values of all fields at the moment of the read.
 
-The attacker-precision decision is: how many fields to zero, and whether to do it consistently. Zeroing only `usage_usec` in `cpu.stat` is precise: a reader that only checks `usage_usec` is fooled, and a reader that also checks `user_usec` and `system_usec` is fooled too if all three are zeroed together. The POC zeros all three. `memory.stat` has more fields, which means more work to achieve full consistency, which raises the attacker's implementation cost without raising the defender's detection cost (the taint bit fires regardless of how many fields are zeroed).
+The attacker-precision decision is: how many fields to zero, and whether to do it consistently. Zeroing only `usage_usec` in `cpu.stat` is precise: a reader that only checks `usage_usec` is fooled, and a reader that also checks `user_usec` and `system_usec` is fooled too if all three are zeroed together. The POC zeros all three. `memory.stat` has more fields, which means more work to achieve full consistency, which raises the attacker's implementation cost without raising the defender's detection cost (the dmesg warning fires at program load time regardless of how many fields are zeroed).
 
 ## Detection
 
 The primitive is detectable at multiple layers.
 
-Kernel taint is the cheapest. `cat /proc/sys/kernel/tainted | awk '{if (and($1,512)) print "TAINT_USER set"}'` on every host, alert on non-zero. Any fleet that has not already seen a `bpf_probe_write_user` in legitimate use (few have) catches the primitive on first fire.
-
-dmesg grep is the next cheapest. `journalctl -k --since=boot | grep "bpf_probe_write_user"` shows every program that has used the helper, with the program's BPF name.
+dmesg grep is the cheapest. `journalctl -k --since=boot | grep "bpf_probe_write_user"` shows every loader process that installed a program using the helper, with the loader's comm and pid. On kernels older than approximately 5.13, the kernel also set `TAINT_USER` (bit 6, value 64) in the taint word, making `cat /proc/sys/kernel/tainted | awk '{if (and($1,64)) print "TAINT_USER set"}'` a detection path. On 6.12 the taint word is no longer set by this helper, so dmesg is the primary signal.
 
 `bpftool prog list` and the `/sys/fs/bpf/` pin tree show currently-loaded programs. A tracepoint program on `sys_exit_read` that uses `bpf_probe_write_user` is an extremely unusual fingerprint; the only legitimate uses are `bpftrace`-style ad-hoc scripts, and those rarely pin and rarely last more than a few seconds.
 
@@ -491,10 +489,10 @@ Production monitoring stacks mostly do not do this. Prometheus `node_exporter`, 
 A defender who wants a trustworthy observability plane on a host with untrusted `CAP_BPF` holders has three options:
 
 - **Route around the attack surface.** Compute cgroup metrics from scheduler state directly. Requires replacing or augmenting every existing collector. High cost, high assurance.
-- **Detect the taint.** `cat /proc/sys/kernel/tainted | awk '{if (and($1,512)) print}'` is a one-line alert. Low cost, detection-only (the rewrite has already happened when the alert fires).
+- **Detect the dmesg warning.** `journalctl -k --since=boot | grep bpf_probe_write_user` is a one-line alert. Low cost, detection-only (the program has already been loaded when the alert fires). On older kernels (pre-5.13) the `TAINT_USER` bit (bit 6, value 64) in `/proc/sys/kernel/tainted` is also set.
 - **Prevent at the capability boundary.** Don't grant `CAP_BPF` to non-trusted workloads. This is what the kernel documentation already recommends. It is also the hardest in practice because observability stacks routinely demand `CAP_BPF`.
 
-The three options are composable. A defensive posture that routes the critical accounting pipelines around cgroup-file reads, detects taint fleet-wide, and audits every `CAP_BPF` grant makes this primitive expensive to deploy and quick to catch if deployed.
+The three options are composable. A defensive posture that routes the critical accounting pipelines around cgroup-file reads, monitors dmesg fleet-wide for `bpf_probe_write_user` warnings, and audits every `CAP_BPF` grant makes this primitive expensive to deploy and quick to catch if deployed.
 
 ## What cannot be fixed at the userspace layer
 
@@ -555,7 +553,7 @@ The script is deliberately minimal. The harness wraps it, records the marker lin
 
 The CO-RE chain `task->files->fdt->fd[fd]->f_path.dentry->d_name.name` is stable across Linux 4.11 (first cgroup v2 release) through 6.12 (the test kernel). `struct files_struct`, `struct fdtable`, `struct file`, and `struct dentry` have all been laid out similarly across that range. CO-RE relocations handle the minor shifts.
 
-The `bpf_probe_write_user` helper has been available since 4.8. Its behavior — atomic write to user memory, taint on first use, dmesg warning — has not changed across 4.x, 5.x, or 6.x. The `TAINT_USER` bit value (512) is stable.
+The `bpf_probe_write_user` helper has been available since 4.8. Its core behavior — write to user memory from BPF context, gated by `CAP_SYS_ADMIN` — has not changed across 4.x, 5.x, or 6.x. The dmesg warning at load time has been present since the helper was introduced. On older kernels (pre-5.13) the load path also set the `TAINT_USER` bit (bit 6, value 64) in the kernel taint word; that taint call was removed in later kernels and is not present in 6.12.
 
 The tracepoints `syscalls/sys_enter_read` and `syscalls/sys_exit_read` are stable tracepoints; their `ctx->args[]` layout matches the kernel ABI for `read(2)`. A BPF program written against this tracepoint on 5.4 loads and runs correctly on 6.12 with no changes.
 

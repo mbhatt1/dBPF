@@ -8,7 +8,7 @@ date: 2025-01-31
 
 > **See also**: [Blog post]({{ site.baseurl }}/the-mirror-controls.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch01-mirror-controls) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
-I was poking at `cap_capable` on a linuxkit 6.12 VM, trying to understand what an unprivileged observer could actually see from a kprobe. The function is the single choke point every capability check routes through (`security/commons.c`), so if you want to know who is asking for what, this is where you sit. What I wanted to know next was whether I could do anything about the answer.
+I was poking at `cap_capable` on a linuxkit 6.12 VM, trying to understand what an unprivileged observer could actually see from a kprobe. The function is the single choke point every capability check routes through (`security/commoncap.c`), so if you want to know who is asking for what, this is where you sit. What I wanted to know next was whether I could do anything about the answer.
 
 The short version: on a stock kernel, you cannot. `cap_capable` is not in `ALLOW_ERROR_INJECTION`, so `bpf_override_return` against it loads but never fires. The verifier accepts the program; the kernel silently ignores the override. I confirmed this by checking `/sys/kernel/debug/kprobes/list` and then by reading `kernel/bpf/verifier.c` around `check_attach_btf_id`. The result is that this chapter is about an observation channel, not a bypass. If you want the bypass you need a kernel built with `CONFIG_BPF_KPROBE_OVERRIDE=y` and the target function annotated — two conditions that almost never coincide in production.
 
@@ -43,19 +43,18 @@ The function sits in the LSM chain, which is the part that matters for anyone tr
 
 The relationship to `ns_capable` is worth mapping. `ns_capable` is the common entry point from kernel code that wants to check a capability in a specific user namespace. Its implementation in 6.12 looks approximately like:
 
+<!-- source: kernel/capability.c:351-384 -->
 ```c
-bool ns_capable(struct user_namespace *ns, int cap)
-{
-    return ns_capable_common(ns, cap, CAP_OPT_NONE);
-}
-
-static bool ns_capable_common(struct user_namespace *ns, int cap,
+static bool ns_capable_common(struct user_namespace *ns,
+                              int cap,
                               unsigned int opts)
 {
     int capable;
 
-    if (unlikely(!cap_valid(cap)))
-        return false;
+    if (unlikely(!cap_valid(cap))) {
+        pr_crit("capable() called with invalid cap=%u\n", cap);
+        BUG();
+    }
 
     capable = security_capable(current_cred(), ns, cap, opts);
     if (capable == 0) {
@@ -64,19 +63,26 @@ static bool ns_capable_common(struct user_namespace *ns, int cap,
     }
     return false;
 }
+
+bool ns_capable(struct user_namespace *ns, int cap)
+{
+    return ns_capable_common(ns, cap, CAP_OPT_NONE);
+}
 ```
 
 Every `ns_capable` call flows into `security_capable`, which dispatches to the LSM chain, which on a default kernel calls `cap_capable`. The kprobe at `cap_capable` therefore sees every capability check in the system. This is the "mirror" in the chapter's title — the function is a single reflective surface for every capability decision.
 
 The related function `capable_wrt_inode_uidgid` handles the inode-aware capability check used by filesystems. It checks `cap_capable` plus an additional inode-ownership predicate. A kprobe on `cap_capable` also sees the checks that flow through `capable_wrt_inode_uidgid`, because they end up calling `cap_capable` internally. A kprobe on `capable_wrt_inode_uidgid` separately sees only the inode-aware subset. Both attachment points are useful; which one you want depends on whether you care about the inode context or not.
 
-Line numbers, with the usual drift caveat: on 6.12 `security/commoncap.c` the `cap_capable` function sits around line 210. On 5.15 it was around line 205. The function has been stable for enough releases that a rough offset is reliable.
+<!-- source: security/commoncap.c:67 -->
+Line numbers, with the usual drift caveat: on 6.12 `security/commoncap.c` the `cap_capable` function sits around line 67. On 5.15 it was around line 205. The function has been stable for enough releases that a rough offset is reliable.
 
 The `opts` argument is the interesting one. It is a bitmask of `CAP_OPT_*` values:
 
+<!-- source: include/linux/security.h:68-72 -->
 - `CAP_OPT_NONE` (0): standard check.
-- `CAP_OPT_NOAUDIT` (1 << 0): do not generate an audit record for this check.
-- `CAP_OPT_INSETID` (1 << 1): check against the set of permitted capabilities rather than the effective set.
+- `CAP_OPT_NOAUDIT` (BIT(1), i.e. 1 << 1): do not generate an audit record for this check.
+- `CAP_OPT_INSETID` (BIT(2), i.e. 1 << 2): being called from within a setid or setgroups syscall.
 
 The `NOAUDIT` bit is the most-frequently-set. It is used by the kernel's internal code to test a capability without generating spam in the audit log. A kernel that calls `ns_capable_noaudit` on the way to a decision sets this bit; the resulting `cap_capable` invocation flows through with the bit set. The kprobe sees the bit and can surface it to the consumer.
 

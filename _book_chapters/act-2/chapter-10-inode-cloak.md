@@ -28,7 +28,7 @@ ssize_t getdents64(int fd, void *dirp, size_t count);
 
 `fd` is an open directory file descriptor. `dirp` is a user-provided buffer. `count` is the buffer's size in bytes. The return value is the number of bytes actually written; `0` means end-of-stream, negative means error.
 
-The buffer is filled with back-to-back `struct linux_dirent64` records. The struct is defined in `include/uapi/linux/dirent.h`:
+The buffer is filled with back-to-back `struct linux_dirent64` records. The struct is defined in `include/linux/dirent.h`:
 
 ```c
 struct linux_dirent64 {

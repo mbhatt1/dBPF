@@ -205,7 +205,7 @@ This is a small methodological point but it matters for the book's overall hones
 
 ## Skip 6 — Chapter 17 ACPI WSMI ping
 
-**Claim.** A kprobe on `acpi_evaluate_object` observes ACPI method invocations and, with `bpf_override_return` on `acpi_ex_execute_method`, rewrites the path argument or the return value of an ACPI ping in flight. The primitive demonstrates kernel-mediated string substitution against WMI / WSMI firmware interfaces used by laptop platform drivers.
+**Claim.** A kprobe on `acpi_evaluate_object` observes ACPI method invocations and, with `bpf_override_return` on `acpi_ps_execute_method`, rewrites the path argument or the return value of an ACPI ping in flight. The primitive demonstrates kernel-mediated string substitution against WMI / WSMI firmware interfaces used by laptop platform drivers.
 
 **What the kernel refused.** aarch64 linuxkit has no ACPI interpreter. None of the target symbols exist in `/proc/kallsyms`:
 
@@ -213,7 +213,7 @@ This is a small methodological point but it matters for the book's overall hones
 [acpi] === symbol availability ===
   acpi_evaluate_object       : ABSENT
   acpi_ns_evaluate           : ABSENT
-  acpi_ex_execute_method     : ABSENT
+  acpi_ps_execute_method     : ABSENT
 ```
 
 `/sys/firmware/acpi/` does not exist. `CONFIG_ACPI=n` on this kernel. ACPI is an x86 (and increasingly arm64-server) firmware interface; the Apple Silicon Docker Desktop linuxkit image does not build it. No call sites invoke the interpreter. No kprobe attach is possible.

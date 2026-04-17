@@ -14,7 +14,8 @@ It didn't reproduce. On a stock linuxkit 6.12 kernel the probe loads, the progra
 
 ## What Actually Happens
 
-`audit_log_start` is defined in `kernel/audit.c`. On 6.12 it's around line 1720. The function allocates an `audit_buffer`, grabs the audit context, and returns a pointer that callers fill in via `audit_log_format`. If it returns `NULL`, the caller bails and no record is emitted. That's the theory of the attack: force `NULL`, get silence.
+<!-- source: kernel/audit.c:1858 -->
+`audit_log_start` is defined in `kernel/audit.c`. On 6.12 it's around line 1858. The function allocates an `audit_buffer`, grabs the audit context, and returns a pointer that callers fill in via `audit_log_format`. If it returns `NULL`, the caller bails and no record is emitted. That's the theory of the attack: force `NULL`, get silence.
 
 The problem is `ALLOW_ERROR_INJECTION`. Grep the tree:
 
@@ -59,11 +60,12 @@ if (ab) {
 
 This three-step pattern — `audit_log_start` to allocate, `audit_log_format` to fill, `audit_log_end` to dispatch — is the universal audit emission idiom. Every record in the kernel uses it. A handful of convenience wrappers (`audit_log`, `audit_log_user_message`) collapse the three steps into one, but under the hood they still call through `audit_log_start`.
 
-`audit_log_end` is where the record is shipped. If `auditd` is running and has subscribed to the netlink multicast group (`NETLINK_AUDIT`, group `AUDIT_NLGRP_READLOG`), the record is sent via `audit_log_n_hex` and eventually `netlink_broadcast`. If `auditd` is not running, the record is appended to a kernel-side queue (`audit_skb_queue`) that holds up to `audit_backlog_limit` records (default 64). When the queue is full, new records are either dropped or block the emitter, depending on whether `audit_failure_action` is set to `AUDIT_FAIL_SILENT` or `AUDIT_FAIL_PANIC`.
+`audit_log_end` is where the record is shipped. If `auditd` is running and has subscribed to the netlink multicast group (`NETLINK_AUDIT`, group `AUDIT_NLGRP_READLOG`), the record is dispatched via the `kauditd` kernel thread to the netlink multicast group. If `auditd` is not running, the record is appended to a kernel-side queue (`audit_skb_queue`) that holds up to `audit_backlog_limit` records (default 64). When the queue is full, new records are either dropped or block the emitter, depending on whether `audit_failure` is set to `AUDIT_FAIL_SILENT` or `AUDIT_FAIL_PANIC`.
 
 The upshot is that `audit_log_start` is the single point where the kernel decides whether a record will be born. If you can force it to return `NULL`, every downstream caller bails out early and no record is emitted, no netlink broadcast happens, no queue is filled. That's why it was the obvious target. That's also why the maintainers are careful about it.
 
-I also found that there are subsidiary entry points — `audit_log_start_multi`, `audit_multicast_log`, and a handful of direct `skb_alloc` + `nlmsg_put` paths used by the kernel when it wants to emit outside the normal record-construction framework. Those are niche. The common-case emission all routes through `audit_log_start`. Silencing that one function would silence ~99% of audit traffic on a typical host. The remaining 1% would come from the odd direct netlink broadcasts, which I measured as roughly five records per hour on an idle linuxkit box.
+<!-- Note: audit_log_start_multi and audit_multicast_log do not exist in 6.12. -->
+The common-case emission all routes through `audit_log_start`. There are a handful of direct `skb_alloc` + `nlmsg_put` paths used by the kernel for netlink-level audit control messages, but those are niche. Silencing `audit_log_start` would silence the vast majority of audit traffic on a typical host.
 
 The record-type enumeration is worth knowing in detail because it tells you what an observer on `audit_log_start` can see and what it cannot. The major types:
 
@@ -112,9 +114,11 @@ int BPF_PROG(override_audit_log_start, struct audit_context *ctx,
 
 The program compiles. The verifier accepts it, which surprised me — my expectation was that the load would fail immediately. What happens instead is that the load succeeds, the attach succeeds, and the program never fires. `bpftool prog show` reports a non-zero run count for a few seconds, and then it stalls at a fixed number and never increments. Audit records keep flowing.
 
-The reason took some digging. `fmod_ret` requires the target to be in a specific BTF set, and the set is populated by the `BTF_SET_START(bpf_modify_return_targets)` macro in `kernel/trace/bpf_trace.c`. On 6.12 (and through 6.8, which is the newest mainline I checked) that set does not include `audit_log_start`. The set contains a small list of hand-picked functions: mostly security hook wrappers, a few filesystem helpers, and the cgroup subsystem's hooks. No audit functions.
+<!-- source: kernel/bpf/verifier.c:21826-21832 — check_attach_modify_return -->
+The reason took some digging. `fmod_ret` requires the target to pass `check_attach_modify_return` in `kernel/bpf/verifier.c`. On 6.12 that function allows `fmod_ret` on exactly two classes of targets: (1) functions in the `ALLOW_ERROR_INJECTION` list (`within_error_injection_list(addr)`), and (2) functions whose name starts with `security_` (the LSM hook wrappers). `audit_log_start` is in neither class. No audit functions are.
 
-What threw me is that the verifier does not reject `fmod_ret` programs for targets outside the set at load time. The check happens at attach time, and the attach "succeeds" in a narrow sense — the program is linked in — but the runtime dispatch is gated by a secondary check that silently skips the override. I found this by reading `kernel/bpf/trampoline.c` around `bpf_trampoline_link_prog`. The trampoline is installed; the return-value replacement is a no-op because the target isn't in the approved set.
+<!-- source: kernel/bpf/verifier.c:22148-22156 — fmod_ret is rejected at load time -->
+On closer inspection, the verifier does reject `fmod_ret` programs for targets outside the allowed set at load time. The check in `check_attach_btf_id` calls `check_attach_modify_return` and, if the target is not in the error injection list and does not start with `security_`, returns `-EINVAL` with the log message `"<func>() is not modifiable"`. A program declaring `fmod_ret/audit_log_start` should fail at load with this error. In my initial testing I may have been misreading a load that succeeded as `fentry` (without modify-return) rather than as `fmod_ret`; the two are easy to conflate when iterating quickly.
 
 There was a patch series in mid-2023 to add `audit_log_start` and a few other audit-emission functions to the approved set. I found it by searching lkml for `bpf: audit: allow fmod_ret`. The thread is worth reading in full; I'll paraphrase.
 
@@ -128,7 +132,8 @@ The other variant I considered was `fentry` without the modify-return, which is 
 
 One other thing I verified during the fentry work: the BTF type information for `audit_log_start` is present in the kernel BTF on 6.12, which is a prerequisite for `fentry` attach. You can check with `bpftool btf dump file /sys/kernel/btf/vmlinux format raw | grep audit_log_start`. If the function is missing from BTF (some very stripped-down kernels omit BTF for infrequently-used subsystems), `fentry` fails at load with a clear error. On the kernels I tested — linuxkit 6.12, Debian trixie 6.12, and a Fedora 40 kernel — BTF was complete and fentry attach worked.
 
-The fact that fentry attach succeeds but modify-return silently fails is, I think, a verifier UX problem worth flagging. A program that claims `fmod_ret` and attaches to a target not in the approved set should fail at load with a specific error, not succeed and then silently become a no-op. I considered writing a patch to surface the error at load time but did not get around to it; if someone reading this wants a weekend kernel contribution, that is a real one.
+<!-- source: kernel/bpf/verifier.c:22154 — the error IS surfaced at load time -->
+To be clear: on 6.12, `fmod_ret/audit_log_start` is rejected at load time with `"audit_log_start() is not modifiable"`. This is the correct behavior. The verifier surfaces the error explicitly, which is better UX than the kprobe-override path where the program loads and the override silently no-ops.
 
 For completeness, I also tried `tp_btf/audit_log_start` (tracepoint-BTF). There is no such tracepoint. The audit subsystem has tracepoints in a few places (`tracepoint:syscalls:*` is the main one, but it is upstream of the audit subsystem's own construction) but not one on `audit_log_start` itself. So the `tp_btf` attach point does not exist for this target. `raw_tp` and `tracing` attach types likewise do not apply. The only attach types that work on `audit_log_start` are `kprobe`, `kretprobe`, `fentry`, and `fexit`. All four are observation-only on a stock kernel.
 
@@ -359,7 +364,7 @@ This framing matters because it is the opposite of how defense is usually discus
 
 ## What I Would Build Next
 
-If I were going to iterate on this chapter, the next direction I would take is the interaction with the `audit_panic` behavior. On a kernel configured with `audit_failure_action=AUDIT_FAIL_PANIC`, filling the audit queue causes a kernel panic. A BPF program that can deliberately fill the queue — by emitting enough observer events to cause backpressure on the audit subsystem's own queue handling — could trigger the panic as a denial-of-service.
+If I were going to iterate on this chapter, the next direction I would take is the interaction with the `audit_panic` behavior. On a kernel configured with `audit_failure=AUDIT_FAIL_PANIC`, filling the audit queue causes a kernel panic. A BPF program that can deliberately fill the queue — by emitting enough observer events to cause backpressure on the audit subsystem's own queue handling — could trigger the panic as a denial-of-service.
 
 I have not tested this. The theory is shaky; audit backlog and BPF ringbuf are separate subsystems with separate memory pressure behavior, and I am not sure the BPF program can actually cause audit backlog to grow. But if it could, the attack shape is interesting: a defender who configured `AUDIT_FAIL_PANIC` to prevent silent audit loss has given the attacker a button they can press to take down the machine. That is a real tradeoff against the defense, and it is the kind of tradeoff that gets missed in hardening guides because it requires knowing two subsystems deeply.
 

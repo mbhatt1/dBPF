@@ -131,17 +131,17 @@ int key_task_permission(const key_ref_t key_ref,
 
 This is the function the kernel calls internally to decide whether a task has a particular permission on a key. It's called from the permission-check path for `keyctl(KEYCTL_READ, ...)`, `keyctl(KEYCTL_SEARCH, ...)`, and several other keyctl operations. It's *also* called from `request_key_and_link()` and other kernel-internal key lookup paths. It's the decision-point function for key access control — the same function the LSM hook `security_key_permission` is called from within.
 
-`key_ref_t` is a pointer with a low-bit possession flag. The kernel's `key_ref_to_ptr()` macro masks off the low two bits:
+`key_ref_t` is a pointer with a low-bit possession flag. The kernel's `key_ref_to_ptr()` inline function masks off the low bit:
 
 ```c
 /* from include/linux/key.h */
 static inline struct key *key_ref_to_ptr(const key_ref_t key_ref)
 {
-    return (struct key *) ((unsigned long) key_ref & ~3UL);
+    return (struct key *) ((unsigned long) key_ref & ~1UL);
 }
 ```
 
-Note the `& ~3UL` — two low bits masked, not one. I initially used `& ~1UL` in the POC, thinking only the bottom bit was used for possession. The kernel actually reserves two bits (one for possession, one historical that may no longer be used). The safe thing is to mask both. The final POC uses `& ~3UL`. A `& ~1UL` mask would work on most allocators that align to 4 bytes or more, because the second-lowest bit is always 0, but `& ~3UL` is what the kernel does and what you should do.
+Note the `& ~1UL` — only bit 0 is masked. That's the possession flag. The final POC uses `& ~3UL` as a defensive over-mask — two low bits instead of one. Since the kernel's slab allocator returns pointers aligned to at least 8 bytes, bits 0-2 are always zero in the real pointer, so masking one bit or two makes no difference in practice. The `& ~3UL` in the POC is strictly safe but not what the kernel does. See the discussion in the "Walking from key_ref_t to struct key" section below for the full reasoning.
 
 The BPF program:
 

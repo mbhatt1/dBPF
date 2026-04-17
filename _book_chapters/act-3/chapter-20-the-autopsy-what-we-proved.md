@@ -87,7 +87,7 @@ Four POCs, one primitive. `bpf_probe_write_user` waits for a syscall to finish, 
 
 **ch10 — getdents64 d_reclen swallow.** The POC attaches paired tracepoints on `sys_enter_getdents64` and `sys_exit_getdents64`. Entry stashes `(ubuf, count)` in a per-(pid, tgid) hash map. Exit walks the returned dirent stream (up to 64 entries per call, a verifier-bounded loop) and, for each entry whose name matches a hidden-set member, rewrites the *previous* entry's `d_reclen` to encompass the hidden entry. Userspace walkers advance by `d_reclen` each iteration and skip over the hidden file. The file is still on disk; `stat` by full path still resolves it; only enumeration via `getdents64` is blind. The `CLOAK_PROVEN before_count=4 after_count=2 hidden=2 stat_still_works=yes` marker captures exactly that.
 
-Both members of Class II taint the kernel. `bpf_probe_write_user` sets the `TAINT_USER` bit (bit 9, value 512) globally, persistent for the lifetime of the kernel, accompanied by a `KERN_WARN` dmesg line per program. Any defender grep on `/proc/sys/kernel/tainted` or on `journalctl -k | grep bpf_probe_write_user` catches every Class II member at zero cost — which is why this class is comparatively easy to detect despite being hard to prevent.
+Both members of Class II leave a kernel log trace. When a program using `bpf_probe_write_user` is loaded, the kernel emits a `pr_warn_ratelimited` message naming the process and PID that loaded it (via `bpf_get_probe_write_proto` in `kernel/trace/bpf_trace.c`). Note: in Linux 6.12, this helper does *not* set the `TAINT_USER` bit (bit 6) despite what some older documentation suggests — the warning is a dmesg log line, not a taint flag. Any defender grep on `journalctl -k | grep bpf_probe_write_user` catches every Class II program load at zero cost — which is why this class is comparatively easy to detect despite being hard to prevent.
 
 ## Detailed walkthrough: Class III — ringbuf exfiltration
 
@@ -143,7 +143,7 @@ These three motions are what `CAP_BPF` grants. Every chapter in the book is a de
 
 Detections built against the class generalize; detections built against individual primitives age. A kretprobe attached to any function on `/sys/kernel/debug/error_injection/list` is suspicious regardless of which function, because the class of intent (Class I override) is the same. One `bpftool prog list` rule that alerts on any kretprobe with `bpf_override_return` in its instruction stream catches every Class I primitive in this book and any future one built on the same mechanism.
 
-Similarly, one dmesg/taint-word rule catches every Class II primitive on the box forever. One rule on unexpected XDP attachments catches every Class IV. One rule on unexpected kprobe attachments to `audit_log_*`, `__secure_computing`, `key_task_permission`, and similar decision-point functions catches the bulk of Class III.
+Similarly, one dmesg grep for `bpf_probe_write_user` catches every Class II program load on the box. One rule on unexpected XDP attachments catches every Class IV. One rule on unexpected kprobe attachments to `audit_log_*`, `__secure_computing`, `key_task_permission`, and similar decision-point functions catches the bulk of Class III.
 
 Class V is the hardest to detect as a class because its BPF-side signature is "a kprobe that pushes to ringbuf" — indistinguishable from legitimate observability. The detection there has to be downstream: watch for privileged userspace processes that open `upperdir/` files shortly after an `ovl_copy_up` event observed on the same host. That is correlation, not a single-signal alert.
 
@@ -223,18 +223,10 @@ Two findings on a typical production box: (1) Cilium's datapath attaches a few k
 ### Class II detector
 
 ```
-awk '{if (and($1, 512)) print "TAINT_USER set at boot="strftime("%F %T", $0)}' /proc/sys/kernel/tainted
+journalctl -k --since=-1h | grep -E "bpf_probe_write_user" | sort -u
 ```
 
-One line, one alert. The `TAINT_USER` bit survives across program unloads and cannot be cleared without rebooting. If the defender's fleet has never used `bpf_probe_write_user` in legitimate tooling, this rule produces no false positives — every positive is a primitive fire.
-
-The dmesg variant is more granular because it names the program:
-
-```
-journalctl -k --since=-1h | grep -E "bpf_probe_write_user" | awk '{print $NF}' | sort -u
-```
-
-The kernel emits the program's BPF name (or truncated tag if unnamed) in the warning line. An unexpected name is an alert.
+One line, one alert. When a BPF program using `bpf_probe_write_user` is loaded, the kernel emits a `pr_warn_ratelimited` dmesg line naming the loading process and its PID (e.g., `<comm>[<pid>] is installing a program with bpf_probe_write_user helper that may corrupt user memory!`). Note: in Linux 6.12, `bpf_probe_write_user` does not set the `TAINT_USER` bit in `/proc/sys/kernel/tainted` -- the detection signal is the dmesg warning, not a taint flag. If the defender's fleet has never used `bpf_probe_write_user` in legitimate tooling, this rule produces no false positives -- every warning line is a primitive load. An unexpected process name is an alert.
 
 ### Class III detector
 
@@ -354,7 +346,7 @@ An honest assessment of the five classes requires distinguishing between how oft
 
 **Class I is rare in legitimate software.** The primary legitimate use case for `bpf_override_return` is error-injection testing: a kernel developer or a chaos engineering tool intentionally makes a function return a specific error to test recovery paths. This is a development and testing workflow, not a production workflow. On a production host, a kretprobe that calls `bpf_override_return` on a function in `/sys/kernel/debug/error_injection/list` has almost no legitimate justification. The Class I detection rule, after a single baseline pass to remove known error-injection test harnesses, should be close to zero false positives in production. Every positive after that baseline is worth investigating.
 
-**Class II is almost never legitimate.** The only common legitimate use of `bpf_probe_write_user` in production software is ad-hoc `bpftrace` scripts that a developer attaches for a debugging session and detaches shortly after. No commercial observability tool uses `bpf_probe_write_user` in steady state — the helper is too dangerous, too detectable (taint word), and too fragile (memory-layout sensitivity). The Class II detection rule (taint word, dmesg grep) has a near-zero false-positive rate on any host that does not permit live `bpftrace` debugging sessions. In a hardened environment where `bpftrace` is not installed or not accessible to non-root users, any `TAINT_USER` bit set is an incident.
+**Class II is almost never legitimate.** The only common legitimate use of `bpf_probe_write_user` in production software is ad-hoc `bpftrace` scripts that a developer attaches for a debugging session and detaches shortly after. No commercial observability tool uses `bpf_probe_write_user` in steady state — the helper is too dangerous, too detectable (dmesg warning), and too fragile (memory-layout sensitivity). The Class II detection rule (dmesg grep for `bpf_probe_write_user`) has a near-zero false-positive rate on any host that does not permit live `bpftrace` debugging sessions. In a hardened environment where `bpftrace` is not installed or not accessible to non-root users, any `bpf_probe_write_user` warning in dmesg is an incident.
 
 **Class V has no legitimate use case.** The OverlayFS copy-up race in ch02 serves no purpose outside of proof-of-concept research and adversarial use. No observability tool, no scheduler, no storage agent writes to container upperdir files based on copy-up kprobe events. The Class V detection correlation — kprobe on `ovl_copy_up*` plus privileged open of a file under `upperdir/` shortly after — has a theoretical false-positive rate of approximately zero. Any firing of that correlation is a confirmed incident. The alarm level for Class V should be the highest of the five, even though (or because) it is the rarest class in production software.
 

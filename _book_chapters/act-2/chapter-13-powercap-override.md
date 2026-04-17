@@ -10,7 +10,7 @@ date: 2025-03-10
 
 ## The Honest Opening
 
-I want to be fully honest about this one before describing anything else. Intel RAPL and the powercap framework are x86-only. On the aarch64 linuxkit kernel I am using as my test bed, `CONFIG_POWERCAP` is off and none of the RAPL-related symbols exist. My loader preflighted four targets — `powercap_register_control_type`, `powercap_set_max_power_uw`, `powercap_get_max_power_uw`, `thermal_zone_device_update` — and every single one came back absent in `/proc/kallsyms`. The primary POC cannot fire on this host. I don't get to pretend otherwise, and this chapter is not going to.
+I want to be fully honest about this one before describing anything else. Intel RAPL is x86-only; the powercap framework itself is architecture-independent (it also has ARM SCMI and DTPM backends), but the RAPL targets I care about require x86. On the aarch64 linuxkit kernel I am using as my test bed, `CONFIG_POWERCAP` is off and none of the RAPL-related symbols exist. My loader preflighted four targets — `powercap_register_control_type`, `powercap_get_max_power_uw`, `powercap_get_energy_uj`, `thermal_zone_device_update` — and every single one came back absent in `/proc/kallsyms`. The primary POC cannot fire on this host. I don't get to pretend otherwise, and this chapter is not going to.
 
 What this chapter does instead is document two separate things. First, what the primitive shape of a powercap override would look like on an x86 Intel host where the symbols exist — the hooks, the attach points, the expected data flow, the detection posture. Second, an analog I actually ran on aarch64 to demonstrate the same userspace-illusion mechanic against a synthetic sensor, using tracepoints on `sys_enter_read` and `sys_exit_read` plus `bpf_probe_write_user` to rewrite a reader's user buffer in flight.
 
@@ -26,10 +26,9 @@ The hooks of interest for a BPF attack:
 
 | Hook | Purpose | On aarch64 linuxkit |
 | --- | --- | --- |
-| `kprobe/powercap_register_control_type` | fires once per driver init (rapl, intel_pmc) | ABSENT |
-| `kprobe/powercap_set_max_power_uw` | any write to `max_power_uw` constraint | ABSENT |
-| `kprobe/powercap_get_max_power_uw` | any read from `max_power_uw` constraint | ABSENT |
-| `kprobe/powercap_get_energy_uj` | any read from energy counter | ABSENT |
+| `kprobe/powercap_register_control_type` | fires once per driver init (rapl, scmi, dtpm) | ABSENT |
+| `kprobe/powercap_get_max_power_uw` | any read from `max_power_uw` constraint (callback in `powercap_zone_ops`) | ABSENT |
+| `kprobe/powercap_get_energy_uj` | any read from energy counter (callback in `powercap_zone_ops`) | ABSENT |
 | `kprobe/thermal_zone_device_update` | thermal engine notifications | ABSENT |
 
 On an Intel host where these resolve, the observer half of the attack is straightforward. Attach kprobes, pull arguments out of `pt_regs`, emit ringbuf events tagged with PID, comm, and the raw first two arguments to each call. That gives a defender precise visibility into who is touching the power envelope and when. It also gives an attacker precise visibility into where the monitoring stack is looking for RAPL data, which is useful recon for the offense.
@@ -38,7 +37,7 @@ The override half is more interesting and has multiple possible attach points de
 
 **Goal 1: Make the power monitoring show idle power while the chip is actually boiling.** The attacker wants `turbostat`, `netdata`, Kepler, `perf stat -e power/energy-pkg/`, or whatever else reads the RAPL energy counter, to see a flat line while the chip is running at full blast. The cleanest attach point is `kretprobe/powercap_get_energy_uj` returning a fixed value — or ideally, a slowly-incrementing value that looks like idle but is not frozen. Userspace consumers that read `/sys/class/powercap/intel-rapl:0/energy_uj` go through this path. If the function is in `ALLOW_ERROR_INJECTION`, a kretprobe-plus-override lands. I do not have an x86 host to check the allowlist against, but the powercap framework was authored with testing in mind and some of its functions do have the annotation.
 
-**Goal 2: Raise the power cap past what the BIOS or OS configured.** The attacker wants to run the chip past its thermal limits — for a cryptocurrency mining or a thermal-attack scenario. The attach point here is `kprobe/powercap_set_max_power_uw`, rewriting the value being written or intercepting it entirely. This requires the function to be in the error-injection allowlist (unlikely) or an LSM-level bypass on the sysfs write (more plausible). The effect is that the chip runs with a higher TDP than the OS believes, consuming more power and producing more heat than the envelope allows.
+**Goal 2: Raise the power cap past what the BIOS or OS configured.** The attacker wants to run the chip past its thermal limits — for a cryptocurrency mining or a thermal-attack scenario. The attach point here is a kprobe on the `set_power_limit_uw` callback in the powercap zone ops (the specific function name depends on the RAPL driver implementation), rewriting the value being written or intercepting it entirely. This requires the function to be in the error-injection allowlist (unlikely) or an LSM-level bypass on the sysfs write (more plausible). The effect is that the chip runs with a higher TDP than the OS believes, consuming more power and producing more heat than the envelope allows.
 
 **Goal 3: Suppress thermal-trip-critical notifications.** The attacker wants to combine goal 2 with defeating the kernel's thermal engine, so the chip can run past its junction temperature without the OS taking any emergency action. Attach point is `kprobe/thermal_zone_device_update` or `kretprobe/thermal_critical_notify`, intercepting the critical-temperature notification path. On a healthy chip this is a tightly-coupled safety mechanism; bypassing it is a recipe for actual hardware damage, and the attack is only interesting in scenarios where the attacker doesn't care about damaging the hardware.
 

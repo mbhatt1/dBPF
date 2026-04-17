@@ -73,7 +73,7 @@ int BPF_PROG(flipper, struct file *file, int mask)
 
 The LSM chain's combination rule is all-must-grant. A BPF LSM program returning `0` allows the check from the BPF LSM's perspective, but the static LSM's decision is also combined in. If SELinux returned `-EACCES`, the final chain result is `-EACCES` — the BPF `0` does not override the SELinux deny. This is the standard LSM combination and it is what prevents BPF from being a general override mechanism.
 
-The flip, in this form, is not actually a flip. It is a second policy layer that also grants. To actually override a static LSM deny, a different mechanism is needed, and the mechanism is `fmod_ret`. BPF LSM `fmod_ret` programs run after the static LSMs and can set the LSM hook's final return value directly. Not every LSM hook supports `fmod_ret`; the set of supported hooks is defined in `kernel/bpf/bpf_lsm.c` via `BTF_SET_START(bpf_lsm_hooks)`. On 6.12 the set is extensive but not universal. `file_open`, `file_permission`, `inode_permission`, and roughly 200 other hooks are included.
+The flip, in this form, is not actually a flip. It is a second policy layer that also grants. To actually override a static LSM deny, a different mechanism is needed, and the mechanism is `fmod_ret`. BPF LSM `fmod_ret` programs run after the static LSMs and can set the LSM hook's final return value directly. Not every LSM hook supports BPF attachment; the set of supported hooks is defined in `kernel/bpf/bpf_lsm.c` where `BTF_SET_START(bpf_lsm_hooks)` includes all hooks from `lsm_hook_defs.h`, and a separate `BTF_SET_START(bpf_lsm_disabled_hooks)` blacklists specific hooks that are incompatible (e.g., `vm_enough_memory`, `inode_need_killpriv`, `inode_getsecurity`). On 6.12 the effective set is nearly all LSM hooks minus a small disabled list. `file_open`, `file_permission`, `inode_permission`, and most other hooks are included.
 
 A real flipper on a SELinux-enforcing kernel uses non-sleepable LSM hooks — `SEC("lsm/file_permission")`, `SEC("lsm/inode_permission")`, `SEC("lsm/bprm_check_security")` — with the understanding that fmod_ret semantics apply. Non-sleepable (`lsm/` not `lsm.s/`) because the programs use no sleepable helpers (`bpf_d_path`, `bpf_copy_from_user`, etc.); they only inspect pointer arguments and the trailing return value. The program runs after the static LSMs and the final return value is the BPF program's return. When the static LSM returned `-EACCES` and the BPF program returns `0`, the chain result is `0` and the denial is flipped. This is the primitive the chapter documents.
 
@@ -258,7 +258,7 @@ The `SEC("lsm.s/file_open")` annotation declares the program as a sleepable LSM 
 
 `bpf_d_path` is a sleepable helper. Its implementation in `kernel/trace/bpf_trace.c` calls `d_path`, the kernel's standard path-reconstruction function, which walks the dentry tree and can sleep under memory pressure (it may need to allocate, may need to take locks that sleep). A non-sleepable BPF program cannot call `bpf_d_path`. The verifier rejects the program at load time with a "helper not allowed in this context" error.
 
-The LSM hook must also be sleepable for a `.s` program to attach. The kernel declares LSM hooks as sleepable in `include/linux/lsm_hook_defs.h` via the `LSM_HOOK` macro's variant forms. On 6.12, `file_open` is sleepable. `inode_permission` is not. `file_permission` is not.
+The LSM hook must also be sleepable for a `.s` program to attach. The kernel declares which LSM hooks are sleepable in `kernel/bpf/bpf_lsm.c` via the `BTF_SET_START(sleepable_lsm_hooks)` set, which is checked by `bpf_lsm_is_sleepable_hook()`. On 6.12, `file_open` is in the sleepable set. `inode_permission` is not. `file_permission` is not.
 
 The practical consequence is a decision tree for LSM programs:
 
@@ -275,7 +275,7 @@ The kernel's BTF information for LSM hooks is the source of truth about which ho
 # bpftool btf dump file /sys/kernel/btf/vmlinux | grep -E "file_open|file_permission|inode_permission" | head
 ```
 
-produces the function signatures for each hook. The sleepable flag is encoded in the kernel-internal `bpf_lsm_hooks` set, not in BTF, so BTF alone does not tell you which hooks are sleepable. The authoritative source is the `BPF_LSM_HOOK` macro expansion in `include/linux/lsm_hook_defs.h` combined with the sleepable declarations in `kernel/bpf/bpf_lsm.c`. The practical way to determine sleepability at runtime is to attempt the attach with `.s` and observe the error, or to consult the kernel source for the target version.
+produces the function signatures for each hook. The sleepable flag is encoded in the kernel-internal `sleepable_lsm_hooks` BTF set in `kernel/bpf/bpf_lsm.c`, not in the generic `LSM_HOOK` definitions in `include/linux/lsm_hook_defs.h`, so the hook definition file alone does not tell you which hooks are sleepable. The authoritative source is the `BTF_SET_START(sleepable_lsm_hooks)` block in `kernel/bpf/bpf_lsm.c`. The practical way to determine sleepability at runtime is to attempt the attach with `.s` and observe the error, or to consult the kernel source for the target version.
 
 A related consideration is that `bpf_d_path` has its own security considerations. The helper's security hook (`bpf_d_path`'s KF_ACQUIRE attribute) requires that the caller have a reference on the `path` being resolved. In the `file_open` context, the `struct file *` argument holds such a reference via the file's `f_path` member. Other LSM hooks that hand the program a raw `struct path *` without a guaranteed reference cannot safely call `bpf_d_path`. This is why the POC specifically takes `struct file *` from the hook and dereferences `file->f_path` rather than taking a `struct path *` directly; the reference is guaranteed by the `file` argument. An incorrectly-written LSM program that tries to call `bpf_d_path` on an unreferenced `path` will produce verifier errors or, worse, runtime instability.
 
@@ -375,19 +375,19 @@ echo "after_rc=$AFTER_RC (expected=0, success)"
 
 The synthetic variant uses one program with a map toggle rather than two programs (one denier, one flipper) attached to the same hook. This is not a stylistic choice; it is required by the LSM chain's short-circuiting behavior.
 
-The LSM chain for a given hook is walked by `call_int_hook`, a macro defined in `include/linux/lsm.h`. The macro expands to a loop over the registered handlers for the hook, stopping at the first handler that returns a non-zero value. For a hook with handlers A, B, C, the effective logic is:
+The LSM chain for a given hook is walked by `call_int_hook`, a macro defined in `security/security.c`. The macro expands to a loop over the registered handlers for the hook, stopping at the first handler that returns a value different from the hook's default return (`LSM_RET_DEFAULT`). For security hooks like `file_permission` and `file_open`, the default is `0` (allow), so any non-zero return short-circuits. For a hook with handlers A, B, C, the effective logic is:
 
 ```c
-int rc = 0;
+int rc = LSM_RET_DEFAULT(hook);  // 0 for most security hooks
 for (handler in [A, B, C]) {
     rc = handler(args);
-    if (rc != 0)
-        break;  // Short-circuit on first non-zero return.
+    if (rc != LSM_RET_DEFAULT(hook))
+        break;  // Short-circuit on first non-default return.
 }
 return rc;
 ```
 
-This is the "first deny wins" semantic of the LSM chain. A handler that returns `-EACCES` prevents later handlers from running. A handler that returns `0` allows the loop to continue to the next handler.
+This is the "first deny wins" semantic of the LSM chain for hooks whose default is `0`. A handler that returns `-EACCES` prevents later handlers from running. A handler that returns `0` allows the loop to continue to the next handler.
 
 The consequence for a denier+flipper pair is severe. If program A (the denier) is registered before program B (the flipper) on the same LSM hook, and program A returns `-EACCES`, program B never runs. The flip cannot happen because the flipper never executes. If the order is reversed — flipper first, denier second — the flipper returns `0`, the denier then returns `-EACCES`, and the final result is `-EACCES`. The flipper's `0` does not override the denier's `-EACCES`, because the final result is determined by the first non-zero return (or by the combination rule described above, which is equivalent for the fmod_ret case).
 
@@ -399,7 +399,7 @@ The single-program-two-stage design is the honest way to demonstrate both halves
 
 There is a deeper kernel-architecture observation in this constraint. The LSM chain's first-deny-wins semantic is a deliberate design choice that prevents policy composition bugs: if two LSMs disagree, the safer (more restrictive) decision wins. This is the right default for a security subsystem. A mechanism that allowed a later LSM to override an earlier LSM's denial would let any installed LSM trivially disable policy enforcement by other LSMs, which is the opposite of what a security subsystem should allow. The synthetic variant's inability to express "denier then flipper" as two programs is not a bug; it is evidence that the LSM chain is working as designed.
 
-The fmod_ret mechanism sidesteps this design by letting BPF programs run at a specific position in the chain (after the static LSMs, with combination semantics that let the BPF program set the final return value), but only for hooks the BPF LSM maintainers have decided can safely accept the mechanism. The allowlist in `bpf_lsm_hooks` is the maintainers' judgment about which hooks are safe to expose to runtime return-value modification. `file_open` is on the list; `selinux_bprm_committing_creds` (which has persistent state effects) is not. The maintainers review new additions on a case-by-case basis; the list grows slowly.
+The fmod_ret mechanism sidesteps this design by letting BPF programs run at a specific position in the chain (after the static LSMs, with combination semantics that let the BPF program set the final return value), but only for hooks the BPF LSM maintainers have decided can safely accept the mechanism. The `bpf_lsm_hooks` set includes nearly all LSM hooks from `lsm_hook_defs.h`, with a small `bpf_lsm_disabled_hooks` blacklist for hooks whose return types or semantics are incompatible (e.g., `vm_enough_memory`, `inode_need_killpriv`, `inode_getsecurity`). `file_open` is in the enabled set; hooks on the disabled list are rejected at attach time. The maintainers review additions to the disabled list on a case-by-case basis.
 
 On the BPF LSM design, the canonical reference is KP Singh's 2020 patch series (lore.kernel.org/bpf/20200220175250.10795-1-kpsingh@chromium.org). The cover letter explains the design goals: allow BPF programs to attach as LSMs, run after the static LSMs, participate in the chain's decision, with fmod_ret semantics for hooks where it is safe. The review discussion on that series is the primary source for understanding why the allowlist is structured the way it is. Readers interested in adding new hooks to the allowlist should read the original thread; it sets the precedent for what the maintainers ask for before they accept a hook addition.
 

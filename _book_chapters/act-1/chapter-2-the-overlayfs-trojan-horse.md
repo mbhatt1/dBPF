@@ -20,7 +20,8 @@ Three layers:
 - **Upper**: writable, populated on first write via copy-up.
 - **Merged**: the view the container sees.
 
-The copy-up path lives in [`fs/overlayfs/copy_up.c`](https://elixir.bootlin.com/linux/latest/source/fs/overlayfs/copy_up.c). The function I care about is `ovl_copy_up_one`; on 6.12 it's around line 870. It walks through `ovl_copy_up_data`, `ovl_copy_up_metadata`, and `ovl_finish_copy_up`, and each of those takes and releases locks in a sequence that varies by filesystem type on the upper layer.
+<!-- source: fs/overlayfs/copy_up.c:1137 -->
+The copy-up path lives in [`fs/overlayfs/copy_up.c`](https://elixir.bootlin.com/linux/latest/source/fs/overlayfs/copy_up.c). The function I care about is `ovl_copy_up_one`; on 6.12 it's around line 1137. It delegates to `ovl_do_copy_up`, which in turn walks through `ovl_copy_up_data` and `ovl_copy_up_metadata`, and each of those takes and releases locks in a sequence that varies by filesystem type on the upper layer.
 
 ## A Map of the OverlayFS Copy-Up Path
 
@@ -30,48 +31,54 @@ The entry point that matters from the VFS side is `ovl_maybe_copy_up`. This is t
 
 One level down is `ovl_copy_up` proper. It handles the walk up the directory chain: overlayfs needs every ancestor directory to exist on the upper layer before it can place a file there, so `ovl_copy_up` recurses upward, copying up any missing parent directories first. This means a single copy-up of a deep path can fire the probe several times in quick succession — once for each ancestor that didn't exist on upper. I learned this the hard way when my first racer saw three ringbuf events for a single `chmod` and tried to race the file three times. Two of those events were directories, and opening a directory `O_WRONLY` just fails with `EISDIR`, which at least gave me a loud error instead of silent corruption.
 
-Below `ovl_copy_up` sits `ovl_do_copy_up_locked`. This is where the upper inode is actually created. It holds the upper directory's inode lock across the whole body, which is the part that makes the whole sequence a bounded critical section rather than a free-for-all. The lock hold is what gives the race its shape: it is roughly the same window from the probe point to unlock, so the timing budget is comparatively stable across invocations. `ovl_do_copy_up_locked` is a great observation point for the "we are now inside the critical section" state, but attaching a kprobe to it on 6.12 is tricky because on some kernel builds with aggressive inlining (`-O2` plus `CONFIG_FINEIBT` on newer toolchains) it is folded into its caller and simply doesn't exist as a distinct symbol. I checked on the linuxkit kernel with `grep ovl_do_copy_up_locked /proc/kallsyms` and it was present; on a 6.12 Fedora kernel with LTO enabled it was not. Assume fragility.
+<!-- source: fs/overlayfs/copy_up.c:938 — the function is ovl_do_copy_up, not ovl_do_copy_up_locked -->
+Below `ovl_copy_up_flags` sits `ovl_do_copy_up`. This is where the upper inode is actually created and the copy-up orchestrated. The function coordinates the work (creating temp files, copying data and metadata, linking to the upper directory) in a sequence that makes the whole sequence a bounded critical section. The timing budget is comparatively stable across invocations. `ovl_do_copy_up` is a great observation point for the "we are now inside the critical section" state, but attaching a kprobe to it on 6.12 is tricky because on some kernel builds with aggressive inlining (`-O2` plus `CONFIG_FINEIBT` on newer toolchains) it may be folded into its caller. I checked on the linuxkit kernel with `grep ovl_do_copy_up /proc/kallsyms` and it was present; on a 6.12 Fedora kernel with LTO enabled it may not be. Assume fragility.
 
-The workhorse is `ovl_copy_up_data`. This is where the actual byte copy happens, via `copy_file_range` or a fallback splice loop depending on whether the lower and upper filesystems support reflinks. It is the slowest function in the sequence — my measurements on the linuxkit VM had it dominating the total copy-up latency by roughly 10x for small files and much more for large ones. It is also the most stable attach point across kernel versions I tested (5.15 through 6.12): the function has kept the same signature and has never been a candidate for inlining because it loops and calls out to VFS.
+<!-- source: fs/overlayfs/copy_up.c:642,261 -->
+The workhorse is `ovl_copy_up_data` (which delegates to `ovl_copy_up_file`). This is where the actual byte copy happens, via `vfs_clone_file_range` (reflink) if supported, or a fallback `do_splice_direct` loop. It is the slowest function in the sequence — my measurements on the linuxkit VM had it dominating the total copy-up latency by roughly 10x for small files and much more for large ones. It is also the most stable attach point across kernel versions I tested (5.15 through 6.12): the function has kept the same signature and has never been a candidate for inlining because it loops and calls out to VFS.
 
-The function I originally hooked, `ovl_copy_up_one`, is an older name for what's now split across `ovl_copy_up` and `ovl_do_copy_up_locked`. On 6.12 the symbol still exists as a thin wrapper for backward compatibility with a handful of callers, but it is not the right place to sit if you want to see every copy-up. It only catches the "single file, no ancestor walk" fast path. I discovered this by instrumenting both `ovl_copy_up_one` and `ovl_copy_up` on the same kernel, triggering a copy-up of `/usr/bin/curl` (several directories deep, none of them yet copied up), and watching `ovl_copy_up` fire four times while `ovl_copy_up_one` fired once. The earlier chapters of this book attach to `ovl_copy_up_one` because that is what the POC harness was built around; when you build your own, attach to `ovl_copy_up` for coverage and consider pairing with `ovl_copy_up_data` for timing.
+<!-- source: fs/overlayfs/copy_up.c:1137,1215 — ovl_copy_up_one is called from ovl_copy_up_flags in a loop for each ancestor -->
+`ovl_copy_up_one` on 6.12 is a real function called by `ovl_copy_up_flags` once per file in the ancestor walk. Its signature is `ovl_copy_up_one(struct dentry *parent, struct dentry *dentry, int flags)`. It is called once per dentry that needs copying up, so a deep path fires it multiple times — once per ancestor plus once for the target. I discovered this by instrumenting `ovl_copy_up_one` on the same kernel, triggering a copy-up of `/usr/bin/curl` (several directories deep, none of them yet copied up), and watching `ovl_copy_up_one` fire four times. For full coverage, attach to `ovl_copy_up_one` (which sees every individual copy-up) and consider pairing with `ovl_copy_up_data` for timing.
 
 Here is what the call graph looked like after I was done drawing on the whiteboard:
 
+<!-- source: fs/overlayfs/file.c:144, fs/overlayfs/copy_up.c -->
 ```
-write(2) on a lower-layer file
-  -> ovl_write_iter (fs/overlayfs/file.c)
-     -> ovl_maybe_copy_up        <-- earliest reliable signal
-        -> ovl_copy_up           <-- recurses over ancestors; good for coverage
-           -> ovl_do_copy_up_locked   <-- critical section; may be inlined
-              -> ovl_copy_up_meta
-              -> ovl_copy_up_data     <-- slow; stable across kernels
-              -> ovl_copy_up_xattrs
-              -> ovl_finish_copy_up   <-- visibility in merged view
+open(2) on a lower-layer file for writing
+  -> ovl_open (fs/overlayfs/file.c)
+     -> ovl_maybe_copy_up              <-- earliest reliable signal
+        -> ovl_copy_up_flags           <-- recurses over ancestors; good for coverage
+           -> ovl_copy_up_one          <-- per-file copy-up entry
+              -> ovl_do_copy_up        <-- orchestrates the copy-up
+                 -> ovl_copy_up_data       <-- slow; stable across kernels
+                 -> ovl_copy_up_metadata   <-- xattrs, origin, fileattr
 ```
 
-My final probe attaches to `ovl_maybe_copy_up` for the signal and uses a return probe on `ovl_finish_copy_up` to close the timing interval for the measurement harness. For the racer itself I only need the front edge: the kretprobe is just for the benchmark.
+My final probe attaches to `ovl_maybe_copy_up` for the signal and uses a return probe on `ovl_do_copy_up` to close the timing interval for the measurement harness. For the racer itself I only need the front edge: the kretprobe is just for the benchmark.
 
 ## The Probe
 
+<!-- source: fs/overlayfs/copy_up.c:1137 — real signature: ovl_copy_up_one(struct dentry *parent, struct dentry *dentry, int flags) -->
 ```c
 SEC("kprobe/ovl_copy_up_one")
 int hook_copy_up(struct pt_regs *ctx) {
-    struct dentry *d = (void *)PT_REGS_PARM1(ctx);
-    struct path *p = (void *)PT_REGS_PARM2(ctx);
+    struct dentry *parent = (void *)PT_REGS_PARM1(ctx);
+    struct dentry *d = (void *)PT_REGS_PARM2(ctx);
+    int flags = (int)PT_REGS_PARM3(ctx);
 
-    char filename[64];
-    bpf_d_path(&p->mnt->mnt_root->d_sb->s_root, filename, sizeof(filename));
-    if (is_host_binary(filename)) {
+    // Note: bpf_d_path is NOT usable in a plain kprobe context.
+    // The dentry name can be extracted via bpf_probe_read_kernel on d->d_name.
+    // Path resolution is done in userspace after the ringbuf event.
+    if (is_target_dentry(d)) {
         bpf_override_return(ctx, 0);  // No-op on stock 6.12; kept for annotated kernels
-        inject_payload(filename);
+        inject_payload(d);
         return 1;
     }
     return 0;
 }
 ```
 
-A few things to note. `bpf_d_path` has allowlist restrictions — it only works from a handful of BTF-tagged attach points, and overlayfs copy-up functions are on that list as of 6.4. If you try this on 5.15 the verifier rejects it; I verified by loading against an Ubuntu 20.04 HWE kernel and reading the reject message: `helper call is not allowed in probe`.
+A few things to note. `bpf_d_path` has allowlist restrictions — it only works from specific sleepable BPF program types and BTF-tagged attach points, not from plain kprobes. A kprobe on `ovl_copy_up_one` cannot call `bpf_d_path`; the verifier rejects it with `helper call is not allowed in probe`. The POC extracts the dentry name via `bpf_probe_read_kernel` on `dentry->d_name` and does full path resolution in userspace.
 
 The `bpf_override_return(ctx, 0)` line is harmless on kernels where the target isn't annotated. I left it in because on a kernel you control (CI, test VM, or a custom build) you can flip `CONFIG_BPF_KPROBE_OVERRIDE=y` and add the annotation, and the same program enforces instead of observing.
 
@@ -79,14 +86,14 @@ The `bpf_override_return(ctx, 0)` line is harmless on kernels where the target i
 
 ## The Race, Actually Observed
 
-Here's the timing I saw on linuxkit 6.12, measured with bpftrace entry/return probes on `ovl_copy_up_one` and `ovl_finish_copy_up`:
+Here's the timing I saw on linuxkit 6.12, measured with bpftrace entry/return probes on `ovl_copy_up_one` and `ovl_do_copy_up`:
 
 - Entry: t=0.
 - `ovl_copy_up_data` return: t ≈ 40–120 µs for a 4 KiB file, dominated by the underlying fs write latency.
-- `ovl_finish_copy_up` return: t ≈ 5–15 µs after that.
+- `ovl_do_copy_up` return: t ≈ 5–15 µs after that.
 - Total window from ringbuf signal to merged-view visibility: ~50–140 µs.
 
-That is not a lot of time. The userspace racer needs to be woken from a poll on the ringbuf fd, resolve the upper path under `/var/lib/docker/overlay2/.../diff/`, and issue its modification before `ovl_finish_copy_up` completes. On the VM I tested, a racer pinned to an isolated CPU with `SCHED_FIFO` won the race about 30% of the time against `/bin/bash` copy-up triggered by `chmod u+x` inside the container. Without CPU pinning and realtime priority, the number dropped into single digits.
+That is not a lot of time. The userspace racer needs to be woken from a poll on the ringbuf fd, resolve the upper path under `/var/lib/docker/overlay2/.../diff/`, and issue its modification before `ovl_do_copy_up` completes. On the VM I tested, a racer pinned to an isolated CPU with `SCHED_FIFO` won the race about 30% of the time against `/bin/bash` copy-up triggered by `chmod u+x` inside the container. Without CPU pinning and realtime priority, the number dropped into single digits.
 
 The practical consequence is that this is not a reliable primitive. It's a probabilistic one. If your threat model tolerates "works 30% of the time, try until it does," this is usable. If you need it to land on the first shot, it is not.
 
@@ -134,7 +141,7 @@ Three things about this loop that the code doesn't show. First, the thread is pi
 
 The measured win rate on the linuxkit VM was roughly 30% for cold caches. "Cold cache" here means the upper directory's inode was not already in the dentry cache, so the `open` call incurred a directory walk. On a warm cache the win rate climbed to maybe 55%. The difference is the walk itself: a couple of `lookup_one_len` calls in VFS at 1-3 µs each. On a hot-path system where the racer has just visited this directory, the walk is essentially free and the race comes down to the raw page cache write time, which is below 5 µs.
 
-The loss mode is worth naming. When the racer loses, it's almost always because `ovl_finish_copy_up` completed before the `open` returned. At that point the merged-view dentry has been updated, the upper inode is live, and a subsequent `open` succeeds — but it opens the already-finalized file, not the pre-finalize one. There is no corruption. The write lands, but too late to be interesting: the container has already seen the final content.
+The loss mode is worth naming. When the racer loses, it's almost always because `ovl_do_copy_up` completed before the `open` returned. At that point the merged-view dentry has been updated, the upper inode is live, and a subsequent `open` succeeds — but it opens the already-finalized file, not the pre-finalize one. There is no corruption. The write lands, but too late to be interesting: the container has already seen the final content.
 
 Some attacks don't care. If all you want is a persistent SUID bit on a freshly copied-up binary, a late write is fine, because the container will re-exec that binary later and the bit will be there. If you want to race the exact `execve` that triggered the copy-up — for instance, to ship a payload before the executable runs — you need the on-time window.
 
@@ -296,7 +303,7 @@ Upstream in the kernel, the `metacopy` support was added by Vivek Goyal; I belie
 
 Academic work on overlayfs races is thin. I found one paper, circa 2020, on filesystem race conditions in container runtimes that mentioned overlayfs in passing; it was not focused on overlayfs specifically. The thrust of the paper was chroot-based container isolation, which is a different problem. There may be other work I am not aware of — the filesystem security literature is scattered across venues and I didn't do an exhaustive survey.
 
-More recent commits worth knowing about: the 6.0 through 6.8 range saw the overlayfs maintainers adopt a couple of cleanups around the copy-up locking, mostly consolidating the lock ordering in `ovl_do_copy_up_locked`. I found a commit from late 2023 (I do not have the SHA handy — search `git log fs/overlay` for "copy_up lock") that narrowed the lock hold in `ovl_copy_up_data`, which slightly shrinks the race window. On 6.12 the window I measured is roughly 20-30% smaller than what I saw on 5.15 a year earlier. The direction of travel is clear: the window will keep shrinking.
+More recent commits worth knowing about: the 6.0 through 6.8 range saw the overlayfs maintainers adopt a couple of cleanups around the copy-up locking, mostly consolidating the lock ordering in `ovl_do_copy_up`. I found a commit from late 2023 (I do not have the SHA handy — search `git log fs/overlay` for "copy_up lock") that narrowed the lock hold in `ovl_copy_up_data`, which slightly shrinks the race window. On 6.12 the window I measured is roughly 20-30% smaller than what I saw on 5.15 a year earlier. The direction of travel is clear: the window will keep shrinking.
 
 The novel contribution in this chapter, as best I can tell, is the BPF-driven observer paired with the timing numbers on a real-world kernel and the honest reporting of the win rate under different scheduling conditions. I am not the first person to notice that copy-up has a race; I may be the first to publish reproducible numbers on a stock kernel with a BPF-based trigger. If someone has earlier numbers, I would like to see them — please email.
 

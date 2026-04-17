@@ -149,7 +149,7 @@ Five POCs did not fire on this kernel and recorded why. These are the ones the h
 
 **ch13 (powercap override)** — the target symbol `powercap_get_max_power_uw` is not in `/proc/kallsyms`. No RAPL on aarch64 linuxkit. The loader's symbol preflight catches this and skips. The `ch13a` analog (userspace sensor substitution) covers the primitive shape.
 
-**ch17 (ACPI WSMI native)** — the target symbols `acpi_evaluate_object`, `acpi_ns_evaluate`, `acpi_ex_execute_method` are all absent from kallsyms, as is the runtime `request_firmware` caller surface (no drivers call it, no `test_firmware` module is available). The loader prints `CH17_SKIP reason="no acpi nor firmware symbols"` and exits 2. The `ch17a` analog (userspace openat-path substitution) covers the primitive shape.
+**ch17 (ACPI WSMI native)** — the target symbols `acpi_evaluate_object`, `acpi_ns_evaluate`, `acpi_ps_execute_method` are all absent from kallsyms, as is the runtime `request_firmware` caller surface (no drivers call it, no `test_firmware` module is available). The loader prints `CH17_SKIP reason="no acpi nor firmware symbols"` and exits 2. The `ch17a` analog (userspace openat-path substitution) covers the primitive shape.
 
 Chapter 21 does the full skip accounting — each skip mapped to the specific kernel configuration axis that disarmed it (subsystem absence, BTF completeness, LSM enforcement state, error-injection membership), and for each one, the concrete configuration on which the primitive would fire.
 
