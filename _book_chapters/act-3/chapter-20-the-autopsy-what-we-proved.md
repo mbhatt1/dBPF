@@ -91,13 +91,13 @@ Both members of Class II leave a kernel log trace. When a program using `bpf_pro
 
 ## Detailed walkthrough: Class III — ringbuf exfiltration
 
-This is the largest class, six representative chapters. Nothing in the kernel changes; the kernel state that the probe reads becomes visible to a peer process via ringbuf.
+This is the largest class, seven representative chapters. Nothing in the kernel changes; the kernel state that the probe reads becomes visible to a peer process via ringbuf.
 
 **ch03 — audit record exfil.** The POC attaches kprobes to `audit_log_start`, `audit_log_format`, and `audit_log_end`. Every kernel-side audit record-construction sequence — one `_start`, zero or more `_format`s, one `_end` — is copied out-of-band. An unprivileged peer with `CAP_BPF` sees every audit record the kernel builds, which on an SELinux-enforcing host includes every AVC decision, every execve, every config change. The normal access path (netlink multicast group with `CAP_AUDIT_READ`) requires privilege the peer does not have; the ringbuf bypass gives it that access.
 
 **ch04 — phantom syscall.** The POC attaches a tracepoint on `sys_enter_write`. When the user buffer starts with `"PHANTOM\0"`, the handler tail-calls into a second BPF program that reads `current->cred->uid`, `current->cred->euid`, and `current->real_parent->comm` via `BPF_CORE_READ` and pushes them to a ringbuf. The unprivileged process issued one `write()` syscall. Three kernel-private fields left the kernel. Seccomp filters that allow `write()` see exactly one syscall — that is the threat model seccomp was designed for; the argument-content-based sidechannel is outside that model by design, not by failure.
 
-**ch08k — keyring description leakage (kprobe variant).** The native LSM fmod_ret variant (`SEC("lsm/key_permission")`) skips because BTF forward-declares `struct key` for the LSM hook's argument type. The workaround in `dBPF-pocs/pocs/ch08-keyring-heist-kprobe/` kprobes `key_task_permission`, takes `PT_REGS_PARM1` as opaque u64, masks the `key_ref_t` possession bits, and uses `BPF_CORE_READ(key, description)` and `BPF_CORE_READ(key, type, name)` against the full `struct key` in vmlinux.h (which DOES have the complete type info despite the LSM hook's argument-type metadata being forward-declared). Same kernel data, different program type, the verifier accepts. An unprivileged `keyctl print <id>` returns EACCES at the syscall level; the ringbuf contains the key's description and type. Category: `real` (the kprobe variant hooks the real kernel function, not a synthetic surface).
+**ch08k — keyring description leakage (kprobe variant).** The harness registers both ch08 (primary) and ch08k (kept kprobe variant). An LSM fmod_ret on `lsm/key_permission` would have been ideal but is not viable on kernels where BTF forward-declares `struct key` for the LSM hook's argument type. The kprobe variant in `dBPF-pocs/pocs/ch08-keyring-heist-kprobe/` kprobes `key_task_permission`, takes `PT_REGS_PARM1` as opaque u64, masks the `key_ref_t` possession bits, and uses `BPF_CORE_READ(key, description)` and `BPF_CORE_READ(key, type, name)` against the full `struct key` in vmlinux.h (which DOES have the complete type info despite any LSM hook argument metadata being forward-declared). Same kernel data, different program type, the verifier accepts. An unprivileged `keyctl print <id>` returns EACCES at the syscall level; the ringbuf contains the key's description and type. Category: `real` (the kprobe variant hooks the real kernel function, not a synthetic surface).
 
 **ch09 — cross-namespace PID mapping.** The POC attaches `SEC("raw_tp/sched_process_fork")` and emits when `task->pid_ns_for_children->ns.inum` differs from the parent's — which is exactly when a `CLONE_NEWPID` took effect. The event carries `(host_pid, ns_pid, ns_inum, comm)`. An unprivileged process inside the namespace sees itself as ns_pid=1; a peer on the host reads the ringbuf and learns the host_pid of that process. The trigger demonstrates end-to-end: spawn a victim via `unshare -Upf`, read the ringbuf, resolve `/proc/<host_pid>/status` (containing an `NSpid:` line that confirms the mapping), and send `kill -TERM` across the namespace boundary. The container thought it was isolated. The attacker on the host disagreed.
 
@@ -155,41 +155,36 @@ This is not a new idea. The `d_reclen` swallow trick for `getdents64` has been i
 
 ## The meta-result
 
-Every primitive in this book is one of three motions: change the syscall return, rewrite the user buffer, or copy the decision out-of-band. These three motions are what `CAP_BPF` grants. The twenty-five POCs (twenty demonstrated, five skipped) across eighteen chapters are demonstrations that granting `CAP_BPF` grants access to all three motions across a representative surface of kernel subsystems. That is the capability, operating as designed. The four-category system (`real`, `observer`, `illusion`, `analog`) ensures honest labelling of what each demonstration actually proved. The blue-team implication is in chapter 22.
+Every primitive in this book is one of three motions: change the syscall return, rewrite the user buffer, or copy the decision out-of-band. These three motions are what `CAP_BPF` grants. The twenty registered POCs across the eighteen chapters (18 fire on linuxkit, 2 on the Fedora 42 aarch64 QEMU VM) are demonstrations that granting `CAP_BPF` grants access to all three motions across a representative surface of kernel subsystems. That is the capability, operating as designed. The four-category system (`real`, `observer`, `illusion`, `analog`) ensures honest labelling of what each demonstration actually proved. The blue-team implication is in chapter 22.
 
 ## Master table
 
-All 25 POCs, mapped to category, primitive class, SEC hooks, BPF primitive used, and effect. Status is `effect_demonstrated` unless noted as `skip`.
+All 20 registered POCs, mapped to category, primitive class, SEC hooks, BPF primitive used, and effect. Status is `effect_demonstrated` on linuxkit unless otherwise noted.
 
 | POC | Category | Class | SEC / attach | BPF primitive | Effect (marker) | Notes |
 |-----|----------|-------|-------------|---------------|-----------------|-------|
 | ch01 | real | I | kprobe+kretprobe `cap_capable`; LSM variant (not in harness): `SEC("lsm/inode_permission")` | `bpf_send_signal(SIGUSR1)` on deny (override is silently no-op) / LSM fmod_ret in the unregistered LSM variant | deny observed + SIGUSR1 delivered (`CH01_WEAPON_PROVEN flips=N signals=N`) | |
 | ch02 | real | V | kprobe `ovl_copy_up*` + ringbuf | ringbuf + userspace racer | Copy-up race won, payload injected (`[ch02] PWNED path=... bytes=... hits=...`) | |
-| ch03 | observer | III | kprobe `audit_log_start/format/end` | ringbuf exfiltration | Audit records exfiltrated (`CH03_PROVEN variant=kprobe before=N after=M`) | Cannot mutate; read-only observation. An unregistered fentry variant exists in `ch03-fuse-blackhole-fentry/`. |
+| ch03 | observer | III | kprobe `audit_log_start/format/end` | ringbuf exfiltration | Audit records exfiltrated (`CH03_PROVEN variant=kprobe before=N after=M`) | Cannot mutate; read-only observation. |
 | ch04 | real | III | tracepoint `tp/syscalls/sys_enter_write` | tail-call + ringbuf + `bpf_send_signal(SIGUSR1)` | Phantom-syscall kernel fields leaked, SIGUSR1 delivered on exfil (`CH04_PROVEN leaked_fields=N` / `EXFIL_COMPLETE exfil=N signals=M` / `SIGUSR1_SENT`) | Portable tracepoint — not arch-gated |
 | ch05 | real | II | tracepoint `sys_exit_read` | `bpf_probe_write_user` | cgroup `cpu.stat` user buffer zeroed (`CH05_PROVEN ... zeroed=yes patched_events=N`) | |
 | ch05b | real | IV | `SEC("xdp")` on veth | `XDP_DROP` + ringbuf | Packets vanish from tcpdump (`GHOST_COVERT_CHANNEL_PROVEN dropped=2 tcpdump=0`) | |
-| ch06 | observer | I | `SEC("lsm/file_permission")` + `SEC("lsm/inode_permission")` + `SEC("lsm/bprm_check_security")` | LSM fmod_ret | **SKIP** — SELinux not enforcing on this kernel | |
-| ch06s | analog | I | `SEC("lsm.s/file_open")` (sleepable, needs `bpf_d_path`) | LSM fmod_ret | Synthetic deny+flip demonstrated (`CH06_CONCEPT_PROVEN`) | Sleepable LSM; only POC using `lsm.s/` |
-| ch07 | real | I | kprobe+kretprobe `devcgroup_check_permission` | observe deny + `bpf_send_signal(SIGUSR2)` + ringbuf | Device-cgroup deny observed and SIGUSR2 delivered (`CH07_WEAPON_PROVEN …`) | Different binary from ch07w; native kprobe path |
-| ch07w | analog | I | `SEC("lsm/inode_mknod")` + `SEC("lsm/file_open")` (synthetic) | LSM fmod_ret | Synthetic deny+flip demonstrated (`CH07_CONCEPT_PROVEN before_rc=N after_rc=0`) | Different binary (`ch07-devcgroup-houdini-lsm/`); LSM variant |
-| ch08 | real | I | `SEC("lsm/key_permission")` | LSM fmod_ret | **SKIP** — BTF forward-declares `struct key` | Would be Class I if it fired |
-| ch08k | real | III | kprobe `key_task_permission` | ringbuf exfiltration | Keyring description leaked (`CH08_CONCEPT_PROVEN events=N`) | Workaround for ch08's BTF issue |
+| ch06 | observer | I | BPF LSM `fmod_ret` on SELinux hooks (`bpf-lsm` capability check) | LSM fmod_ret | **Skips on linuxkit** (no SELinux policy); fires on Fedora 42 aarch64 QEMU VM (`CH06_PROVEN`) | Primary ch06 PoC |
+| ch06o | observer | III | kprobe `avc_has_perm` / `avc_has_perm_noaudit` / `selinux_file_permission` | ringbuf exfiltration | SELinux decisions exfiltrated (`CH06_PROVEN hook=...`); prints `CH06_SKIP reason=...` if SELinux absent | Kept kprobe observer variant |
+| ch07 | real | I | kprobe+kretprobe `devcgroup_check_permission` | observe deny + `bpf_send_signal(SIGUSR2)` + ringbuf | Device-cgroup deny observed and SIGUSR2 delivered (`CH07_WEAPON_PROVEN …`) | Native kprobe path |
+| ch08 | real | III | kprobe `key_task_permission` / `lookup_user_key` | ringbuf exfiltration | Keyring descriptions exfiltrated (`CH08_PROVEN` / `CH08_WEAPON_PROVEN` / `EXFIL=...`) | Primary ch08 PoC, kprobe not LSM |
+| ch08k | real | III | kprobe `key_task_permission` / `lookup_user_key` | ringbuf exfiltration | Keyring description leaked (`CH08_CONCEPT_PROVEN events=N`) | Kept kprobe variant — real kprobe, not synthetic |
 | ch09 | real | III | `SEC("raw_tp/sched_process_fork")` + `SEC("kprobe/copy_namespaces")` | ringbuf exfiltration + `bpf_send_signal(SIGUSR1)` (armed via `cfg` map) | Cross-namespace PID mapping exposed; SIGUSR1 delivered on match (`CH09_PROVEN host_pid=N mapped=yes` / `PID_NS_ESCAPE_PROVEN` / `SIGUSR1_SENT`) | Category=`real` per `proof.py` (default) |
 | ch10 | real | II | tracepoint `sys_enter/exit_getdents64` | `bpf_probe_write_user` | `d_reclen` swallow hides entries (`CLOAK_PROVEN before_count=4 after_count=2 hidden=2`) | |
 | ch11 | real | III | kprobe `handle_irq_event` / `__handle_irq_event_percpu` / `handle_irq_event_percpu` | ringbuf + per-CPU timing histogram (`last_ts` + `timing_hist` maps) | Per-IRQ timing covert channel (`CH11_PROVEN events=N unique=M` / `IRQ_COVERT_CHANNEL_PROVEN timed_events=N`) | Cannot mutate; atomic/IRQ context. Category=`real` per `proof.py` (default) |
-| ch12 | real | I | `SEC("lsm/kernel_read_file")` | LSM fmod_ret | **SKIP** — no module signature enforcement | |
+| ch12 | real | I | `SEC("lsm/kernel_read_file")` | LSM fmod_ret | **Skips on linuxkit** (no `CONFIG_MODULE_SIG_FORCE`); fires on Fedora 42 aarch64 QEMU VM (`CH12_PROVEN` / `CH12_WEAPON_PROVEN`) | Primary ch12 PoC |
 | ch12s | illusion | I | kretprobe `__arm64_sys_finit_module` | `bpf_override_return` | finit_module return forged (`CH12_CONCEPT_PROVEN`) | aarch64-only; kernel state unchanged |
-| ch13 | — | — | kprobe `powercap_get_max_power_uw` | — | **SKIP** — no RAPL on aarch64 | x86-only subsystem |
-| ch13a | analog | II | tracepoint `sys_enter/exit_read` | `bpf_probe_write_user` | Fake sensor file rewrite (`CH13_ANALOG_PROVEN`) | Synthetic /tmp file, not real RAPL |
 | ch14 | illusion | I | kretprobe `__arm64_sys_sched_setscheduler` | `bpf_override_return` | sched_setscheduler return forged (`SCHED_WEAPON_PROVEN flips=N`) | aarch64-only; kernel state unchanged |
 | ch15 | real | IV | `SEC("xdp")` on veth | `bpf_redirect_map` + `bpf_xdp_adjust_head` | Cross-namespace VLAN redirect (`VLAN_GHOST_CROSSNS_PROVEN redirect_count=N`) | |
 | ch16 | observer | III | kprobe+kretprobe `__secure_computing` | ringbuf exfiltration | Seccomp decision exfiltrated (`SECCOMP_SIDECHANNEL_PROVEN events=N`) | Seccomp threat model excludes CAP_BPF sibling |
-| ch17 | real | — | kprobe `request_firmware` / `acpi_evaluate_object` | — | **SKIP** — no ACPI/firmware symbols on aarch64 | x86-only subsystem |
-| ch17a | analog | II | tracepoint `sys_enter_openat` | `bpf_probe_write_user` | Fake firmware file path swap (`CH17_ANALOG_PROVEN`) | Synthetic /tmp file, not real firmware |
 | ch18 | illusion | I | kretprobe `__arm64_sys_getuid` + `__arm64_sys_geteuid` | `bpf_override_return` | Token-bypass uid forged (`TOKEN_FORGE_PROVEN uid_forges=N`) | aarch64-only; kernel state unchanged |
 
-**Category counts**: real=15, observer=3, illusion=3, analog=4 (total 25, per `proof.py` where `category` defaults to `"real"`). **Status counts**: effect_demonstrated=20, skip=5, fail=0.
+**Category counts** (from literal `category=` assignments in `proof.py` plus the `"real"` default): real=13, observer=4, illusion=3, analog=0 (total 20). **Status counts**: 18 demonstrate on linuxkit; 2 (ch06 LSM, ch12 LSM) skip on linuxkit and demonstrate on the Fedora 42 aarch64 QEMU VM; across-environment total 20 demonstrated, 0 failures.
 
 ## Onward
 
@@ -354,7 +349,7 @@ The rarity gradient runs from Class III (ubiquitous, low alarm per-event) throug
 
 ## Cross-references
 
-- Chapter 21 is the opposite accounting: the five primitives that did not fire on this kernel (ch06, ch08, ch12, ch13, ch17 natives), and the specific environmental reasons they were refused.
+- Chapter 21 is the opposite accounting: the two primitives that do not fire on linuxkit (ch06 LSM, ch12 LSM), the secondary Fedora 42 aarch64 QEMU VM where they do fire, and the specific environmental reasons the linuxkit skips occur.
 - Chapter 22 maps each class to concrete mitigations a defender can deploy at the capability-grant boundary, at the program-load boundary, and at runtime.
 - The harness entry for each chapter (`dBPF-pocs/harness/proof.py`) is the single source of truth for proof markers and expected BEFORE/AFTER outputs. When in doubt about what a chapter actually demonstrates, read the `Poc(...)` entry and the chapter's `trigger.sh`.
 
