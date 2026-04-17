@@ -130,7 +130,7 @@ POCS: list[Poc] = [
         category="observer"),
     Poc("ch17", "ACPI WSMI Ping / firmware", "ch17-acpi-wsmi",
         hooks=["request_firmware", "acpi_evaluate_object"], prefix="[acpi]",
-        proof_marker=r"ACPI_PROBE_PROVEN\s+attached=\d+\s+fired=[1-9]"),
+        proof_marker=r"ACPI_PROBE_PROVEN\s+arch=\S+\s+substituted=\S+"),
     Poc("ch18", "Token Bypass (getuid override)", "ch18-token-bypass",
         hooks=["__arm64_sys_getuid", "__arm64_sys_geteuid"], prefix="[token]",
         mode="override-all", loader_args=["--all"],

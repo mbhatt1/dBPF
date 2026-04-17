@@ -10,7 +10,7 @@ date: 2025-04-15
 
 Cross-namespace XDP redirect via `bpf_redirect_map` is not novel. Cilium's datapath has used the pattern since approximately 2019 for legitimate cross-namespace forwarding in service-mesh topologies. `tc-bpf` and `xdp-tutorial` examples have demonstrated it in pedagogical form for about the same span. The primitive is mature, documented, and shipping in a large fraction of production Kubernetes clusters today.
 
-What is new in this chapter is the *direction*. Cilium uses the redirect to pull traffic into the right namespace on the way toward a pod. This POC uses the redirect to ferry covert, VLAN-tagged traffic between two tenant-style namespaces without the tagged frames ever being visible to the host-side VLAN-aware bridge or netfilter. The orchestrator's "VLAN 4242 is trunk traffic for tenant A" configuration is bypassed because the XDP program strips the tag before the stack sees the frame, and then redirects the now-untagged payload into a peer veth in a namespace that was supposed to be isolated. The VLAN tag never reaches the bridge, netfilter never sees the frame, and the destination namespace receives an ordinary-looking ethernet frame on its ingress device.
+What is new in this chapter is the *direction*. Cilium uses the redirect to pull traffic into the right namespace on the way toward a pod. This POC uses the redirect to ferry covert, VLAN-tagged traffic between two tenant-style namespaces without the tagged frames ever being visible to the host-side VLAN-aware bridge or netfilter. The orchestrator's "VLAN 142 is trunk traffic for tenant A" configuration is bypassed because the XDP program strips the tag before the stack sees the frame, and then redirects the now-untagged payload into a peer veth in a namespace that was supposed to be isolated. The VLAN tag never reaches the bridge, netfilter never sees the frame, and the destination namespace receives an ordinary-looking ethernet frame on its ingress device.
 
 The threat model to be honest about: VLAN-based segmentation was never designed to resist host-level XDP. XDP runs as a peer to the netdev, below the bridge layer, below netfilter, below anything a VLAN-aware config could enforce. A program attached to the host side of a veth sees every frame that arrives at the device, tagged or untagged, before the orchestrator's policy has any chance to act. If you have `CAP_BPF` on the host — and in most of the multi-tenant deployments where VLANs are the isolation mechanism, *somebody* has that capability — there is no VLAN-enforcement layer that XDP cannot preempt. Calling this a "VLAN escape" is overselling it. A more accurate framing: host-level XDP is a privileged capability, and the orchestrators that depend on VLAN segmentation for tenant isolation are depending on an assumption (no unsanctioned XDP) that they do not usually enforce.
 
@@ -41,11 +41,11 @@ ghost_a (attacker)  <--veth_a---veth_host-->  [host]  <--veth_host2---veth_b--> 
 - The two veth pairs are *not* bridged together. In a legitimate deployment, frames emitted on `veth_a` arrive on `veth_host` and terminate there; there is no L2 path to `veth_host2`.
 - The attacker is in `ghost_a`. The goal is to deliver a frame from `ghost_a` into `ghost_b` without any packet-routing configuration in the host having a path between them.
 
-The XDP program runs on the host-side `veth_host`. When a frame tagged with VLAN 4242 arrives from `ghost_a`, the program strips the VLAN tag, and `bpf_redirect_map`s the now-untagged frame to `veth_host2`. The kernel delivers it across the veth pair into `ghost_b`. The victim namespace receives a frame it was never supposed to see.
+The XDP program runs on the host-side `veth_host`. When a frame tagged with VLAN 142 arrives from `ghost_a`, the program strips the VLAN tag, and `bpf_redirect_map`s the now-untagged frame to `veth_host2`. The kernel delivers it across the veth pair into `ghost_b`. The victim namespace receives a frame it was never supposed to see.
 
 The trigger script (`trigger.sh`) builds the topology from scratch with `ip netns add ghost_a`, `ip netns add ghost_b`, `ip link add veth_host type veth peer name veth_a netns ghost_a`, and the mirror on the other side. It assigns IPs (`192.168.77.1/24` on `veth_host`, `192.168.77.4/24` on `veth_host2`, `192.168.77.2/24` inside `ghost_a`, `192.168.77.3/24` inside `ghost_b`), brings everything up, and demonstrates that there is no L2 path between the namespaces under normal operation.
 
-That "no path" property is the control. The BEFORE phase of the trigger sends three VLAN-4242-tagged frames from inside `ghost_a` and runs `tcpdump` on `veth_host2` expecting to see zero. It sees zero; the frames arrive at `veth_host`, the host has nothing configured to forward them to `veth_host2`, and they are dropped. The AFTER phase loads the XDP program and sends three more frames. `tcpdump` on `veth_host2` now sees three untagged frames with inner ethertype `0x88b5` (IEEE Local Experimental 1), which is what the BPF program produced after strip-and-redirect.
+That "no path" property is the control. The BEFORE phase of the trigger sends three VLAN-142-tagged frames from inside `ghost_a` and runs `tcpdump` on `veth_host2` expecting to see zero. It sees zero; the frames arrive at `veth_host`, the host has nothing configured to forward them to `veth_host2`, and they are dropped. The AFTER phase loads the XDP program and sends three more frames. `tcpdump` on `veth_host2` now sees three untagged frames with inner ethertype `0x88b5` (IEEE Local Experimental 1), which is what the BPF program produced after strip-and-redirect.
 
 BEFORE and AFTER on the same script, same netns, same sender: that is the proof. The path didn't exist and then existed, and the only change between the two phases is the XDP program attached to `veth_host`.
 
@@ -54,12 +54,12 @@ BEFORE and AFTER on the same script, same netns, same sender: that is the proof.
 The attached program is `ch15-netns-vlan-ghost.bpf.c`. Walk it in order.
 
 ```c
-#define COVERT_VLAN_ID 4242
+#define COVERT_VLAN_ID 142
 #define ETH_P_8021Q    0x8100
 #define VLAN_VID_MASK  0x0FFF
 ```
 
-`4242` was chosen because it does not collide with any of the VLANs I use in other test harnesses. The 802.1Q ethertype is the standard `0x8100`. The VID mask is the low 12 bits of the TCI field (Tag Control Information); the upper 4 bits are PCP (Priority Code Point, 3 bits) and DEI (Drop Eligible Indicator, 1 bit), both of which we do not care about for matching.
+`142` was chosen because it does not collide with any of the VLANs I use in other test harnesses, and — unlike an earlier draft of this POC that used `4242` — it stays inside the 12-bit VID range (0–4095). The 4242 value overflowed and the carry bits ended up in the PCP field; reducing to a real VID fixed that. The 802.1Q ethertype is the standard `0x8100`. The VID mask is the low 12 bits of the TCI field (Tag Control Information); the upper 4 bits are PCP (Priority Code Point, 3 bits) and DEI (Drop Eligible Indicator, 1 bit), both of which we do not care about for matching.
 
 ```c
 struct {
@@ -121,7 +121,7 @@ If the ethertype is not `0x8100`, this is not an 802.1Q frame and we fall throug
     if (vid != COVERT_VLAN_ID) return XDP_PASS;
 ```
 
-Parse the VLAN header. `vlan_hdr` comes from `vmlinux.h` and has the standard layout: a 16-bit TCI followed by a 16-bit inner ethertype. Extract the VID from the TCI and compare against 4242. Frames tagged with any other VID fall through.
+Parse the VLAN header. `vlan_hdr` comes from `vmlinux.h` and has the standard layout: a 16-bit TCI followed by a 16-bit inner ethertype. Extract the VID from the TCI and compare against 142. Frames tagged with any other VID fall through.
 
 ```c
     unsigned char dst_mac[6], src_mac[6];
@@ -353,7 +353,7 @@ info = fcntl.ioctl(s.fileno(), SIOCGIFHWADDR,
                    struct.pack('256s', ifname[:15]))
 src_mac = info[18:24]
 dst_mac = b'\xff\xff\xff\xff\xff\xff'
-tci = (0 << 13) | 4242
+tci = (0 << 13) | 142
 vlan_hdr  = struct.pack('!HH', 0x8100, tci)
 inner_eth = struct.pack('!H', 0x88b5)
 payload   = b'GHOSTVLAN-covert-channel-message\x00' * 2
@@ -362,7 +362,7 @@ for _ in range(3):
     s.send(frame)
 ```
 
-A raw AF_PACKET socket, bound to `veth_a` inside `ghost_a`. The frame is constructed byte-by-byte: broadcast destination, the local veth's MAC as source, the VLAN header (0x8100 ethertype + TCI with VID 4242), the inner ethertype 0x88b5, and a recognizable payload. Three frames, sent sequentially.
+A raw AF_PACKET socket, bound to `veth_a` inside `ghost_a`. The frame is constructed byte-by-byte: broadcast destination, the local veth's MAC as source, the VLAN header (0x8100 ethertype + TCI with VID 142), the inner ethertype 0x88b5, and a recognizable payload. Three frames, sent sequentially.
 
 The choice of 0x88b5 as the inner ethertype is deliberate: it is IEEE Local Experimental 1, one of two ethertypes reserved for research and experimental use. It is unused by any standard protocol. That makes the AFTER-side tcpdump filter trivially precise: `tcpdump -i veth_host2 'ether proto 0x88b5'` matches only these frames and nothing else in the noise of a container host. The BEFORE count (expected zero) and AFTER count (expected three) are both scraped from the tcpdump output to produce the proof marker.
 
@@ -374,7 +374,7 @@ Broadcast destination MAC was chosen over unicast to sidestep any MAC-learning o
 
 1. **Setup**: create `ghost_a`, `ghost_b`, the two veth pairs, assign IPs, bring interfaces up. Verify the topology is in place. This phase should produce no covert-channel evidence.
 
-2. **BEFORE**: start `tcpdump -i veth_host2 -c 3 'ether proto 0x88b5'` in the background. Send three VLAN-4242-tagged frames from inside `ghost_a` on `veth_a`. Wait up to 2 seconds for tcpdump to capture or time out. Expect capture count 0 (no XDP, no path from veth_a/veth_host to veth_host2).
+2. **BEFORE**: start `tcpdump -i veth_host2 -c 3 'ether proto 0x88b5'` in the background. Send three VLAN-142-tagged frames from inside `ghost_a` on `veth_a`. Wait up to 2 seconds for tcpdump to capture or time out. Expect capture count 0 (no XDP, no path from veth_a/veth_host to veth_host2).
 
 3. **AFTER**: load the XDP program on `veth_host -> veth_host2`. Start a fresh tcpdump with the same filter. Send three more frames. Expect capture count 3, with untagged ethertype 0x88b5.
 
@@ -395,7 +395,7 @@ The BEFORE phase is essential. Without it, an observer who saw three frames on `
 `Poc("ch15", ...)` in `proof.py`:
 
 ```python
-Poc("ch15", "NetNS VLAN Ghost (XDP VID=4242)", "ch15-netns-vlan-ghost",
+Poc("ch15", "NetNS VLAN Ghost (XDP VID=142)", "ch15-netns-vlan-ghost",
     hooks=["veth"], prefix="[vghost]", mode="trigger-runs-loader",
     timeout=20,
     proof_marker=r"VLAN_GHOST_CROSSNS_PROVEN"),
@@ -435,7 +435,7 @@ Detection is straightforward if you know what to look for.
 
 **Helper-pair audit**: programs that call both `bpf_xdp_adjust_head` and `bpf_redirect_map` are rare outside dataplane software. `bpftool prog dump xlated` shows the helper-call opcodes. A program with that pair, not belonging to a known CNI, is worth flagging.
 
-**Off-host taps**: if the orchestrator's management plane can tap the upstream switch or the NIC itself (via mirror port or `hwtraffic`), it sees every frame that enters the host regardless of what XDP does on the host. An upstream tap would show the VLAN-4242 frames leaving `ghost_a` before the XDP strip, which is an out-of-band confirmation that the tagged frame was real. Cross-referencing the upstream capture against the on-host netfilter logs (which would show *no* VID 4242 frames because XDP preempted the stack) reveals the XDP interposition.
+**Off-host taps**: if the orchestrator's management plane can tap the upstream switch or the NIC itself (via mirror port or `hwtraffic`), it sees every frame that enters the host regardless of what XDP does on the host. An upstream tap would show the VLAN-142 frames leaving `ghost_a` before the XDP strip, which is an out-of-band confirmation that the tagged frame was real. Cross-referencing the upstream capture against the on-host netfilter logs (which would show *no* VID 142 frames because XDP preempted the stack) reveals the XDP interposition.
 
 The off-host tap is the hardest-to-evade detection. Everything above it runs on the compromised host and is potentially subject to the same attacker who attached the XDP program.
 
@@ -650,7 +650,7 @@ docker run --rm -v "$PWD":/work -w /work dbpf-base \
 
 SIGINT/SIGTERM detaches XDP from every interface it attached to; if the loader exits via any error path, `detach_all()` still runs.
 
-End-to-end demo (creates ghost_a / ghost_b netns, sends one VLAN-4242-tagged AF_PACKET frame from inside ghost_a, sniffs egress on veth_host2):
+End-to-end demo (creates ghost_a / ghost_b netns, sends one VLAN-142-tagged AF_PACKET frame from inside ghost_a, sniffs egress on veth_host2):
 
 ```
 docker run --rm --privileged --pid=host \
@@ -672,4 +672,4 @@ docker run --rm --privileged --pid=host \
 - Docker Desktop linuxkit aarch64: veth drivers do not implement native XDP; the loader falls back to SKB-mode (or use `--skb` to skip the probe). Native-mode redirect is unavailable.
 - `bpf_redirect_map` to a device in another netns requires the egress device to also have an XDP program loaded on many kernels; the loader attaches the same program there.
 - The verifier rejects skb writes from kprobe context, so the chapter's original `__netif_receive_skb_core` mutation cannot be done directly. XDP at the NIC edge is the equivalent primitive.
-- `arping` and `ping` will not generate the covert frames reliably; the trigger uses an embedded AF_PACKET sender for deterministic VLAN-4242 emission with inner ethertype `0x88b5`.
+- `arping` and `ping` will not generate the covert frames reliably; the trigger uses an embedded AF_PACKET sender for deterministic VLAN-142 emission with inner ethertype `0x88b5`.

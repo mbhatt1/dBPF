@@ -10,7 +10,7 @@ date: 2025-03-10
 
 ## The Honest Opening
 
-I want to be fully honest about this one before describing anything else. Intel RAPL is x86-only; the powercap framework itself is architecture-independent (it also has ARM SCMI and DTPM backends), but the RAPL targets I care about require x86. On the aarch64 linuxkit kernel I am using as my test bed, `CONFIG_POWERCAP` is off and none of the RAPL-related symbols exist. My loader preflighted four targets — `powercap_register_control_type`, `powercap_get_max_power_uw`, `powercap_get_energy_uj`, `thermal_zone_device_update` — and every single one came back absent in `/proc/kallsyms`. The primary POC cannot fire on this host. I don't get to pretend otherwise, and this chapter is not going to.
+I want to be fully honest about this one before describing anything else. Intel RAPL is x86-only; the powercap framework itself is architecture-independent (it also has ARM SCMI and DTPM backends), but the RAPL targets I care about require x86. On the aarch64 linuxkit kernel I am using as my test bed, `CONFIG_POWERCAP` is off and none of the RAPL-related symbols exist. My loader preflighted four targets — `powercap_register_control_type`, `powercap_get_max_power_uw`, `powercap_set_max_power_uw`, `thermal_zone_device_update` — and every single one came back absent in `/proc/kallsyms`. The primary POC cannot fire on this host. I don't get to pretend otherwise, and this chapter is not going to.
 
 What this chapter does instead is document two separate things. First, what the primitive shape of a powercap override would look like on an x86 Intel host where the symbols exist — the hooks, the attach points, the expected data flow, the detection posture. Second, an analog I actually ran on aarch64 to demonstrate the same userspace-illusion mechanic against a synthetic sensor, using tracepoints on `sys_enter_read` and `sys_exit_read` plus `bpf_probe_write_user` to rewrite a reader's user buffer in flight.
 
@@ -28,7 +28,7 @@ The hooks of interest for a BPF attack:
 | --- | --- | --- |
 | `kprobe/powercap_register_control_type` | fires once per driver init (rapl, scmi, dtpm) | ABSENT |
 | `kprobe/powercap_get_max_power_uw` | any read from `max_power_uw` constraint (callback in `powercap_zone_ops`) | ABSENT |
-| `kprobe/powercap_get_energy_uj` | any read from energy counter (callback in `powercap_zone_ops`) | ABSENT |
+| `kprobe/powercap_set_max_power_uw` | any write to the power-envelope limit (callback in `powercap_zone_ops`) | ABSENT |
 | `kprobe/thermal_zone_device_update` | thermal engine notifications | ABSENT |
 
 On an Intel host where these resolve, the observer half of the attack is straightforward. Attach kprobes, pull arguments out of `pt_regs`, emit ringbuf events tagged with PID, comm, and the raw first two arguments to each call. That gives a defender precise visibility into who is touching the power envelope and when. It also gives an attacker precise visibility into where the monitoring stack is looking for RAPL data, which is useful recon for the offense.

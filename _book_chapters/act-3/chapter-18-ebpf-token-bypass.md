@@ -645,4 +645,4 @@ Send `SIGINT` (Ctrl-C) to detach cleanly.
 - aarch64 only. Symbols are spelled `__arm64_sys_getuid` / `__arm64_sys_geteuid`. On x86_64 they would be `__x64_sys_getuid` / `__x64_sys_geteuid`. The loader's symbol preflight disables affected programs cleanly if absent.
 - `bpf_override_return` only succeeds on functions present in `/sys/kernel/debug/error_injection/list`. Both targets happen to be on the linuxkit 6.12 list. On a hardened kernel without these entries, the kretprobe will attach but the override silently no-ops; the loader will still emit non-`flipped` events but the userspace illusion will not occur.
 - Userspace illusion only. No kernel access check is bypassed. This is intentional — the POC demonstrates the class of bug, which is identical in shape to the historical "trust-the-query, not-the-cred" CVEs.
-- Requires `CAP_BPF` + `CAP_PERFMON` (or root). Inside Docker, run with `--privileged --pid=host`.
+- Requires `CAP_SYS_ADMIN` (because `bpf_override_return` demands it — `CAP_BPF`+`CAP_PERFMON` is not sufficient for override). Inside Docker, run with `--privileged --pid=host`.

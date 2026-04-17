@@ -34,10 +34,11 @@ struct evt {
     char comm[16];
     char parent_comm[16];
     char payload[32];
+    int signal_sent;
 };
 ```
 
-Six fields, 72 bytes on a 64-bit target, not counting padding. The `comm` buffers are 16 bytes because `TASK_COMM_LEN` is 16 in the kernel; matching that size prevents truncation when reading from `task_struct->comm`. The 32-byte payload is the remainder of the user buffer after the 8-byte magic prefix. The numeric fields carry the process identity and the credential fields stage 2 will extract.
+Seven fields, 76 bytes on a 64-bit target before alignment. The `comm` buffers are 16 bytes because `TASK_COMM_LEN` is 16 in the kernel; matching that size prevents truncation when reading from `task_struct->comm`. The 32-byte payload is the remainder of the user buffer after the 8-byte magic prefix. The numeric fields carry the process identity and the credential fields stage 2 will extract. The `signal_sent` field is 1 when the BPF program successfully delivered a `SIGUSR1` into the caller via `bpf_send_signal` on an exfil match — the PoC's active side-effect beyond the observer path.
 
 The program declares three maps. A ringbuf for events; a `BPF_MAP_TYPE_PROG_ARRAY` for the tail call; and a single-entry per-CPU array that serves as scratch space between stage 1 and stage 2:
 

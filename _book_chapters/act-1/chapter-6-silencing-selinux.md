@@ -289,7 +289,7 @@ The return convention is the number of bytes written, including the NUL terminat
 
 ## Stage control via signals
 
-The loader `ch06-silence-selinux-lsm-synthetic.c` uses POSIX signals to drive the stage transitions. The signal handler at line 56 captures the three signals the loader responds to:
+The loader `ch06-silence-selinux-lsm-synthetic.c` uses POSIX signals to drive the stage transitions. The signal handler at line 56 captures the five signals the loader responds to — three stage-transition signals (`SIGUSR1`, `SIGUSR2`, `SIGHUP`) plus `SIGINT` and `SIGTERM` for clean shutdown:
 
 ```c
 static void on_sig(int s)

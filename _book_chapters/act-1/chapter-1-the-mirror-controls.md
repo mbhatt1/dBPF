@@ -140,10 +140,11 @@ struct evt {
     int cap;
     int orig_ret;
     int flipped;
+    int signal_sent;
 };
 ```
 
-The struct is six fields, 40 bytes on aarch64 with alignment. Ringbuf reservations are aligned to 8 bytes, so the practical per-event cost is 48 bytes. A 256-KB ringbuf holds about 5000 events before the consumer has to drain. On the test harness, `capset` fires three to five `cap_capable` checks per call, so a 256-KB ringbuf absorbs roughly 1500 `capset` invocations before backpressure. Good enough.
+The struct is seven fields, 44 bytes on aarch64 with alignment. Ringbuf reservations are aligned to 8 bytes, so the practical per-event cost is 48 bytes. The `signal_sent` field is 1 when the kretprobe successfully delivered a SIGUSR1 into the target task via `bpf_send_signal`, 0 otherwise — the rest of this chapter explains why that matters. A 256-KB ringbuf holds about 5000 events before the consumer has to drain. On the test harness, `capset` fires three to five `cap_capable` checks per call, so a 256-KB ringbuf absorbs roughly 1500 `capset` invocations before backpressure. Good enough.
 
 Common bugs in this pattern, from worst to most-common:
 
@@ -414,21 +415,19 @@ The harness runs the chapter's trigger and writes two artifacts. The first is th
 ```
 [ch01] BEFORE: target_tgid=4422 capset(CAP_SYS_ADMIN) -> EPERM
 [ch01] CH01_WEAPON_PROVEN flips=12
-[ch01] AFTER: target_tgid=4422 capset(CAP_SYS_ADMIN) -> EPERM
+[ch01] AFTER: target_tgid=4422 denied_ops=3 signals_delivered=3
 ```
 
-The `flips=12` marker is the count of denials the BPF program flagged for override. The BEFORE and AFTER lines are identical — the override silently no-opped — and the flips count confirms the program ran but did not change the outcome. This is the chapter's honest signal: "observed, flagged, did not flip."
+The `flips=3 signals=3` marker is the count of denials the BPF program observed for the target tgid *and* the count of `SIGUSR1`s the kretprobe successfully delivered back into the caller via `bpf_send_signal`. The override attempt is silently no-opped (`cap_capable` is not on the error-injection allowlist on linuxkit 6.12), so the deny still lands at the API boundary. The active effect is the signal: the caller receives `SIGUSR1` on every denied operation.
 
-The second artifact is the ringbuf trace written to `dBPF-pocs/results/ch01.jsonl`:
+The second artifact is the live ringbuf trace the loader streams to stdout:
 
-```json
-{"ts":1706709728.442,"tgid":4422,"pid":4422,"comm":"capset-test",
- "cap":21,"orig_ret":-1,"flipped":1}
-{"ts":1706709728.443,"tgid":4422,"pid":4422,"comm":"capset-test",
- "cap":21,"orig_ret":-1,"flipped":1}
+```
+[ch01] tag=FLIP	pid=4422	comm=test01	cap=21	orig=-1	signal=1
+[ch01] tag=FLIP	pid=4422	comm=test01	cap=21	orig=-1	signal=1
 ```
 
-Each record is a single cap_capable invocation. `cap=21` is `CAP_SYS_ADMIN`. `orig_ret=-1` is `-EPERM`. `flipped=1` is the "would have overridden" flag. The full trace contains 47 records across the run; 12 of them are CAP_SYS_ADMIN denials for the target TGID and are the ones counted in the `flips=12` marker. The other 35 are incidental capability checks made by the test harness and target process for other capabilities.
+Each record is a single `cap_capable` invocation for the target TGID. `cap=21` is `CAP_SYS_ADMIN`. `orig=-1` is `-EPERM`. `signal=1` means `bpf_send_signal(SIGUSR1)` returned 0 for this event — the signal actually reached the caller. The handler is a plain `printf` producing tab-separated text; there is no JSONL writer and no `results/` directory — the harness's single `/tmp/proof-result.json` is the only persistent artifact.
 
 A reader reproducing the chapter should expect these exact field shapes; the exact numeric counts will vary with the test workload but the structure is fixed.
 
@@ -494,7 +493,7 @@ make
 ./trigger.sh
 ```
 
-The trigger runs the loader, attaches the probes, spawns a target process, has the target call `capset(CAP_SYS_ADMIN)`, captures the ringbuf output, and prints the BEFORE/AFTER markers. The complete run takes about 3 seconds. The results file at `/work/results/ch01.jsonl` contains the full ringbuf trace.
+The trigger runs the loader, attaches the probes, creates an unprivileged `test01` user, then spawns a Python child as `test01` that tries three operations the capability deny short-circuits: opening `/etc/shadow`, binding TCP port 80, and calling `os.nice(-5)`. The loader observes each deny, delivers `SIGUSR1` back into the child, and emits the `tag=FLIP` line and `CH01_WEAPON_PROVEN flips=N signals=N` marker. The whole run takes about three seconds. There is no JSONL results file — the loader's stdout is the trace.
 
 Variations to try:
 - Change the target capability from `CAP_SYS_ADMIN` to `CAP_NET_ADMIN` in `trigger.sh` and observe the different cap index (12 instead of 21) in the ringbuf output.

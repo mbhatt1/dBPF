@@ -7,7 +7,7 @@
 
 ## What this demonstrates
 
-An XDP program on the host-side of a veth pair strips 802.1Q VLAN tags (VID 4242) and optionally redirects the untagged frame to a device in a different network namespace via `bpf_redirect_map`. The orchestrator's monitoring on the VLAN-aware bridge or host stack never observes the tagged frame (XDP runs before the stack); the destination namespace receives a clean, untagged ethernet frame.
+An XDP program on the host-side of a veth pair strips 802.1Q VLAN tags (VID 142) and optionally redirects the untagged frame to a device in a different network namespace via `bpf_redirect_map`. The orchestrator's monitoring on the VLAN-aware bridge or host stack never observes the tagged frame (XDP runs before the stack); the destination namespace receives a clean, untagged ethernet frame.
 
 ## What this does NOT do
 
@@ -25,7 +25,7 @@ The book's chapter imagines a `kprobe/__netif_receive_skb_core` hook rewriting n
 |------|---------|
 | `ch15-netns-vlan-ghost.bpf.c` | Kernel-side BPF program (XDP: VLAN strip + bpf_redirect_map) |
 | `ch15-netns-vlan-ghost.c` | Userspace loader with strip-only and redirect modes |
-| `trigger.sh` | Activity generator (creates netns, sends VLAN-4242 AF_PACKET frames) |
+| `trigger.sh` | Activity generator (creates netns, sends VLAN-142 AF_PACKET frames) |
 | `Makefile` | Build (uses shared/common.mk) |
 
 ## Build & Run

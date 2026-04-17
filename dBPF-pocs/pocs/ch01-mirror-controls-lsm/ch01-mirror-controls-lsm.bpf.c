@@ -1,6 +1,6 @@
 // ch01 Mirror Controls — REAL mutation via BPF LSM fmod_ret.
 //
-// Hooks lsm/file_permission (called on vfs_read / vfs_write) and flips
+// Hooks lsm/inode_permission (called on vfs_read / vfs_write) and flips
 // -EACCES to 0 for targeted tgids. This hook fires reliably on kernel
 // 6.14+ where security_capable bypasses the LSM chain for non-root
 // processes.

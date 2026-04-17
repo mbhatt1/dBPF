@@ -1,4 +1,4 @@
-// ch01-mirror-controls-lsm loader — hooks lsm/file_permission.
+// ch01-mirror-controls-lsm loader — hooks lsm/inode_permission.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

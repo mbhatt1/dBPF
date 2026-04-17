@@ -1,4 +1,4 @@
-// ch06 Silence SELinux LSM-variant loader: attaches three sleepable
+// ch06 Silence SELinux LSM-variant loader: attaches three non-sleepable
 // fmod_ret programs (file_permission, inode_permission, bprm_check_security)
 // and flips any pending deny to allow for tgids in target_tgids.
 //

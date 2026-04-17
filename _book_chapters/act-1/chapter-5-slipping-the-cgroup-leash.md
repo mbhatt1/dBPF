@@ -122,25 +122,35 @@ The BPF program in `ch05-cgroup-leash.bpf.c` attaches two tracepoints. The first
 
 ```c
 SEC("tp/syscalls/sys_enter_read")
-int tp_enter_read(struct trace_event_raw_sys_enter *ctx)
+int tp_read_enter(struct trace_event_raw_sys_enter *ctx)
 {
     int fd = (int)ctx->args[0];
-    char __user *ubuf = (void *)(unsigned long)ctx->args[1];
-    size_t nbytes = (size_t)ctx->args[2];
+    void *ubuf = (void *)ctx->args[1];
     u64 id = bpf_get_current_pid_tgid();
 
     struct task_struct *task = (void *)bpf_get_current_task();
-    struct file *f = BPF_CORE_READ(task, files, fdt, fd[fd]);
+    struct files_struct *files = BPF_CORE_READ(task, files);
+    struct fdtable *fdt = BPF_CORE_READ(files, fdt);
+    unsigned int max_fds = BPF_CORE_READ(fdt, max_fds);
+    if (fd < 0 || (unsigned int)fd >= max_fds) return 0;
+    struct file **farr = BPF_CORE_READ(fdt, fd);
+    struct file *f = NULL;
+    bpf_probe_read_kernel(&f, sizeof(f), &farr[fd]);
     if (!f) return 0;
 
-    char name[NAME_MAX_MATCH] = {};
     struct dentry *d = BPF_CORE_READ(f, f_path.dentry);
+    char name[NAME_MAX_MATCH] = {};
     BPF_CORE_READ_STR_INTO(&name, d, d_name.name);
 
-    if (!is_cpu_stat(name)) return 0;
+    /* Inlined byte-by-byte compare against "cpu.stat" — the verifier
+     * will not bound an open-coded strcmp, and a helper isn't needed. */
+    unsigned int is_cpu_stat = (name[0]=='c' && name[1]=='p' && name[2]=='u' &&
+                                name[3]=='.' && name[4]=='s' && name[5]=='t' &&
+                                name[6]=='a' && name[7]=='t' && name[8]=='\0');
+    if (!is_cpu_stat) return 0;
 
-    struct pending p = { .ubuf = ubuf, .nbytes = nbytes };
-    bpf_map_update_elem(&inflight, &id, &p, BPF_ANY);
+    struct rctx r = { .buf = (unsigned long)ubuf, .is_cpu_stat = 1 };
+    bpf_map_update_elem(&inflight, &id, &r, BPF_ANY);
     return 0;
 }
 ```
@@ -153,21 +163,9 @@ From there the program walks five struct fields using `BPF_CORE_READ`. `task->fi
 
 `BPF_CORE_READ_STR_INTO` wraps a final `bpf_probe_read_kernel_str` into the on-stack scratch buffer `name`. The buffer is sized `NAME_MAX_MATCH`, which is 32 — enough for `cpu.stat\0` plus headroom. Anything longer gets truncated and harmlessly fails the comparison.
 
-The comparison is `is_cpu_stat(name)`. That function is a bounded-loop memcmp against the literal "cpu.stat". The BPF verifier rejects unbounded string compares. A plain `strcmp` against "cpu.stat" loops until the null terminator; the verifier cannot bound that loop at load time, so it refuses the program. A `#pragma unroll` over an 8-iteration compare works, as does an explicit 8-iteration for loop with a constant bound:
+The comparison is a bounded byte-by-byte compare against the literal "cpu.stat", inlined directly at the call site. No helper function is defined — the BPF verifier rejects unbounded string compares (`strcmp` loops to a null terminator the verifier can't bound), but it accepts a fixed-length compare spelled out in straight-line code. Writing it inline avoids even the risk of `__always_inline` not firing at the right optimization level; an unrolled 8-iteration `for` loop against `"cpu.stat"` would also work.
 
-```c
-static __always_inline bool is_cpu_stat(const char *s)
-{
-    static const char expect[] = "cpu.stat";
-    #pragma unroll
-    for (int i = 0; i < sizeof(expect) - 1; i++) {
-        if (s[i] != expect[i]) return false;
-    }
-    return s[sizeof(expect) - 1] == '\0';
-}
-```
-
-If the comparison matches, the program stashes `(ubuf, nbytes)` in a per-(pid, tgid) hash map named `inflight`. The hash is keyed by `bpf_get_current_pid_tgid()` — a 64-bit value containing both the thread id and the thread-group id. Keying by that 64-bit value correctly disambiguates between concurrent threads of the same process: thread A's `read()` and thread B's `read()` do not collide in the map.
+If the comparison matches, the program stashes `(ubuf, is_cpu_stat=1)` in a per-(pid, tgid) hash map named `inflight` — note the struct is `rctx`, and it carries the buffer pointer and a one-bit "this was cpu.stat" marker, not `nbytes` (the length comes from the exit tracepoint's `ret`). The hash is keyed by `bpf_get_current_pid_tgid()` — a 64-bit value containing both the thread id and the thread-group id. Keying by that 64-bit value correctly disambiguates between concurrent threads of the same process: thread A's `read()` and thread B's `read()` do not collide in the map.
 
 ## Source walk: buffer rewrite at sys_exit_read
 
@@ -175,32 +173,32 @@ The paired exit tracepoint runs after the kernel's read path has written bytes i
 
 ```c
 SEC("tp/syscalls/sys_exit_read")
-int tp_exit_read(struct trace_event_raw_sys_exit *ctx)
+int tp_read_exit(struct trace_event_raw_sys_exit *ctx)
 {
     long ret = ctx->ret;
     u64 id = bpf_get_current_pid_tgid();
 
-    struct pending *p = bpf_map_lookup_elem(&inflight, &id);
-    if (!p) return 0;
+    struct rctx *r = bpf_map_lookup_elem(&inflight, &id);
+    if (!r) return 0;
     bpf_map_delete_elem(&inflight, &id);
 
-    if (ret <= 0) return 0;
+    if (ret <= 0 || !r->is_cpu_stat) return 0;
 
-    static const char zeros[] =
+    static const char fake[] =
         "usage_usec 0\nuser_usec 0\nsystem_usec 0\n";
-    long n = sizeof(zeros) - 1;
+    long n = sizeof(fake) - 1;
     if (n > ret) n = ret;
 
-    if (bpf_probe_write_user(p->ubuf, zeros, n) != 0) return 0;
+    if (bpf_probe_write_user((void *)r->buf, fake, n) != 0) return 0;
 
-    struct evt e = {
-        .pid = id & 0xffffffff,
-        .tgid = id >> 32,
-        .patched = 1,
-        .bytes = n,
-    };
-    bpf_get_current_comm(&e.comm, sizeof(e.comm));
-    bpf_ringbuf_output(&events, &e, sizeof(e), 0);
+    struct evt *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e) return 0;
+    e->pid = id & 0xffffffff;
+    e->tgid = id >> 32;
+    e->patched = 1;
+    e->bytes = n;
+    bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    bpf_ringbuf_submit(e, 0);
     return 0;
 }
 ```
@@ -357,7 +355,7 @@ The entire chain is `task → files_struct → fdtable → file* array → file 
 
 ## Trivial extensions to other files
 
-The mechanism is not specific to `cpu.stat`. Swap the literal in `is_cpu_stat()` and the program targets a different file. Every cgroup-v2 file exposed as a `struct cftype` with a `read()` backend is reachable:
+The mechanism is not specific to `cpu.stat`. Swap the byte-by-byte compare in `tp_read_enter` for a different literal and the program targets a different file. Every cgroup-v2 file exposed as a `struct cftype` with a `read()` backend is reachable:
 
 - `memory.current` — the cgroup's current memory charge.
 - `memory.stat` — detailed memory breakdown.

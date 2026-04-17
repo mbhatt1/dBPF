@@ -495,7 +495,7 @@ On a multi-arch host you need both rules. The audit subsystem matches on the sys
 ### 5.2 A sample record
 
 ```
-type=SYSCALL msg=audit(1739462001.123:9471): arch=c00000b7 syscall=321 \
+type=SYSCALL msg=audit(1739462001.123:9471): arch=c00000b7 syscall=280 \
   success=yes exit=4 a0=5 a1=7ffeabcd1200 a2=90 a3=0 items=0 \
   ppid=1822 pid=1830 auid=1000 uid=1000 gid=1000 \
   euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=pts0 ses=3 \
@@ -505,8 +505,8 @@ type=SYSCALL msg=audit(1739462001.123:9471): arch=c00000b7 syscall=321 \
 
 Parsing:
 
-- `syscall=321` is `bpf` on aarch64. On x86_64 it is `321` as well (same number). Verify with `ausyscall bpf` on the host.
-- `a0=5` is the first argument to `bpf(2)`, which is the command. `5` decodes to `BPF_PROG_LOAD` per `include/uapi/linux/bpf.h`. `0` is `BPF_MAP_CREATE`, `9` is `BPF_PROG_ATTACH`, and so on.
+- `syscall=280` is `bpf` on aarch64 (`__NR_bpf` from `arch/arm64/include/uapi/asm/unistd.h`). On x86_64 it is `321`. The `arch=c00000b7` field in the record above is `AUDIT_ARCH_AARCH64`, so the 280 is consistent. Verify with `ausyscall bpf` on the host.
+- `a0=5` is the first argument to `bpf(2)`, which is the command. `5` decodes to `BPF_PROG_LOAD` per `include/uapi/linux/bpf.h`. `0` is `BPF_MAP_CREATE`, `8` is `BPF_PROG_ATTACH`, `28` is `BPF_LINK_CREATE`, and so on (see the full enum in `include/uapi/linux/bpf.h`).
 - `success=yes exit=4` means the syscall returned a file descriptor (fd 4) to the loaded program.
 - `auid=1000 uid=1000 euid=0` — the caller's login UID is 1000, their real UID is 1000, and their effective UID is 0. This is the credential tell: a non-root user is calling `bpf(2)` with effective-root privileges. That combination on a workload that does not legitimately need it is a finding.
 - `comm="tokforge"` is the program's own name, attacker-controllable. Do not gate alerting on `comm` alone.
@@ -519,7 +519,7 @@ Audit records can be voluminous. A high-traffic Cilium node issues thousands of 
 - **Loud and not tractable**: `BPF_MAP_UPDATE_ELEM`, `BPF_MAP_LOOKUP_ELEM`. Thousands per second on an active agent. Drop in the audit pipeline unless you are specifically investigating map-based covert channels.
 - **Medium**: `BPF_MAP_CREATE`, `BPF_BTF_LOAD`. Dozens per second at agent startup, essentially zero after steady state. Keep.
 
-A good log-pipeline filter keeps every `a0` value in the set `{0, 5, 8, 9, 28}` (MAP_CREATE, PROG_LOAD, OBJ_PIN, PROG_ATTACH, LINK_CREATE) and drops the rest. That reduces volume by 99%+ on busy nodes while preserving the security-relevant events.
+A good log-pipeline filter keeps every `a0` value in the set `{0, 5, 6, 8, 28}` (MAP_CREATE, PROG_LOAD, OBJ_PIN, PROG_ATTACH, LINK_CREATE — per `include/uapi/linux/bpf.h`, where `BPF_OBJ_PIN=6` and `BPF_PROG_ATTACH=8`) and drops the rest. That reduces volume by 99%+ on busy nodes while preserving the security-relevant events.
 
 ### 5.4 Off-host sink
 
@@ -704,7 +704,7 @@ Full mapping from primitive class to defensive controls. Each row lists the chap
 
 | Class | Chapters | Kernel mitigation | Runtime monitor | Post-incident detection |
 |-------|----------|-------------------|------------------|--------------------------|
-| **I — Return-value override** | ch01, ch06, ch07, ch10 (syscall exit), ch12 syscall variant, ch14, ch18 | BPF LSM gate on `fmod_ret`, `kretprobe`, and `bpf_override_return` (step 3, 6); strip `ALLOW_ERROR_INJECTION` annotations at kernel build (step 6) | Audit `bpf(2)` with `a0=5` (`BPF_PROG_LOAD`) and ship off-host (step 5); baseline BPF program set and alert on new kretprobes (step 4) | Audit log shows `BPF_PROG_LOAD` by unexpected UID; baseline diff shows new kretprobe on syscall wrapper; post-check ground truth in orchestrator (step 7) |
+| **I — Return-value override** | ch01, ch06, ch07, ch12 syscall variant, ch14, ch18 | BPF LSM gate on `fmod_ret`, `kretprobe`, and `bpf_override_return` (step 3, 6); strip `ALLOW_ERROR_INJECTION` annotations at kernel build (step 6) | Audit `bpf(2)` with `a0=5` (`BPF_PROG_LOAD`) and ship off-host (step 5); baseline BPF program set and alert on new kretprobes (step 4) | Audit log shows `BPF_PROG_LOAD` by unexpected UID; baseline diff shows new kretprobe on syscall wrapper; post-check ground truth in orchestrator (step 7) |
 | **II — Userspace buffer rewrite** | ch05, ch10 (getdents64 d_reclen swallow) | BPF LSM gate on `bpf_probe_write_user` — either deny the helper entirely for non-root or check the target address range against an allowlist; same kernel-build strip for the syscall exit wrappers | Audit `bpf(2)`; baseline; alert on new kretprobe on `sys_exit_getdents64` or similar | Re-read the buffer via a different syscall (stat the file after getdents; snapshot the cgroup memory.current via `cat` after the orchestrator reads it) and diff |
 | **III — Ringbuf exfiltration** | ch03, ch04, ch08, ch09, ch11, ch16 | Cannot prevent at kernel level once the peer has `CAP_BPF`; minimize holders (step 2); ship off-host synchronously (step 5); enclaves for true secrets (step 8) | Audit `bpf(2)` for `BPF_MAP_CREATE` of type `BPF_MAP_TYPE_RINGBUF` and baseline BPF program set | Record ringbuf maps created and by whom; correlate with credential access events in other subsystems |
 | **IV — Packet-path interception (XDP)** | ch05b, ch15 | BPF LSM gate on `BPF_PROG_LOAD` for type `BPF_PROG_TYPE_XDP`; netlink audit on netdev attach | Audit `bpf(2)`; baseline; alert on new XDP programs via `bpftool net show -j` | `bpftool net show` output diffs vs. baseline; `tcpdump` loss vs. `cat /proc/net/dev` counters (packets seen by netdev but not by tcpdump indicates XDP drop) |

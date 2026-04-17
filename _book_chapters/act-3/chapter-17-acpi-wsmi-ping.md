@@ -13,14 +13,14 @@ The chapter as originally drafted hooks `acpi_evaluate_object`, watches for a sp
 ```
 $ grep acpi_evaluate_object /proc/kallsyms
 $ grep acpi_ns_evaluate /proc/kallsyms
-$ grep acpi_ps_execute_method /proc/kallsyms
+$ grep acpi_ex_execute_method /proc/kallsyms
 ```
 
 All three returned nothing. Docker Desktop's linuxkit kernel (6.12 aarch64) ships without the ACPI interpreter. There is no `acpi_*` symbol to kprobe. The chapter's primary scenario cannot fire on this platform.
 
 ## The negative result is the result
 
-It is worth being honest about why the symbols are missing before moving on, because the missingness is not an accident of the build — it is the platform telling you something about itself. ACPI — the Advanced Configuration and Power Interface — is an x86 legacy. It predates the modern device-tree model by roughly a decade. On a physical x86 machine the firmware ships a pile of AML bytecode in DSDT and SSDT tables, and the kernel ships an interpreter that walks them to answer questions about hardware. Everything from "what does pressing the power button do" to "where is the EC that tells me the battery level" is expressed as an AML method in those tables. On x86 Linux kernels with `CONFIG_ACPI=y`, `drivers/acpi/acpica/*` compiles the interpreter in and the kallsyms for `acpi_evaluate_object`, `acpi_ns_evaluate`, and `acpi_ps_execute_method` all exist.
+It is worth being honest about why the symbols are missing before moving on, because the missingness is not an accident of the build — it is the platform telling you something about itself. ACPI — the Advanced Configuration and Power Interface — is an x86 legacy. It predates the modern device-tree model by roughly a decade. On a physical x86 machine the firmware ships a pile of AML bytecode in DSDT and SSDT tables, and the kernel ships an interpreter that walks them to answer questions about hardware. Everything from "what does pressing the power button do" to "where is the EC that tells me the battery level" is expressed as an AML method in those tables. On x86 Linux kernels with `CONFIG_ACPI=y`, `drivers/acpi/acpica/*` compiles the interpreter in and the kallsyms for `acpi_evaluate_object`, `acpi_ns_evaluate`, and `acpi_ex_execute_method` all exist.
 
 On aarch64 the story is different. Linux on aarch64 uses device-tree blobs as the primary hardware-description format. Some aarch64 server parts support ACPI as a secondary option under SBBR, but container images and cloud VMs almost never enable it. The linuxkit kernel that Docker Desktop uses on Apple Silicon has `CONFIG_ACPI` off. There is no ACPI namespace, no AML, no interpreter, and no symbol in kallsyms to hook.
 
@@ -611,7 +611,7 @@ None of these are exotic. All three are within reach of any operator who runs `b
 ### x86 (primary)
 - `kprobe/acpi_evaluate_object`
 - `kprobe/acpi_ns_evaluate`
-- `kprobe/acpi_ps_execute_method`
+- `kprobe/acpi_ex_execute_method`
 
 ### aarch64 (fallback)
 - `kprobe/request_firmware`
@@ -665,7 +665,7 @@ sudo bash ./trigger.sh
 - `bpftool prog show | grep -E 'acpi|firmware|sys_enter_openat'`
 - `cat /sys/kernel/debug/tracing/kprobe_events` shows attached probes.
 - `events` ringbuf visible in `bpftool map show`.
-- On production x86 hosts, any kprobe on `acpi_ps_execute_method` is worth investigating. Legitimate telemetry rarely hooks it.
+- On production x86 hosts, any kprobe on `acpi_ex_execute_method` is worth investigating. Legitimate telemetry rarely hooks it.
 - On any host, a tracepoint attached to `sys_enter_openat` that also calls `bpf_probe_write_user` is a strong anomaly. The combination is rare in legitimate tooling.
 
 ## Limitations / arch notes
@@ -673,4 +673,4 @@ sudo bash ./trigger.sh
 - No ACPI, no firmware → honest skip. If `/proc/kallsyms` contains none of the six candidates, the loader prints `CH17_SKIP` and exits 2. On aarch64 linuxkit specifically, ACPI symbols are absent (no ACPI interpreter — `CONFIG_ACPI` is off) and `request_firmware` symbols are present but nothing fires them at runtime because the `test_firmware` module is absent and no hardware drivers call the firmware-request path.
 - The trigger script now emits a proper `CH17_SKIP reason="no firmware trigger available on <arch> linuxkit (test_firmware module absent, no ACPI)"` when on aarch64 without the `test_firmware` trigger node, making the skip reason explicit in harness output.
 - The analog variant (`ch17-acpi-wsmi-analog`, harness entry `ch17a`) demonstrates the primitive shape on a synthetic surface: `tp/syscalls/sys_enter_openat` + `bpf_probe_write_user` against a fake `fw_requester` process. This is **category ANALOG** — same motion (intercept kernel-mediated string, rewrite before side-effect resolves), different and synthetic surface.
-- Override is out of scope for this POC. A real ACPI WSMI bypass would need `bpf_override_return` on `acpi_ps_execute_method` (not error-injectable on stock kernels) or a BPF LSM hook on `kernel_read_file` with `class=FIRMWARE`. Neither is wired up here.
+- Override is out of scope for this POC. A real ACPI WSMI bypass would need `bpf_override_return` on `acpi_ex_execute_method` (not error-injectable on stock kernels) or a BPF LSM hook on `kernel_read_file` with `class=FIRMWARE`. Neither is wired up here.
