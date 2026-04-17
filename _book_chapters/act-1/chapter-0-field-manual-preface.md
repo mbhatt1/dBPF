@@ -12,7 +12,9 @@ This book documents what `CAP_BPF` plus `CAP_PERFMON` (or `CAP_SYS_ADMIN`) actua
 
 The reason I wrote it is that the gap between "CAP_BPF is a privileged capability" and "here is what a process holding CAP_BPF can actually do" keeps producing surprised operators. Modern observability agents routinely request the capability, and the consequences of granting it are more direct than the docs tend to spell out.
 
-Each chapter ships with a reproducible trigger that runs under the Docker harness in `dBPF-pocs/`. Every claim has a BEFORE line and an AFTER line printed on stdout, plus a machine-grep-able marker like `CH01_WEAPON_PROVEN flips=2 signals=2` or `CH08_WEAPON_PROVEN exfil_count=13`. The harness records both. Out of 31 PoC variants covering all 18 technique chapters, 25 produce a PROVEN marker on the test matrix (20 on Docker Desktop linuxkit 6.12, 5 more on a Fedora 42 QEMU VM with BPF LSM and SELinux). The remaining 6 are honest skips: each has a verified root cause (kernel architecture, missing hardware, BTF limitation) and each chapter's skip has at least one working base or analog variant that does fire. Failures are documented honestly inside each chapter and tallied in Chapter 21.
+Each chapter ships with a reproducible trigger that runs under the Docker harness in `dBPF-pocs/`. Every claim has a BEFORE line and an AFTER line printed on stdout, plus a machine-grep-able marker like `CH01_WEAPON_PROVEN flips=2 signals=2` or `CH08_WEAPON_PROVEN exfil_count=13`. The harness records both. 20 PoCs are registered in `dBPF-pocs/harness/proof.py`, covering the 18 technique chapters. Of those 20, 18 fire on the Docker Desktop linuxkit 6.12 aarch64 primary test environment; the remaining 2 (ch06 LSM, ch12 LSM) skip there because linuxkit does not load SELinux policy and is not built with `CONFIG_MODULE_SIG_FORCE`, and both fire on the secondary Fedora 42 aarch64 QEMU VM where those prerequisites are present. Failures are documented honestly inside each chapter and tallied in Chapter 21.
+
+The secondary environment is a Fedora 42 aarch64 QEMU VM (BPF LSM + SELinux enforcing + module signature enforcement) used as a cross-check for the two PoCs that linuxkit cannot host. The VM is driven by `dBPF-pocs/run-qemu-tests.sh` (host-side orchestration) and `dBPF-pocs/qemu-runner.sh` (guest-side per-PoC driver, mounted via virtio-9p from the host). Every chapter's harness run records whether the primitive fired on linuxkit, skipped on linuxkit, or fired only in the Fedora VM; the ledger is in Chapter 21.
 
 The intended audience is operators deciding whether to grant `CAP_BPF` to a workload and what guardrails to configure when they do. The second audience is researchers who want a reproducible baseline to extend.
 
@@ -74,7 +76,7 @@ The program-type-to-capability mapping is enforced in `kernel/bpf/syscall.c` in 
 A concrete mapping, for reference. These are the program types this book uses, and the minimum capability grant for each:
 
 - `BPF_PROG_TYPE_KPROBE` — `CAP_BPF + CAP_PERFMON`. Chapters 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 14.
-- `BPF_PROG_TYPE_TRACEPOINT` — `CAP_BPF + CAP_PERFMON`. Chapters 4, 9, 13 (analog), 16, 17 (analog).
+- `BPF_PROG_TYPE_TRACEPOINT` — `CAP_BPF + CAP_PERFMON`. Chapters 4, 9, 16.
 - `BPF_PROG_TYPE_RAW_TRACEPOINT` — `CAP_BPF + CAP_PERFMON`. Chapter 9 (fork tracepoint).
 - `BPF_PROG_TYPE_TRACING` (fentry/fexit/lsm) — `CAP_BPF + CAP_PERFMON`, and in some configs `CAP_SYS_ADMIN` for the LSM subtype. LSM variants: Chapters 1, 2, 3, 6, 7, 12.
 - `BPF_PROG_TYPE_XDP` — `CAP_BPF + CAP_NET_ADMIN`. Chapters 5b, 15.
@@ -219,7 +221,7 @@ Chapter 20 formalizes the seven-class taxonomy of primitives that actually fired
 
 **Class 1: Return override.** A kretprobe on a function in `ALLOW_ERROR_INJECTION` uses `bpf_override_return` to change the function's return value. The primitive is narrow — the function has to be in the allowlist — and the failure mode is silent when the allowlist check fails. Chapters 3, 14, 16, and 18 fire this against syscall entry points and audit infrastructure.
 
-**Class 2: Buffer rewrite.** A kprobe or fentry program uses `bpf_probe_write_user` to rewrite a buffer in the caller's address space before the caller reads it. Chapter 5 fires this against `vfs_read` output to falsify cgroup stats; Chapter 10 fires it against `getdents64` to hide directory entries; Chapters 13 and 17 (analog variants) fire it to spoof sensor readings and firmware requests.
+**Class 2: Buffer rewrite.** A kprobe or fentry program uses `bpf_probe_write_user` to rewrite a buffer in the caller's address space before the caller reads it. Chapter 5 fires this against `vfs_read` output to falsify cgroup stats; Chapter 10 fires it against `getdents64` to hide directory entries.
 
 **Class 3: Out-of-band copy.** A probe on any decision function captures the decision's inputs and outputs and streams them to a ringbuf for a userspace consumer. This goes beyond passive observation when the exfiltrated data includes kernel-internal secrets: Chapter 8 reads actual key payload bytes from `key->payload.data[0]` via `bpf_probe_read_kernel`, exfiltrating credentials that are never visible to the key's owning process. Chapter 4 uses a tail-call chain to extract creds from the `write()` path while seccomp sees only a single benign syscall.
 
@@ -406,7 +408,7 @@ Linuxkit is minimal. The kernel config is readable and the attack surface is sma
 
 Linuxkit is aarch64 on Apple Silicon because that is the machine I have on my desk. The techniques translate to x86_64 with two caveats: the register ABI for `PT_REGS_PARM*` macros is different, and the kprobe fire path has slightly different JIT characteristics. Neither caveat changes the conceptual content of any chapter. Where a chapter's code would need adjustment for x86_64, the chapter calls it out; most chapters do not need adjustment because the BPF C compiles to the same bytecode on both architectures.
 
-Linuxkit boots in seconds, which matters for the harness. The full test matrix (22 chapters, each with BEFORE/AFTER capture) runs in under a minute on a clean linuxkit VM. The same matrix on a full Ubuntu VM would take several minutes; on bare metal it would require physical access. The harness's ergonomics were a deciding factor in picking the test environment.
+Linuxkit boots in seconds, which matters for the harness. The full test matrix (20 PoCs across the 18 technique chapters, each with BEFORE/AFTER capture) runs in under a minute on a clean linuxkit VM. The same matrix on a full Ubuntu VM would take several minutes; on bare metal it would require physical access. The harness's ergonomics were a deciding factor in picking the test environment.
 
 One downside of linuxkit: it is not a production environment. A technique that works on linuxkit is not automatically applicable to a production host, because production hosts run additional tooling — security modules, auditd rules, EDR agents — that may interfere. The book's position is that linuxkit's output is the *upper bound* on what an attacker holding the stated capabilities can do; production deployments close some of the gaps, and Chapter 22's defender playbook describes which ones and how.
 

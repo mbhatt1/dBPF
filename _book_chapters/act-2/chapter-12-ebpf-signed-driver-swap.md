@@ -4,102 +4,83 @@ title: "Chapter 12: eBPF Signed-Driver Swap"
 date: 2025-03-01
 ---
 
-# Chapter 12: Forging the finit_module Return Value
+# Chapter 12: Flipping the Kernel's Module-Load Verdict
 
-> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) and the surviving workaround variant at [dBPF-pocs/pocs/ch12-signed-driver-swap-syscall/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs).
+> **Note**: The real primitive in this chapter — a BPF LSM fmod_ret flip on `kernel_read_file` — does not fire on the linuxkit 6.12 aarch64 host we use for day-to-day development, because that kernel does not enforce module signatures. It fires on the Fedora 42 aarch64 QEMU VM run by `run-qemu-tests.sh`, which does enforce them. A secondary syscall-return illusion (registered as `ch12s`) fires on linuxkit and is kept because it is the only ch12-shape primitive that host can execute. The chapter is explicit about which does what.
 
 ## The Question and the Honest Answer
 
-The question I started with was: can a BPF program flip a rejected kernel module load into a successful one, so that userspace believes the module is loaded when it isn't? Not actually load a malicious module — that is a different, much harder problem involving signed-module-loader internals and ELF-construction gymnastics that BPF does not help with — but defeat the class of orchestrators, monitors, and shell scripts that treat `insmod`'s return code as proof of load.
+The question I started with was: can a BPF program flip a rejected kernel module load into a successful one — not just fool a userspace consumer into believing the module loaded, but actually land the module's bytes in kernel memory against an enforcing kernel?
 
-The answer is yes, with a very specific definition of "yes." The primitive I ended up with rewrites the syscall return value of `finit_module` and `init_module` to zero regardless of what the kernel's module loader did internally. Any userspace consumer that checks only the return code is fooled. Any consumer that checks kernel state — `lsmod`, `/proc/modules`, `/sys/module/<name>/`, `dmesg` — catches the forgery immediately. It is a userspace-illusion bypass, narrowly scoped to the syscall boundary.
+The answer is yes, on a kernel that enforces module signatures, via BPF LSM fmod_ret. The real primitive for this chapter is `ch12-signed-driver-swap-lsm`: three fmod_ret programs on `lsm/kernel_read_file`, `lsm/kernel_load_data`, and `lsm/locked_down`. When signature enforcement is on — `CONFIG_MODULE_SIG_FORCE=y` in the kernel config, or `module.sig_enforce=1` on the kernel command line — and BPF LSM is active in the LSM stack, flipping the return of `kernel_read_file` from a denial to zero lets an unsigned blob through the integrity gate. The module's bytes get read in, and the loader continues down the path toward actually inserting the module into kernel memory.
 
-Before I got to that working primitive, I spent a week on an approach that did not work. I want to describe that failed approach in detail, because the reason it failed is the same reason several chapters in this book are workaround variants rather than their original designs. The pattern matters more than the specific failure.
+That is the real override. It requires a specific configuration — signature enforcement on, BPF LSM active. Linuxkit has neither. Fedora, configured to run an enforcing kernel, has both. The chapter is about that primitive and is honest about where it fires.
 
-## Three Variants, Three Categories
+There is a second, separate primitive kept in the repository as `ch12-signed-driver-swap-syscall`, registered in the harness as `ch12s`. It is not a real override. It is a kretprobe on `__arm64_sys_finit_module` that calls `bpf_override_return(ctx, 0)`, rewriting the syscall's userspace-visible return value regardless of what the kernel's loader actually did. Its marker says this plainly: `CH12_CONCEPT_PROVEN syscall_override_landed=yes module_actually_loaded=no`. It exists because it is the only ch12-shape primitive that fires on the linuxkit host, and because the illusion category is useful to keep alongside the real variant as a pedagogical contrast.
 
-Before diving into the details, it is worth laying out all three POC variants for this chapter and what each one does, because they are fundamentally different primitives despite sharing a chapter title:
+A third observer variant (`ch12-signed-driver-swap`) attaches kprobes to `load_module`, `module_sig_check`, and `mod_verify_sig` without mutating anything. Forensic visibility into the module-load decision path.
 
-1. **Observer (kprobe)** -- `ch12-signed-driver-swap`. Attaches kprobes to `load_module`, `module_sig_check`, and `mod_verify_sig` (plus a kretprobe on `mod_verify_sig` to capture the return value). Pure observation: streams ringbuf events showing which module-load gates fire and what they return. Cannot mutate anything. Category: **REAL** (observer) -- the hooks fire on actual module loads, and the data reported is the kernel's real decisions.
+Three variants. One real override. One honest illusion. One observer. This chapter walks all three, starting with the real one.
 
-2. **LSM mutator (fmod_ret)** -- `ch12-signed-driver-swap-lsm`. Attaches BPF LSM fmod_ret programs to three hooks in the module-load path: `SEC("lsm/kernel_read_file")`, `SEC("lsm/kernel_load_data")`, and `SEC("lsm/locked_down")`. For targeted tgids, flips any non-zero chain result to 0. This is a **REAL** mutator: on a kernel with `CONFIG_MODULE_SIG_FORCE=y` and a validly-formed ELF with a bad signature, flipping `kernel_read_file` to 0 would allow the module to actually load into kernel memory. `lsmod` would show it. The module's init function would run. This is the "load an unsigned driver" primitive people imagine when they read the chapter title. It requires specific kernel config conditions (signature enforcement on, valid ELF with bad sig) and did not fire on the linuxkit test kernel because `CONFIG_MODULE_SIG_FORCE` is off.
+## The Real Primitive: BPF LSM fmod_ret on the Module-Load Path
 
-3. **Syscall forger (kretprobe)** -- `ch12-signed-driver-swap-syscall`. Attaches kretprobes to `__arm64_sys_finit_module` and `__arm64_sys_init_module`, using `bpf_override_return(ctx, 0)` to forge the syscall return to 0 for target tgids. Category: **ILLUSION** -- the kernel still rejects the module bytes internally, `lsmod` shows nothing, `/proc/modules` is unchanged, but the userspace-visible syscall return says 0. Any tool that trusts only the return code is fooled; any tool that checks `/proc/modules` or `/sys/module/` catches the forgery.
+The kernel does not enforce module signatures in a single function. The decision is routed through the LSM (Linux Security Module) framework, which gives each registered LSM a chance to veto an operation. When `insmod` or `modprobe` calls `finit_module(2)` with an fd pointing at a `.ko` file, the kernel reads the file's contents through an integrity-gated path, and the LSM hooks in that path get the first crack at saying no.
 
-The three variants sit on a spectrum from "observe only" to "real kernel-state change" to "userspace-only lie," and each has a different set of conditions under which it fires.
+Three hooks matter for the module-load path. Each one gates a different kind of kernel-internal load operation. The real variant attaches to all three and flips every denial it sees for targeted tgids to zero.
 
-## The LSM Approach That Didn't Fire
+### `lsm/kernel_read_file`
 
-My first cut was a BPF LSM program. On modern kernels with `CONFIG_BPF_LSM=y` — which the linuxkit Docker Desktop kernel and most Ubuntu/Debian distros enable — you can attach BPF programs to LSM hook points and use the `fmod_ret` return-override mechanism to change the hook's verdict. The plan was to target the signature verification path — specifically `mod_verify_sig`, the internal function in `kernel/module/signing.c` that runs the actual PKCS#7 signature check, or the LSM hooks in the path like `security_locked_down` that enforce lockdown policy on module loads. If I could flip the return from "signature invalid" to "signature valid," the loader would proceed to actually load the module.
+`security_kernel_read_file(struct file *file, enum kernel_read_file_id id, bool contents)` is the LSM hook for file-backed reads that the kernel performs on userspace's behalf for integrity-sensitive purposes. The `id` argument tells the LSM what kind of read this is: `READING_MODULE`, `READING_FIRMWARE`, `READING_KEXEC_IMAGE`, `READING_POLICY`, `READING_X509_CERTIFICATE`, a handful of others. All of them share the property that what gets read is going to become part of the kernel's trusted state, so the read is a policy point.
 
-The relevant hook surface in `security/security.c` includes `security_kernel_read_file`, `security_locked_down`, and a few others that sit in the module-load path. The plan was to fmod_ret on whichever of these the running kernel actually checks. On 6.12 aarch64 linuxkit, my BPF program attached fine to `kernel_read_file` and never fired.
+For `finit_module`, the loader calls into this hook via `kernel_read_file_from_fd` while copying the module bytes in. A sig-enforcing kernel has IMA or a similar LSM registered that consults signature state at this point. If signature state is bad, the hook returns non-zero and the read aborts before the module bytes are even fully in kernel memory.
 
-Two independent problems killed the approach. They were not obvious from reading the kernel source alone; I had to run the POC and observe what happened to see them. That is the lesson I keep relearning in this work: you cannot reason a BPF primitive into working from the source code alone, because the running kernel's configuration and the specific code path your trigger exercises combine to determine which hooks actually run.
+The BPF LSM program for this chapter attaches at `SEC("lsm/kernel_read_file")` and, for a targeted tgid, rewrites the hook's return from whatever-the-hook-said to zero. From the loader's perspective, the signature-check LSM said yes. The read proceeds.
 
-Problem one: the linuxkit kernel I am running does not enforce module signatures at all. `CONFIG_MODULE_SIG_FORCE` is off in the linuxkit config. That means even if a module has no signature, the loader accepts it (possibly logging a warning, but not failing). Without signature enforcement, `module_sig_check` does not reject — it calls `security_locked_down(LOCKDOWN_MODULE_SIGNATURE)` as its final fallback, which returns 0 on a non-locked-down kernel. Without denials, there is nothing for an LSM hook flip to be useful about. The hook attaches fine; the denial code path it watches for never runs. I confirmed this by reading the linuxkit kernel config via `/proc/config.gz | gunzip | grep MODULE_SIG`, which showed `CONFIG_MODULE_SIG=y` (signing is supported) but `CONFIG_MODULE_SIG_FORCE` was unset (enforcement is off). The hook exists, the enforcement does not.
+### `lsm/kernel_load_data`
 
-Same story on stock Debian cloud images, which I checked afterward. `CONFIG_MODULE_SIG_FORCE=n` is the default on a lot of distro kernels — signatures are checked and logged as warnings, not as fatal errors. If you want a kernel that fails-closed on unsigned modules, you either build it yourself with the flag set or you pass `module.sig_enforce=1` on the kernel command line. Most production systems do not. The attack surface I was trying to hit — signature enforcement rejecting a module that my BPF then flips to accept — simply does not exist on most kernels.
+`security_kernel_load_data(enum kernel_load_data_id id, bool contents)` is the buffer-backed counterpart. The legacy `init_module(2)` syscall — still supported, used by some embedded systems — takes a raw userspace buffer rather than an fd. When the kernel copies that buffer in via `security_kernel_load_data`, this is the hook that gates it. The `id` distinguishes module, firmware, kexec-segment, and other buffer-backed load types.
 
-Problem two: even on a kernel with signature enforcement enabled, my test payload was not a properly-formed module. I was writing a 1 KiB blob with an ELF header prefix but garbage bytes elsewhere, and it lacked a valid signature marker suffix (`MODULE_SIG_STRING`). Without the signature marker, `module_sig_check` takes the "unsigned module" path — on an enforcing kernel this returns `-EKEYREJECTED` immediately, before `mod_verify_sig` is ever called. The LSM hooks I was targeting (`kernel_read_file`, `locked_down`) are in different parts of the path, and flipping them would not change the outcome of `module_sig_check`'s direct rejection when the module lacks a signature marker entirely.
+We attach to this hook for the same reason: to catch module loads that take the `init_module` path rather than `finit_module`. Both routes converge at `load_module()` internally, but their LSM gates are distinct.
 
-This is a specific, annoying detail about the kernel's module loader: the control flow is "verify signature first, parse ELF second, run init third." In `load_module()`, `module_sig_check()` runs before `elf_validity_cache_copy()`. If you want to test the signature-verification hook, you need a blob with a valid signature marker suffix (so the sig check path is exercised), or a validly-formed (but unsigned or wrongly-signed) ELF blob. Constructing one is not impossible — you take a real `.ko` and strip or corrupt the signature blob — but it is a meaningful engineering detour. I started down that path, got far enough to realize I was building a test harness more complex than the BPF primitive I was trying to prove, and backed out.
+### `lsm/locked_down`
 
-Both problems are the same category of mistake: I was trying to hook a check that was not happening on the code path my trigger was exercising. The chapter I started from described exactly this LSM-flipping plan and claimed it worked. It does not work on stock kernels, and without a deliberately-constructed test kernel plus a deliberately-constructed test ELF, you cannot even set up the conditions under which it would fire. The "working attack" described in the original draft was doing the same thing half the BPF exploitation write-ups on the internet do: describing a primitive under conditions that are not the real-world default, without saying so.
+`security_locked_down(enum lockdown_reason what)` is the general lockdown gate. Modern kernels built with `CONFIG_SECURITY_LOCKDOWN_LSM=y` route many integrity-sensitive operations through a single LSM hook with a reason code. For module loads without a valid signature on an enforcing kernel, the reason is `LOCKDOWN_MODULE_SIGNATURE`. The hook's return dictates whether the operation is permitted.
 
-I am leaving the LSM attempt in the repository as `ch12-signed-driver-swap-lsm` for completeness, but the chapter is about what I moved on to.
+On a non-locked-down kernel this hook returns zero and the primitive's flip is a no-op. On a kernel booted in lockdown mode (confidentiality or integrity), the hook can be the gate that rejects the module load even when signature checks by other means would have let it through. Flipping it to zero removes that veto.
 
-## The Syscall-Entry Pivot
+### Why three hooks, not one
 
-The approach that actually works is coarser and has a smaller claim. I read `/sys/kernel/debug/error_injection/list` to see what the kernel's error-injection allowlist contained. Two relevant entries:
+The module-load code path in modern kernels routes its integrity decisions through different LSM hooks depending on which syscall was used, whether the kernel was built with lockdown, and which LSMs are registered. `kernel_read_file` is the dominant hook for `finit_module` on a signed-module kernel; `kernel_load_data` is the dominant hook for `init_module`; `locked_down` is the dominant hook on lockdown-enabled kernels. Attaching all three covers the plausible configurations without making assumptions.
 
-```
-__arm64_sys_finit_module
-__arm64_sys_init_module
-```
+On the Fedora 42 test kernel the hook that actually fires on `insmod` is `kernel_read_file`. The other two attach without firing in this specific trigger. That is fine: they cost nothing extra at attach time and the program body returns zero if nothing needed to be flipped.
 
-Both module-load syscall entry wrappers are ERRNO-injectable on 6.12 aarch64 linuxkit. The `__arm64_sys_` prefix is the architecture-specific syscall wrapper that Linux generates from the `SYSCALL_DEFINE*` macros; these wrappers are the actual kprobe targets. On x86_64 the equivalent names are `__x64_sys_finit_module` and `__x64_sys_init_module`.
+## Source Walk: The BPF LSM Object
 
-ERRNO-injectable means a kretprobe attached to the symbol is permitted to call `bpf_override_return(ctx, 0)` — or any other value — and the verifier will accept the program at load. The override runs on syscall exit, after every internal rejection path inside the module loader has already produced an errno, after the ELF validation has failed or the signature check has failed or the init function has thrown an error. It works regardless of why the loader gave up, because it runs at the end of the syscall, after the decision has been made.
-
-This is the same primitive class as ch14 (SCHED_FIFO impersonator, which flips `sched_setscheduler` return) and ch18 (token bypass, which flips `getuid` return). The pattern is: find a syscall entry point in the error-injection allowlist, attach a kretprobe, rewrite the return. It works wherever the kernel developers have chosen to allow fault injection, which for syscalls is a reasonably generous set.
-
-The trade-off is scope. The kernel still rejects the module bytes; no code actually loads into kernel memory. `lsmod` still reports the true state of loaded modules; `/proc/modules` is unchanged; `dmesg` still logs the original rejection reason. Only the syscall's return value lies to userspace. Any consumer that does more than check the return value catches the forgery instantly.
-
-What this is useful for: fooling anything that checks only the return value. Shell scripts that do `insmod x.ko && echo loaded`. Orchestrators that call `finit_module(fd, ...)` and treat rc=0 as load-confirmation. CI systems that assert "module loaded successfully" based on exit status. Any tool whose author assumed — reasonably, ordinarily — that a non-zero return from a module-load syscall means the module is actually loaded.
-
-What this is not useful for: loading actual malicious code into the kernel. The module does not load. Kernel state is unchanged. The illusion is strictly userspace-visible.
-
-I have to sit with this for a moment and be honest about the ROI. For an attacker, a userspace-illusion bypass is a narrow win: it defeats the specific class of weak verifiers that trust the syscall return. That class is large — because a lot of operations code was written assuming that when `insmod` says 0 the module is loaded — but it is not universal, and competent defenders easily defeat it with a post-check. The primitive has real value in adversarial workflows where an attacker wants to appear to have loaded their driver without actually loading it (because loading it would trip other detectors like auditd module-load events, or because they don't have the driver ready yet and just want to satisfy an orchestrator). It is not the "load an unsigned driver" primitive it might appear to be on first read.
-
-The surviving variant is at `dBPF-pocs/pocs/ch12-signed-driver-swap-syscall/`. It is what the rest of this chapter describes.
-
-## Source Walk: The BPF Program
-
-The BPF object at `ch12-signed-driver-swap-syscall.bpf.c` is short. I will walk it in order.
-
-License, constants, and the event struct:
+The object at `ch12-signed-driver-swap-lsm.bpf.c` is short. Three programs, one ringbuf, one target map. I will walk it in order.
 
 ```c
 char LICENSE[] SEC("license") = "GPL";
 
-#define HOOK_FINIT_MODULE 1
-#define HOOK_INIT_MODULE  2
+#define HOOK_KERNEL_READ_FILE 1
+#define HOOK_KERNEL_LOAD_DATA 2
+#define HOOK_LOCKED_DOWN      3
+#define HOOK_NAME_LEN 24
 
 struct evt {
-    unsigned int pid;
-    unsigned int tgid;
-    char         comm[16];
-    long         orig_ret;
-    int          hook;
-    int          flipped;
+    unsigned int pid, tgid;
+    char comm[16];
+    int hook;
+    int orig_ret;
+    int flipped;
+    char hook_name[HOOK_NAME_LEN];
 };
 ```
 
-GPL license for helper access. Two hook IDs so userspace can distinguish events from the two probes. The event carries: the PID (lightweight thread ID), the TGID (process ID in the userspace sense), the comm (16 bytes, standard), the original return value from the kernel's module loader, the hook identifier, and a boolean-ish `flipped` field saying whether we actually rewrote the return.
+GPL for BPF helper access (LSM programs require GPL). Three hook IDs, one per attached program, so userspace can tell which hook fired. The event carries pid and tgid, comm, the hook ID, the `orig_ret` (captured *before* any flip — the LSM's actual verdict), the `flipped` boolean, and a short human-readable hook name so the ringbuf consumer does not need an ID table to render log lines.
 
-The `orig_ret` capture is the interesting field. It is the *pre-flip* return from the kernel — the kernel's actual verdict. On a non-ELF blob, it is `-ENOEXEC` (-8). On a valid ELF with a bad signature, it would be `-EKEYREJECTED` (-129). On a valid ELF whose init function failed, it is whatever the init returned. We record this before calling `bpf_override_return`, so userspace can see what the kernel actually decided and compare it to what we forged.
+The `orig_ret` capture is the interesting field. It is the kernel's real decision. On a sig-enforcing kernel with an unsigned module, the LSM returns `-EBADMSG` or `-EKEYREJECTED` depending on which LSM is registered and which path the read took. Recording the pre-flip value lets the ringbuf consumer print something like `orig=-74 -> 0`, which makes the evidence unambiguous: here is what the kernel said, here is what we rewrote it to.
 
-The maps:
+Maps:
 
 ```c
 struct {
@@ -107,7 +88,6 @@ struct {
     __uint(max_entries, 1 << 18);
 } events SEC(".maps");
 
-// tgid -> 1.  Key 0 is the wildcard slot ("forge every caller").
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, unsigned int);
@@ -116,457 +96,209 @@ struct {
 } target_tgids SEC(".maps");
 ```
 
-Ringbuf for events — 256 KiB, plenty for a primitive that fires once per `insmod` call. The target map is interesting: it is a TGID-keyed hash mapping target process IDs to a presence flag. The key 0 is reserved as a wildcard slot. If 0 is present in the map, the program flips every caller's return; otherwise it only flips calls from TGIDs explicitly listed.
+A 256-KiB ringbuf for events and a TGID-keyed hash for targeting. The key 0 in `target_tgids` is reserved as a wildcard slot: if present, every caller's denial is flipped; if absent, only the explicitly listed TGIDs are flipped.
 
-This target-selectivity is important for a primitive you would actually deploy. Wildcard mode is how you test the mechanism. Per-TGID mode is how you use it in real adversarial workflows — an attacker who wants to forge returns only for their own process, not for every privileged caller of `finit_module` on the system. Forging every caller's return would break systemd's module auto-loader, break driver initialization at boot, and otherwise cause chaos. Selective targeting keeps the blast radius limited.
+The `is_target_tgid` helper does two lookups: first the current TGID, then the wildcard slot. Either one hitting returns 1. This two-lookup design keeps per-TGID mode cheap (one map hit, one miss) and wildcard mode equally cheap (miss, then hit) on modern branch predictors.
 
-The is_target helper:
+Per-TGID mode is the one you use adversarially. Forging every caller's module-load denial would break systemd's module auto-loader at boot, break `modprobe` for legitimate drivers, and otherwise cause chaos. Wildcard mode is for testing the primitive end-to-end; real use should scope to the attacker's own process or a specific target.
 
-```c
-static __always_inline int is_target(void)
-{
-    unsigned int tgid = bpf_get_current_pid_tgid() >> 32;
-    if (bpf_map_lookup_elem(&target_tgids, &tgid))
-        return 1;
-    unsigned int zero = 0;
-    if (bpf_map_lookup_elem(&target_tgids, &zero))
-        return 1;
-    return 0;
-}
-```
-
-Two lookups. First, check if the current TGID is explicitly listed. Second, if not, check if the wildcard slot (key 0) is set. Return 1 if either is true, 0 otherwise. The two-lookup pattern means wildcard mode is a single extra map lookup; the branch predictor handles the "not wildcard" case cheaply on any modern CPU.
-
-The event emitter:
+The fmod_ret programs themselves are near-identical in shape. Here is the first:
 
 ```c
-static __always_inline void emit(long ret, int hook, int flipped)
+SEC("lsm/kernel_read_file")
+int BPF_PROG(lsm_kernel_read_file,
+             struct file *file,
+             unsigned int id,
+             bool contents,
+             int ret)
 {
-    struct evt *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
-    if (!e)
-        return;
-    unsigned long long id = bpf_get_current_pid_tgid();
-    e->pid = (unsigned int)(id & 0xffffffff);
-    e->tgid = (unsigned int)(id >> 32);
-    bpf_get_current_comm(&e->comm, sizeof(e->comm));
-    e->orig_ret = ret;
-    e->hook = hook;
-    e->flipped = flipped;
-    bpf_ringbuf_submit(e, 0);
-}
-```
-
-Standard ringbuf reserve/fill/submit. The interesting ordering is: we capture the original ret *before* any potential override, we capture the flipped flag *after* deciding whether to override. The emit call comes last in the probe body so the event reflects the final state of the probe's decision.
-
-The two probes:
-
-```c
-SEC("kretprobe/__arm64_sys_finit_module")
-int BPF_KRETPROBE(kr_finit_module, long ret)
-{
-    int flip = 0;
-    if (is_target() && ret != 0) {
-        bpf_override_return(ctx, 0);
-        flip = 1;
+    (void)file; (void)id; (void)contents;
+    int flipped = 0;
+    int new_ret = ret;
+    if (is_target_tgid() && ret != 0) {
+        new_ret = 0;
+        flipped = 1;
     }
-    emit(ret, HOOK_FINIT_MODULE, flip);
-    return 0;
-}
-
-SEC("kretprobe/__arm64_sys_init_module")
-int BPF_KRETPROBE(kr_init_module, long ret)
-{
-    int flip = 0;
-    if (is_target() && ret != 0) {
-        bpf_override_return(ctx, 0);
-        flip = 1;
-    }
-    emit(ret, HOOK_INIT_MODULE, flip);
-    return 0;
+    emit_named(HOOK_KERNEL_READ_FILE, NAME_KRF, ret, flipped);
+    return new_ret;
 }
 ```
 
-Two kretprobes, one per syscall variant. The condition for flipping is "target process AND ret is non-zero." The second clause matters — if the kernel's loader actually succeeded (somehow, on a real module), we do not need to flip the return. Only failures get flipped. This makes the primitive idempotent against actual success cases and keeps the ringbuf events honest.
+The fmod_ret convention: the program's return value becomes the hook's effective return value, *if* the program is attached as `fmod_ret`. The BPF LSM infrastructure stitches fmod_ret programs into the LSM hook chain after the built-in LSMs have had their say. If any LSM in the chain returned non-zero, the final `ret` argument reflects that verdict; the fmod_ret program can override it by returning something else.
 
-`BPF_KRETPROBE` is a libbpf macro that unpacks the kretprobe context so the `ret` parameter is directly accessible as a typed argument. Without the macro you would have to fetch the return via `PT_REGS_RC(ctx)` manually. The macro is cleaner and matches the pattern other retprobes in this book use.
+The condition is "target tgid AND ret was non-zero." The second clause matters: if the underlying LSM stack already said yes (returned 0), there is nothing to flip, and rewriting zero to zero would just muddy the ringbuf. We only flip denials. Emit the event last so the logged `flipped` flag reflects the final decision.
 
-`bpf_override_return(ctx, 0)` is the primitive that does the actual work. The `ctx` argument is the probe's pt_regs context; the second argument is the new return value. The verifier checks that the target symbol is in `ALLOW_ERROR_INJECTION` at program load — if it were not, the load would fail here with a specific error message. Because `__arm64_sys_finit_module` and `__arm64_sys_init_module` are both on the allowlist, load succeeds and the override takes effect at runtime.
-
-The two-probe design covers both the legacy and modern module-load syscalls. `init_module` is the historical API; it takes a raw kernel-module image buffer and loads it. `finit_module` is the file-descriptor-based API that `insmod` and `modprobe` use on modern systems — it takes an fd to an already-opened `.ko` file. Both wind up in the same internal `load_module()` eventually, but at the syscall boundary they are distinct entry points. Attaching to both means we catch whichever one the caller actually used.
+The `kernel_load_data` and `locked_down` programs are structural duplicates of this one, differing only in their hook ID, hook name, and the hook-specific argument signature that `BPF_PROG` unpacks.
 
 ## Source Walk: The Userspace Loader
 
-The loader at `ch12-signed-driver-swap-syscall.c` does three things: preflights the kallsyms and error-injection lists, loads and attaches the BPF programs, and pumps the ringbuf. The preflight is where the correctness work happens.
+The loader's job is to preflight BPF LSM availability, load and attach the three programs, install the target-TGID entries, and pump the ringbuf. The preflight is where correctness lives.
 
 ```c
-const char *fsym = "__arm64_sys_finit_module";
-const char *isym = "__arm64_sys_init_module";
-int has_f  = kallsyms_has(fsym);
-int has_i  = kallsyms_has(isym);
-int inj_f  = err_inj_has(fsym);
-int inj_i  = err_inj_has(isym);
-fprintf(stderr, "[ch12s] symbol=%s\tkallsyms=%s\terror_injection=%s\n",
-        fsym,
-        has_f == 1 ? "present" : (has_f == 0 ? "ABSENT" : "err"),
-        inj_f == 1 ? "present" : (inj_f == 0 ? "ABSENT" : "err"));
-fprintf(stderr, "[ch12s] symbol=%s\tkallsyms=%s\terror_injection=%s\n",
-        isym,
-        has_i == 1 ? "present" : (has_i == 0 ? "ABSENT" : "err"),
-        inj_i == 1 ? "present" : (inj_i == 0 ? "ABSENT" : "err"));
-
-if (has_f != 1 && has_i != 1) {
-    fprintf(stderr, "[ch12s] CH12S_SKIP reason=\"module-load syscalls absent\"\n");
-    return 2;
-}
-if (inj_f != 1 && inj_i != 1) {
-    fprintf(stderr,
-            "[ch12s] CH12S_SKIP reason=\"module-load syscalls NOT in "
-            "error_injection allowlist; bpf_override_return would be rejected\"\n");
-    return 2;
-}
-```
-
-Two preflights, both cheap. `kallsyms_has` looks for the function in `/proc/kallsyms`, same pattern ch11 uses. `err_inj_has` reads `/sys/kernel/debug/error_injection/list` looking for a matching name. That file is a plain text file with one function name per line — the set of functions the kernel will permit `bpf_override_return` on.
-
-The loader then disables autoload for each program whose target is missing or not injectable:
-
-```c
-if (has_f != 1 || inj_f != 1) {
-    fprintf(stderr, "[ch12s] disabling kr_finit_module (symbol or inject missing)\n");
-    bpf_program__set_autoload(s->progs.kr_finit_module, false);
-}
-if (has_i != 1 || inj_i != 1) {
-    fprintf(stderr, "[ch12s] disabling kr_init_module (symbol or inject missing)\n");
-    bpf_program__set_autoload(s->progs.kr_init_module, false);
-}
-```
-
-This is the same graceful-degradation pattern ch11 uses. If either one of the two syscalls is missing or not injectable, only the other gets loaded. If both are missing, the loader exits with a `CH12S_SKIP` marker explaining why.
-
-Mode selection is via command-line flags:
-
-```c
-static const struct option longopts[] = {
-    { "all",  no_argument,       NULL, 'A' },
-    { "tgid", required_argument, NULL, 'T' },
-    { "help", no_argument,       NULL, 'h' },
-    { 0, 0, 0, 0 },
-};
-```
-
-`--all` sets the wildcard bit in `target_tgids` (key 0 -> 1). `--tgid <pid>` adds a specific TGID to the map. Both can be combined, though there's no reason to; either mode is sufficient on its own.
-
-The ringbuf handler is straightforward:
-
-```c
-static int handle(void *ctx, void *data, size_t sz)
+static int check_lsm_bpf_enabled(char *reason, size_t rlen)
 {
-    ...
-    const struct evt *e = data;
-    const char *sc = hook_str(e->hook);
-    if (e->flipped) {
-        printf("[ch12s] FORGE pid=%u comm=%s syscall=%s orig_ret=%ld -> 0 "
-               "(module NOT actually loaded)\n",
-               e->pid, e->comm, sc, e->orig_ret);
-    } else {
-        printf("[ch12s] OBSERVE pid=%u comm=%s syscall=%s ret=%ld\n",
-               e->pid, e->comm, sc, e->orig_ret);
+    FILE *f = fopen("/sys/kernel/security/lsm", "r");
+    if (!f) {
+        snprintf(reason, rlen, "/sys/kernel/security/lsm unreadable");
+        return 0;
     }
-    ...
+    char buf[512] = {0};
+    if (!fgets(buf, sizeof(buf), f)) { ... }
+    if (!strstr(buf, "bpf")) {
+        snprintf(reason, rlen,
+                 "kernel lacks 'bpf' in /sys/kernel/security/lsm (boot with lsm=bpf,...)");
+        return 0;
+    }
+    return 1;
 }
 ```
 
-Two formats: FORGE for flipped returns, OBSERVE for non-flipped (either not a target, or target with ret=0 already). The `orig_ret=%ld -> 0` output makes it obvious in the log what the kernel actually decided and what we lied about. The `(module NOT actually loaded)` parenthetical is there to head off the exact misreading this chapter is trying to prevent: people seeing "FORGE" and assuming the module loaded.
+`/sys/kernel/security/lsm` is a comma-separated list of active LSMs. If `bpf` is not in it, BPF LSM is inactive; fmod_ret programs will attach but never fire, because they are not in the LSM chain. That is a hard skip condition — no point starting the ringbuf consumer if no events can be produced.
 
-## The Trigger and the Proof Marker
+On a kernel with BPF LSM active the loader proceeds to open-and-load the skeleton, attach all three programs, install the wildcard or per-TGID entries, and pump the ringbuf. The attach failures on individual programs are tolerated — if the running kernel does not expose one of the three hooks, the program for that hook will fail to attach but the other two can still run. In practice all three attach on modern kernels.
 
-The trigger at `trigger.sh` does a tight before/after comparison. Read it end-to-end:
+The ringbuf handler formats each event:
 
-```bash
-# Build a 1 KiB non-ELF blob. insmod will fail with ENOEXEC ("Invalid module
-# format") on any kernel — this is pre-signature-check rejection, so the LSM
-# variant couldn't observe it, but the syscall return is still what userspace
-# sees.
-printf '\x7fELF\x02\x01\x01\x00' > "$FAKE_KO"
-printf '\x00\x00\x00\x00\x00\x00\x00\x00' >> "$FAKE_KO"
-dd if=/dev/zero bs=1 count=1016 >> "$FAKE_KO" 2>/dev/null
+```c
+printf("[ch12] FLIP\thook=%-.*s\tpid=%u\tcomm=%-16s\torig=%d\t-> 0\n",
+       HOOK_NAME_LEN, e->hook_name[0] ? e->hook_name : "?",
+       e->pid, e->comm, e->orig_ret);
 ```
 
-The fake module is an ELF header prefix followed by zeros. That is enough for the kernel to recognize "this is supposed to be an ELF" and then immediately reject it for being malformed. `\x7fELF\x02\x01\x01\x00` is the first 8 bytes of the ELF magic (class = 64-bit, data = little-endian, version = 1), followed by 8 zero bytes for the remainder of the ident, followed by 1016 zero bytes of "rest of the file." The total size is 1032 bytes. The loader will call it `-ENOEXEC` (invalid module format) because the section headers are garbage.
+One line per flipped event, carrying the hook name, the caller's pid and comm, and the `orig -> 0` rewrite. This is the evidence a defender would see in audit output if they happened to be reading the loader's stdout — which they wouldn't, in an adversarial deployment. It is here to make the proof-of-concept legible to a human reader.
 
-Then the baseline:
+## Target and Proof: the Fedora QEMU Run
 
-```bash
-echo "=== BEFORE (no loader attached) ==="
-BEFORE_OUT="$(insmod "$FAKE_KO" 2>&1)"
-BEFORE_RC=$?
-...
-lsmod | grep -q "^${MODNAME}\b" && BEFORE_LSMOD=yes || BEFORE_LSMOD=no
-echo "BEFORE: insmod_rc=${BEFORE_RC} lsmod_shows_module=${BEFORE_LSMOD}"
-```
+The trigger at `trigger.sh` fabricates a minimal fake `.ko` — valid ELF64 relocatable header for aarch64, e_type=ET_REL, e_machine=EM_AARCH64 (0xB7), everything else zeroed, padded to 4 KiB — and attempts `insmod` on it. The ELF header is just enough to get past the loader's early magic-bytes check and into the module-loading path where the LSM hooks fire.
 
-Without the BPF loader running, `insmod` returns non-zero (usually 1, representing ENOEXEC translated to userspace), and `lsmod` does not list the module. This is the baseline: kernel rejected, userspace saw the rejection.
+Three steps in the trigger. First, a baseline `insmod` with no BPF loader running — on an enforcing kernel with no valid signature on the blob, this produces an errno like `EBADMSG` ("Bad message") or `EKEYREJECTED` ("Key was rejected by service"). The trigger records this as `baseline_errno`.
 
-Then the loader starts:
+Second, the loader starts with `-a` (wildcard). The trigger waits briefly, then `insmod`s the same fake blob again. If the LSM override fires on `kernel_read_file`, the signature gate is bypassed and the loader proceeds further down the module-load path — past the LSM's integrity veto, into ELF validation and beyond. The ELF validation of a zeros-filled blob still fails, but with a *different* errno: typically `ENOEXEC` ("Invalid module format"). The errno has shifted.
 
-```bash
-"$LOADER" --all >/tmp/ch12s.out 2>/tmp/ch12s.err &
-LOADER_PID=$!
-
-for i in $(seq 1 50); do
-    if grep -q "status=ready" /tmp/ch12s.err 2>/dev/null; then
-        break
-    fi
-    sleep 0.1
-done
-```
-
-The `--all` flag sets wildcard mode so every caller's return is flipped. The trigger waits up to 5 seconds for the loader to print its `status=ready` marker, confirming the kretprobes are attached.
-
-Then the AFTER run:
-
-```bash
-echo "=== AFTER (loader attached, override active) ==="
-AFTER_OUT="$(insmod "$FAKE_KO" 2>&1)"
-AFTER_RC=$?
-...
-lsmod | grep -q "^${MODNAME}\b" && AFTER_LSMOD=yes || AFTER_LSMOD=no
-```
-
-With the loader attached, `insmod` of the same non-ELF blob now returns 0. The syscall return was flipped from -ENOEXEC to 0. But `lsmod` still does not list any module called `ch12sfake` (the trigger's chosen modname), because no module was loaded. Kernel state is unchanged. The userspace-illusion is narrow: only the return code.
-
-The proof marker:
-
-```bash
-if [[ "$BEFORE_RC" -ne 0 && "$AFTER_RC" -eq 0 && "$AFTER_LSMOD" == "no" ]]; then
-    echo "=== CH12_CONCEPT_PROVEN syscall_override_landed=yes module_actually_loaded=no ==="
-else
-    echo "=== CH12_CONCEPT_UNPROVEN before_rc=${BEFORE_RC} after_rc=${AFTER_RC} lsmod=${AFTER_LSMOD} ==="
-fi
-```
-
-The primitive is "proven" iff three conditions hold: BEFORE rc was non-zero (baseline: kernel rejects bad .ko), AFTER rc is zero (syscall return forged), AND lsmod still does not show the module (kernel state unchanged). The third condition is essential — without it, you could not distinguish "we lied about the rc" from "somehow the module actually loaded." All three conditions together prove exactly what the primitive claims: the syscall-return illusion is in effect, and it is strictly an illusion.
-
-The ringbuf event confirms the override landed, with the original return visible:
+Third, the trigger compares. If the loader's ringbuf recorded at least one FLIP event *and* the observed errno changed from the baseline, the proof marker fires:
 
 ```
-[ch12s] FORGE pid=<N> comm=insmod syscall=finit_module orig_ret=-8 -> 0
+CH12_PROVEN flipped=N hook=kernel_read_file baseline=EBADMSG override=ENOEXEC
 ```
 
-`orig_ret=-8` is `-ENOEXEC` — the kernel's actual verdict, captured inside the probe before the override rewrites it. The `-> 0` is what userspace sees. The comm tells us insmod was the caller. The pid correlates with the test run.
+That is what the Fedora 42 aarch64 QEMU VM produces. On a kernel that does not enforce module signatures — linuxkit — the baseline `insmod` already fails with `ENOEXEC` (ELF validator rejects first, before any LSM even sees the load) and the LSM hooks never fire on the module-load path at all. In that case the loader emits `CH12_LSM_SKIP reason="kernel lacks 'bpf' in /sys/kernel/security/lsm"` (linuxkit does not boot with `lsm=bpf,...`) or, on a kernel with BPF LSM active but no sig enforcement, `CH12_SKIP reason="no kernel_read_file/load_data/locked_down flip observed (module-sig path not taken)"`.
 
-## Scope: The Userspace Illusion and Its Limits
+The skip is honest. This is the primitive's required configuration: signature enforcement on, BPF LSM active, a module blob that reaches the signature-verification path. Any one of those absent and the primitive has nothing to flip.
 
-I keep circling back to the scope of this primitive because readers — and I, when I was writing the first draft of this chapter — want to believe it does more than it does.
+`run-qemu-tests.sh` is the harness that sets this up. It mounts the PoCs into a Fedora 42 aarch64 QEMU VM (Fedora boots its modern kernel with BPF LSM active by default and has `module.sig_enforce` set on most images), runs `make`, and invokes `trigger.sh` with a 30-second timeout. Look for `CH12_PROVEN` in the output.
 
-What it does: rewrites the return value of `finit_module(2)` and `init_module(2)` from the kernel's actual verdict to zero, for processes that match the target map.
+## Scope: What the Real Flip Does and Does Not Do
+
+On the enforcing kernel with the flip active: the signature gate is bypassed. That is a real kernel-state-affecting primitive. It is not subject to the disclaimers the syscall illusion carries. Specifically:
+
+- It *does* let the module bytes through the LSM integrity gate.
+- It *does* advance the loader into ELF validation and beyond.
+- If you supply a validly-formed unsigned `.ko` (a real module whose signature has been stripped or corrupted), it *does* cause that module to actually load into kernel memory, become visible in `lsmod`, register its sysfs entries under `/sys/module/<name>/`, and run its init function.
 
 What it does not do:
 
-- It does not load any code into the kernel.
-- It does not change `lsmod` output.
-- It does not change `/proc/modules`.
-- It does not create an entry in `/sys/module/<name>/`.
-- It does not suppress the kernel log message that records the original loader rejection.
-- It does not change the kernel's runtime state in any way.
+- It does not suppress the kernel log message recording the original LSM decision. On `CONFIG_MODULE_SIG_FORCE=y` systems with audit configured, dmesg still contains the pre-flip verdict. The flip changes the in-kernel control flow; it does not rewrite the audit trail retroactively.
+- It does not bypass kernel-level detectors that consult BPF program state — `bpftool prog list type lsm` shows the attached fmod_ret programs to anyone with `CAP_BPF`.
+- It does not make the attack invisible. A defender with auditd, or who reads the LSM audit stream, sees the forged allow against the original deny and can reconstruct the bypass after the fact.
 
-That is a strict scope. The value of the primitive depends entirely on whether the defender's checking logic is gated on the syscall return. If it is, the primitive fools them. If it is not, the primitive does nothing.
+The trigger in this repo uses a zeros-padded fake `.ko`, not a validly-formed unsigned module, because the goal of the PoC is to prove the *flip* landed. Proving that the flip can carry a real malicious module into kernel memory requires a real malicious module, which the repo does not ship. The errno shift from `EBADMSG` to `ENOEXEC` is the proof that the LSM override changed the control flow; the subsequent ELF-validation rejection is the fake `.ko` meeting its own separate rejection for not being a real module. Two rejections, two different errnos, one real bypass sandwiched between them.
 
-Orchestration code is a common target of this scope. Lots of system-provisioning tools call `modprobe` or `insmod` in a subprocess and check the exit code; if the exit code is zero, they proceed. That pattern is convenient, it matches how every other Unix tool works, and it is wrong against this primitive. A defender using such a tool sees "module loaded successfully" when the module in fact failed to load. The next step in the orchestration — configuring the module, using its sysfs entries, whatever — will fail with a different error (missing sysfs node, unknown syscall, etc.), but by that point the orchestrator may have already progressed past the point where it thought the module was available.
+## Secondary: the Syscall-Return Illusion (`ch12-signed-driver-swap-syscall`, registered as `ch12s`)
 
-This is the specific attack surface: multi-step orchestrations where the module-load step's success is the gate for subsequent steps, and where a failure at a later step produces diagnostics different from the failure the primitive masked. An attacker who wants a defender's orchestrator to take some later action that assumes the module is present can use this primitive to make the module-load step "succeed" (lie) without having to actually supply a working module.
+The secondary variant at `ch12-signed-driver-swap-syscall` is not a real override. It is kept in the repository as a separate category because it is the only ch12-shape primitive that fires on the linuxkit development kernel.
 
-The narrower use is defender-fooling: any monitoring system that alerts on `insmod` failure but does not cross-check `/proc/modules` is blinded by this primitive. The loader call succeeds as far as the monitor can see. Only a post-check detects the forgery.
+The primitive: kretprobes on `__arm64_sys_finit_module` and `__arm64_sys_init_module`, both of which are listed in `/sys/kernel/debug/error_injection/list` on linuxkit 6.12 aarch64. `bpf_override_return(ctx, 0)` on these probes rewrites the syscall's userspace-visible return value, regardless of what the kernel's module loader actually did internally.
 
-The even narrower use is anti-forensics: if a defender runs a script that logs the result of every `insmod` call to audit their system's module-load history, this primitive makes failed loads look like successes in the log. The `dmesg` record is untouched, so a forensic examiner who reads dmesg sees the truth, but the userspace log file is misleading.
+The loader's module bytes are still rejected. `lsmod` still shows nothing. `/proc/modules` is unchanged. `dmesg` still contains the original loader rejection message. Only the integer that `insmod`'s `syscall()` wrapper returns to userspace is flipped.
 
-None of these are "load an unsigned driver." The unsigned-driver attack requires either signature enforcement being off (in which case you don't need BPF at all, `insmod` works directly) or the LSM-level bypass of `mod_verify_sig` (which requires both signature enforcement and a real but unsigned .ko, conditions I could not set up on the test kernel). This primitive is for a different, narrower attack surface.
+The proof marker is explicit about this:
 
-## Why the Error-Injection Allowlist Contains Syscall Entries
+```
+CH12_CONCEPT_PROVEN syscall_override_landed=yes module_actually_loaded=no
+```
 
-A digression on the kernel-source side of things, because it is useful to understand why the allowlist has what it has.
+`module_actually_loaded=no` is not a disclaimer tacked on for honesty's sake; it is a condition of the proof. The trigger asserts three things: `BEFORE_RC != 0` (baseline: kernel rejects bad .ko), `AFTER_RC == 0` (syscall return forged), and `lsmod_shows_module == no` (kernel state unchanged). All three together prove exactly what the primitive claims: the syscall-return illusion is in effect, and it is strictly an illusion.
 
-`/sys/kernel/debug/error_injection/list` is populated from source-code annotations. Functions that declare `ALLOW_ERROR_INJECTION(func_name, TYPE)` in their defining source file are added to this list at build time. The type — one of four values defined as `EI_ETYPE_NULL`, `EI_ETYPE_ERRNO`, `EI_ETYPE_ERRNO_NULL`, or `EI_ETYPE_TRUE` in `include/asm-generic/error-injection.h` — tells the verifier what return values are permissible for the override. For syscall entry wrappers, the type is `ERRNO`, meaning override returns must be valid errno values (negative in the range -MAX_ERRNO to 0, or 0 itself).
+The illusion still has utility. It fools orchestrators, shell scripts, and CI systems whose check of module-load success is `insmod && echo ok` — the class of consumers that trusts the syscall return as authoritative. It does not fool anything that post-checks `/proc/modules` or `/sys/module/<name>/`, which is a two-line fix for any defender who cares.
 
-The syscall wrappers get this annotation because fault injection testing of syscalls is a common kernel test technique. You want to be able to simulate "what happens if `finit_module` fails with ENOMEM right here" as part of the kernel's own self-test infrastructure, and the allowlist is the mechanism that enables that. BPF programs piggyback on this — the same gate that lets the kernel's fault-injection framework rewrite a return lets a BPF program do so.
+The reason to keep `ch12s` registered alongside the real LSM variant is pedagogical. It demonstrates the error-injection-allowlist pattern that ch14 (SCHED_FIFO impersonator) and ch18 (token bypass) also use — find a syscall in the allowlist, attach a kretprobe, rewrite the return. On linuxkit, where the sig-enforcement path is absent, the syscall-return illusion is the only ch12-shape primitive that can be proved at all. The repository is explicit that it is an illusion, not an analog of the LSM variant.
 
-This is why the allowlist contains a lot of syscall entries but very few mid-kernel functions. Syscall entries are natural points to inject faults at because the entire syscall is a single transactional unit from userspace's perspective; the kernel's behavior in response to one is a single point of observation. Mid-kernel functions are deeper in the call graph and rewriting their returns has effects on other functions up the stack that are harder to reason about. The kernel developers have been generous with syscall-entry annotations and stingy with anything below the syscall boundary.
+The harness registers it as:
 
-The practical effect is that BPF programs that want to rewrite behavior have two clean attachment points: LSM hooks (explicit policy points with declared semantics for override) and syscall entries (explicit userspace-facing points with declared ERRNO semantics). Anywhere else — the IRQ dispatch path from chapter 11, the powercap functions from chapter 13, almost any filesystem or networking internal — is off-limits for `bpf_override_return` unless a kernel developer has specifically made that allowance.
+```python
+Poc("ch12s", "Signed-Driver Swap — syscall kretprobe (illusion)",
+    "ch12-signed-driver-swap-syscall",
+    hooks=["__arm64_sys_finit_module", "__arm64_sys_init_module"],
+    prefix="[ch12s]", mode="trigger-runs-loader", timeout=25,
+    proof_marker=r"CH12_CONCEPT_PROVEN|CH12_PROVEN|FORGE\s+pid=|_PROVEN",
+    category="illusion"),
+```
 
-For an attacker, this means the menu of possible primitives is bounded by the allowlist. You do not get to pick any function you like. You get to pick from a specific set. And for each function in the set, you get to decide what return value to rewrite to, within the ERRNO envelope.
+`category="illusion"` is load-bearing. `ch12s` is not a substitute for `ch12` and is not a fallback for it; it is a different primitive with a different, strictly narrower scope.
 
-This is the reason chapters 12, 14, and 18 look so structurally similar. Each one identifies a syscall in the allowlist, rewrites its return to fool a userspace consumer, and documents the scope. The pattern is the pattern because the allowlist is the allowlist.
+## Secondary: the Kprobe Observer (`ch12-signed-driver-swap`)
 
-## A Walk Through Why Non-ELF Triggers ENOEXEC
+The third variant is `ch12-signed-driver-swap` — pure observer. Kprobes on `load_module`, `module_sig_check`, and `mod_verify_sig`, plus a kretprobe on `mod_verify_sig` to capture its return. No mutation, no overrides, no flips. Events to a ringbuf describing which module-load gates fired, in what order, with what return values.
 
-An aside to make the ELF-validation rejection concrete. When `insmod fake.ko` runs on a non-ELF blob, the kernel's path through `load_module()` is:
+This is a forensic tool, not an attack primitive. The value is visibility: on a system where module loads are happening, the observer variant lets you watch the kernel's decision-making in real time. If you are writing a detector for the LSM bypass, the observer variant is the telemetry source you would start from — it shows the pre-flip view of the module-load path, which is what a defender's in-kernel instrumentation would see.
 
-For `finit_module` (the fd-based path that `insmod` uses on modern systems):
+The observer skips gracefully on kernels where the target symbols are absent (`CONFIG_MODULE_SIG=n` kernels do not have `mod_verify_sig`, for example). It does not require `bpf_override_return` privileges and does not trip the error-injection allowlist check.
 
-1. The syscall entry wrapper receives the file descriptor and flag arguments.
-2. `kernel_read_file` reads the .ko bytes into a kernel buffer (inside `init_module_from_file`).
-3. `load_module` is called, which first runs `module_sig_check` — the signature verification.
-4. `elf_validity_cache_copy` validates the ELF header: magic bytes, class (32 vs 64), data encoding (LE/BE), version, machine type, section headers.
+## Cross-Kernel Behavior Matrix
 
-For `init_module` (the legacy buffer-based path), step 2 is replaced by `copy_module_from_user` which copies the userspace image into a `struct load_info` (and calls `security_kernel_load_data`), then proceeds to the same `load_module` path.
+| Kernel config                               | `ch12` (LSM)  | `ch12s` (syscall illusion)    | `ch12-observer` (kprobes)     |
+|---------------------------------------------|---------------|-------------------------------|-------------------------------|
+| linuxkit 6.12 aarch64 (no SIG_FORCE, no BPF LSM in `lsm=`) | SKIP | **PROVES** (syscall allowlist ok) | SKIP (sig symbols absent)     |
+| Fedora 42 aarch64 QEMU (SIG_FORCE, BPF LSM active)         | **PROVES**    | would prove the illusion       | would fire on real loads      |
+| stock Debian cloud image (SIG=y, SIG_FORCE=n, BPF LSM active) | flips but errno unchanged (no denial to flip) | proves illusion | fires on real loads |
 
-The critical ordering detail: `module_sig_check` runs *before* ELF validation. A non-ELF blob without a valid signature marker suffix hits the `module_sig_check` path first. If enforcement is off, `module_sig_check` returns 0 (via `security_locked_down`), and the blob then fails at `elf_validity_cache_copy`. If enforcement is on and the blob lacks a signature, `module_sig_check` returns `-EKEYREJECTED` and the loader never reaches ELF validation at all.
+The LSM variant requires enforcement *and* BPF LSM *and* an insmod that reaches the signature-verification path. All three. That configuration exists on hardened production kernels and on deliberate QEMU test setups. It does not exist on most development hosts.
 
-At the ELF validation step, the `\x7fELF\x02\x01\x01\x00` + zeros blob the trigger creates will make it past magic-byte check (the first four bytes are correct), past class check (`\x02` = ELFCLASS64), past data check (`\x01` = ELFDATA2LSB), past version check (`\x01` = EV_CURRENT). What it fails at is the subsequent sanity checks on section headers and program headers — the zero bytes make the header offsets nonsensical, e_shoff and e_phoff point into nowhere, and the loader rejects with `-ENOEXEC`.
-
-The exact function that produces -ENOEXEC is `elf_validity_cache_copy` in `kernel/module/main.c`, called from `load_module`. This happens inside the syscall, after the signature check but before any further processing. My syscall-entry kretprobe fires on the way out of the syscall, after this rejection has been produced.
-
-On a valid ELF with bad or missing signature on an enforcing kernel, the path fails at `module_sig_check` with `-EKEYREJECTED` (-129) and never reaches ELF validation. If signature enforcement is off, `module_sig_check` returns 0 (or delegates to `security_locked_down`), and the ELF validation runs next. The LSM hooks that the original LSM variant was supposed to target include `security_kernel_load_data` (called during the initial copy/read), and `security_locked_down` (called at the end of `module_sig_check` when enforcement is off but the signature is missing or invalid).
-
-So the code path for "non-ELF blob on a non-enforcing kernel" fails at `elf_validity_cache_copy` after passing the signature check. The code path for "ELF with bad signature on an enforcing kernel" fails at `module_sig_check` before ever reaching ELF validation. The syscall-entry primitive catches both because it runs after everything; the LSM primitive catches only certain hook points, and only under specific kernel configurations.
-
-## On bpf_override_return Semantics
-
-The mechanics of `bpf_override_return` are worth pinning down because they are often described vaguely.
-
-The function is a BPF helper that, when called from a kprobe or kretprobe on an allowlisted target, arranges for the probed function's return value to be the specified value instead of what the function would have returned. On kprobes, this preempts the function's execution — the function body does not run at all, and the return value is set to the override. On kretprobes, the function has already run; the override rewrites its return value before it propagates to the caller.
-
-The kretprobe case is what this chapter uses. The module loader has already executed its full logic, decided to reject the bytes, and written a negative errno into the return register. The kretprobe fires on syscall exit, runs my BPF program, which calls `bpf_override_return(ctx, 0)`. That helper rewrites the kretprobe context's return-value slot, and when the probe returns, the kernel's return-path code uses the rewritten value to populate the userspace-visible return.
-
-The override is not a "fake return from kernel space"; it is a literal rewrite of the pt_regs-backed return value at the moment of syscall exit. There is no way for any userspace-visible mechanism to distinguish a BPF-forged return from a kernel-native return, because from the CPU's point of view there is no distinction — they are the same value in the same register at the same point in execution.
-
-Anything that reads the return in kernel space *before* the kretprobe runs sees the pre-flip value. That includes audit records, as noted in the detection section, and any other in-kernel consumer of the syscall's return. It also includes subsequent BPF programs attached to the same kretprobe if there are any — the order of kretprobe firing is not guaranteed to match the order of attachment.
-
-Anything that reads the return in kernel space *after* the kretprobe runs sees the post-flip value. That includes the userspace delivery of the return via the syscall exit path.
-
-The boundary between "before" and "after" is the specific placement of the kretprobe in the kernel's return-path code. This is a narrow window — single-digit instructions on modern kernels — and the behavior is consistent across 5.x and 6.x. The design choice here was made deliberately by the BPF developers: kretprobes need to be able to rewrite returns, the natural place to do that is at syscall exit after the function has run but before the value propagates.
-
-For a primitive that wants to fool both userspace and audit, the kretprobe placement is not good enough. Audit catches the pre-flip value. For a primitive that wants to fool only userspace, the kretprobe placement is exactly right. Chapter 12 is in the second category.
-
-## Cross-Kernel Behavior: When the LSM Path Actually Works
-
-I want to describe the kernel configuration under which the original LSM approach does fire, because it is a real configuration and someone reading this chapter should know how to recognize it.
-
-The LSM approach works against a kernel that has:
-
-1. `CONFIG_BPF_LSM=y` (BPF LSM infrastructure).
-2. `CONFIG_MODULE_SIG=y` (module signing compiled in).
-3. `CONFIG_MODULE_SIG_FORCE=y` or `module.sig_enforce=1` on the command line (signature enforcement fail-closed).
-4. A module blob with a valid signature marker suffix but an invalid or missing signature, so that `module_sig_check` reaches the `mod_verify_sig` verification path and fails.
-
-On such a kernel, a `.ko` with a bad signature hits `module_sig_check` (which runs before ELF validation inside `load_module`), `mod_verify_sig` returns a signature-failure errno, and `module_sig_check` translates that into `-EKEYREJECTED`. A BPF LSM program attached via `fmod_ret` on the `kernel_read_file` or `locked_down` hooks can flip the denial to zero, and the loader proceeds past the signature check to actually load the module into kernel memory. Unlike the syscall-entry primitive, this is a real bypass — the module actually loads, `lsmod` shows it, `/proc/modules` is updated, and the module's init function runs.
-
-The ROI on that primitive is enormous: it is the "load an unsigned driver" attack people are thinking of when they read a chapter title like this one. It is also rare in practice, because the kernel config conditions above are specific and the test-case construction (a validly-formed ELF with bad or missing signature) is deliberate.
-
-On a kernel with `CONFIG_MODULE_SIG_FORCE` off — which is most kernels — the LSM approach does not fire usefully because there is no signature denial to flip. `module_sig_check` falls through to `security_locked_down(LOCKDOWN_MODULE_SIGNATURE)`, which returns 0 on a non-locked-down kernel, and the module proceeds to load. The LSM hook attaches, runs, returns success, and no flip is needed because nothing was going to deny anyway.
-
-On a kernel with `CONFIG_MODULE_SIG_FORCE=y` but where my test payload lacks a signature marker suffix, `module_sig_check` returns `-EKEYREJECTED` directly — but this happens in `module_sig_check` before ELF validation, not after. The LSM hooks (`kernel_read_file`, `locked_down`) may or may not be in the code path depending on which syscall variant is used and how far the loader gets.
-
-The conditions for the LSM bypass to be useful are: signature enforcement on (so there is a denial to flip), and a module blob that reaches the signature verification path (so the LSM hooks in that path are exercised). That configuration is what a serious production kernel with strict module signing looks like. It is also what this chapter does not have a test environment for.
-
-The syscall-entry primitive works on any kernel where the module-load syscalls are in the error-injection allowlist, which is a much more permissive condition. Different conditions, different ROIs across all three variants:
-
-- **Observer (kprobe)** -- `ch12-signed-driver-swap` -- watches `load_module`, `module_sig_check`, `mod_verify_sig`. Fires on any kernel where those symbols exist in kallsyms. Pure observation, no mutation. Category: **REAL** (observer).
-- **LSM mutator (fmod_ret)** -- `ch12-signed-driver-swap-lsm` -- attaches to `SEC("lsm/kernel_read_file")`, `SEC("lsm/kernel_load_data")`, `SEC("lsm/locked_down")`. Flips LSM hook denials to allow module loads blocked by signature enforcement or lockdown. Rare kernel config; real bypass. Category: **REAL** (mutator).
-- **Syscall forger (kretprobe)** -- `ch12-signed-driver-swap-syscall` -- forges return code for any reason of loader failure on any kernel with injectable module-load syscalls. Common kernel config; userspace illusion only. The kernel still rejects the module; `lsmod` is unchanged. Category: **ILLUSION**.
-
-No single variant is strictly better; they do different things. The LSM approach is the one people imagine when they hear "signed-driver swap," and it is genuinely more powerful where it fires. The syscall-entry approach is the one I could prove on the test kernel and is what survives in the repository. The observer variant provides forensic visibility into the module-load decision path regardless of whether mutation is possible.
+The syscall illusion requires only that the module-load syscalls be in the error-injection allowlist, which they are on any kernel built with `CONFIG_FUNCTION_ERROR_INJECTION=y`. That is a much more permissive condition. The trade-off is that the illusion does not actually load anything.
 
 ## Detection
 
-The detection story is uncomfortably simple for the defender and embarrassing for the attacker: the forgery is visible to anyone who checks more than one thing.
+For the real LSM variant:
 
-`lsmod` / `/proc/modules`: the supposedly-loaded module is not listed. This is the canonical cross-check. Any workflow that does `insmod x.ko` followed by `lsmod | grep x` catches the forgery. The second command is maybe two seconds of extra script work; the defensive value is enormous.
+- `bpftool prog list type lsm` shows attached sleepable programs on `kernel_read_file`, `kernel_load_data`, `locked_down`. Legitimate userspace does not typically attach LSM fmod_ret on module-load hooks; one showing up is high-signal.
+- The LSM audit stream (`auditctl -w /sys/fs/bpf -p wa` and LSM hook audit records) captures the attach event and, on some configurations, the hook-return mismatch between what the underlying LSM decided and what the chain returned.
+- `dmesg` on an enforcing kernel still records the pre-flip integrity decision. A forensic examiner reading dmesg sees `modsign: module "fake" signature verification failed` (or equivalent) regardless of whether the LSM chain was subsequently overridden to allow the load. The log line is written before the override runs.
 
-`/sys/module/<name>/`: the module's sysfs directory does not exist. `stat("/sys/module/<name>")` returns ENOENT. Any orchestrator that consults the sysfs representation of loaded modules catches the forgery trivially.
+For the syscall illusion (`ch12s`):
 
-`dmesg`: the kernel log still contains the module loader's original error message. "Invalid module format" for a bad ELF, "Key was rejected by service" for a signature failure, "Unknown symbol" for an unresolved init dependency. The log is not rewritten by the BPF primitive; only the syscall return is. A defender reading dmesg sees the truth.
+- `lsmod` / `/proc/modules` / `/sys/module/<name>/` show no module. The canonical cross-check; defeats the illusion in two lines of shell.
+- `dmesg` shows the original loader rejection.
+- `auditctl -a always,exit -S finit_module -S init_module` records the pre-flip return value on the 6.12 kernels I tested; the kretprobe override runs after the audit-exit hook.
+- `bpftool prog show type kprobe | grep finit_module` reveals the attached kretprobe.
 
-`auditctl -a always,exit -S finit_module -S init_module`: audit watches on the module-load syscalls record every call, with the return code as the audit system sees it. The audit return is captured in the audit-exit stage of the syscall — which may be before or after the BPF kretprobe runs, depending on the kernel's audit-hook placement. On the 6.12 kernels I tested, the audit return captures the pre-flip value; the BPF override runs at the very end of syscall exit, after the audit record has been emitted. That means audit logs show the real return, not the forged one. Which is good news for defenders and bad news for the primitive's stealth.
-
-`bpftool prog show type kprobe | grep -i finit_module`: the attached kretprobe is visible to anyone with `CAP_BPF`. This is the generic BPF-observability detection — same as ch11, same as every BPF primitive. If you can run `bpftool` you can see the probe.
-
-`/sys/kernel/tracing/kprobe_events`: the kernel's tracing subsystem records every kprobe registration. The BPF loader does not typically go through this interface (it uses perf_event_open instead), but kprobes registered through either path show up here.
-
-The defender's question, and this is what I ended the chapter section of the first draft with and I want to repeat it: "did this module actually load" is easy to verify. The real surface this primitive attacks is "which code path in my orchestration treats a syscall return as authoritative." That is a different question, and the answer varies by orchestrator.
-
-## Prior Art and Related Primitives
-
-Module-signature bypass has a long history in kernel-security research. Before BPF, the primary approaches were: modify the kernel's signing key in memory (requires arbitrary kernel write), load the module via `/proc/kallsyms` + `finit_module` with a kernel-resident trampoline (requires a privileged loader already in kernel), or directly modify `/sys/module/<name>/` entries via debugfs to mask the absence (requires debugfs write access, detectable).
-
-The KSPP (Kernel Self-Protection Project) threads from 2018-2020 covered signature enforcement hardening fairly extensively. The consensus was that `CONFIG_MODULE_SIG_FORCE=y` plus a trusted keyring is sufficient to prevent unsigned module loads against an attacker who does not have kernel-code-execution already. Once they do, all bets are off; the kernel cannot defend against an attacker inside the kernel.
-
-BPF-based extensions to module-signature bypass started appearing in public around 2022, on the back of the LSM fmod_ret mechanism. The threat model there is "attacker with CAP_BPF but not kernel-code-execution," which is a narrower and more interesting threat than the classical one. A lot of container escape research has hit this boundary: if the attacker has CAP_BPF in a container that shares the host kernel, the LSM bypass of `mod_verify_sig` is a plausible escalation step toward actually loading a kernel module from the container.
-
-The syscall-entry variant I describe here is in a different class. It is not a privilege-escalation primitive — the attacker has to have CAP_BPF already to load the program, and the primitive doesn't get them anything extra in kernel memory. It is a workflow-manipulation primitive: fool the orchestration, not the kernel.
-
-Ch14 (SCHED_FIFO impersonator), which forges `sched_setscheduler` returns, and ch18 (token bypass), which forges `getuid` returns, are the closest siblings. All three use the same pattern: ERRNO-injectable syscall entry, kretprobe, `bpf_override_return`, narrow userspace illusion. Different syscalls, different specific lies, same mechanism.
+For the observer: nothing to detect, it is just watching.
 
 ## Deployment Notes for the Defender
 
-If you are a defender thinking about detection for this primitive, here is the practical playbook.
+If you operate kernels that load modules and you care about this attack surface:
 
-First, do not trust `insmod`'s exit code alone. If your ops scripts call `insmod` or `modprobe` and check the exit code, add a post-check on `/proc/modules` or `/sys/module/<name>/`. The two-line diff is:
+First, enable signature enforcement. `CONFIG_MODULE_SIG_FORCE=y` at kernel-build time, or `module.sig_enforce=1` on the kernel command line. Without enforcement, the LSM hooks in the module-load path return success regardless of signature state, and neither this primitive nor any other can bypass what was never enforced in the first place.
 
-```bash
-# before
-insmod x.ko || die "load failed"
-# after
-insmod x.ko || die "load failed"
-lsmod | grep -q '^x\b' || die "load claimed success but module not present"
-```
+Second, audit your LSM stack. A kernel running `lsm=lockdown,yama,bpf` has BPF LSM active and is subject to fmod_ret overrides from any process with `CAP_BPF`. A kernel running `lsm=lockdown,yama` without BPF is not — but may lack other BPF features you rely on. The trade-off is real; the point is to know which stack you are running.
 
-The cost is one extra shell-out per load. The defensive value is complete coverage of this primitive.
+Third, do not trust `insmod`'s exit code alone. This defeats both the real LSM bypass (which leaves a real module loaded, so a post-check would see that it succeeded) *and* the syscall illusion (which leaves nothing loaded, so a post-check would catch the lie). The two-line cross-check — `insmod x.ko && lsmod | grep -q '^x\b'` — is universal and cheap.
 
-Second, deploy auditd rules on the module-load syscalls:
+Fourth, watch `bpftool prog list type lsm` for attachments on module-load hooks. Legitimate observability tools do not fmod_ret on `kernel_read_file`; they fentry/fexit for observation. An fmod_ret attach on that hook from an unexpected loader is high-signal.
 
-```
-auditctl -a always,exit -S finit_module
-auditctl -a always,exit -S init_module
-```
+## Why Linuxkit Skips, and Why That Matters
 
-The audit records capture the real return value (pre-flip, as discussed). A forensic analyst looking at audit logs sees every module-load attempt with the kernel's actual verdict, regardless of whether a BPF primitive has forged the syscall return for userspace.
+The linuxkit kernel on macOS Docker Desktop (Linux 6.12 aarch64 on an Apple Silicon host) is the default development surface for this book. It is fast, it is reproducible, and it runs most BPF primitives fine. But it does not enforce module signatures, and it does not boot with `lsm=bpf,...`. Two configuration decisions, both reasonable for a developer-facing virtual kernel, that together mean the real ch12 primitive has nothing to bite.
 
-Third, watch `bpftool prog show` output. Any kretprobe attached to `__arm64_sys_finit_module` or `__arm64_sys_init_module` (or the x86 equivalents) is high-signal. Legitimate observability tools do not kretprobe syscall entries by default. If you see one, ask who loaded it and why.
+The honest response is to skip, not to claim a working attack on conditions the host cannot provide. The LSM trigger emits `CH12_LSM_SKIP` or `CH12_SKIP` with a reason string; the harness respects it; the chapter is explicit about it. The syscall illusion takes over as the ch12-shape primitive linuxkit can actually execute, and it is labeled what it is: an illusion, not a real override.
 
-Fourth, consider `CONFIG_MODULE_SIG_FORCE=y` for your kernel build if you are not already doing this. Signature enforcement is the front-line defense against the LSM-variant attack; it also makes the syscall-entry variant less useful because most caller workflows that matter already post-check the module state. Enforcement is a requirement on serious production kernels and I'd argue should be the default everywhere except development.
+This pattern — real primitive requires specific kernel config, development host does not provide that config, secondary variant fills the gap — recurs across the book. Chapters 8, 11, and 15 have similar stories. Each chapter is explicit about which variant fires where and what each one proves. The field-manual voice: here is what worked, here are the conditions, here is what did not work and why.
 
-Fifth, if you operate a cluster orchestration system that relies on module-load success as a gate, audit every call site to ensure it cross-checks `/proc/modules`. This is the kind of systemic review that does not scale to "read every script in every team's ops repo," but you can at least set the policy and write a lint rule.
+## Why This Chapter is in the Book
 
-## Deployment Notes for the Attacker
+The LSM bypass of module-signature enforcement is one of the most consequential BPF primitives against a hardened kernel. It turns a correctly-configured signing wall into a single `CAP_BPF`-gated decision. On a multi-tenant host, on a container that shares the host kernel, on any system where the threat model is "attacker may acquire `CAP_BPF` but not kernel-code-execution" — this primitive is the escalation path from "can load BPF programs" to "can load arbitrary kernel modules."
 
-From the other side, if you are thinking about using this primitive adversarially, the things to know are:
+The syscall illusion is a narrower primitive, but a real one within its scope. Orchestration code that treats module-load syscall returns as authoritative is common; the illusion defeats all of it. Against a defender who has not thought to cross-check kernel state, the illusion is a complete bypass of the orchestration's assumption.
 
-First, this is a userspace-illusion primitive. Do not deploy it expecting to load code into the kernel; that is not what it does. The module does not load. If you need kernel code execution, you need a different primitive — typically one that requires conditions you do not have (kernel write, signature bypass on an enforcing kernel, and so on).
+The observer is the forensic tool that makes both of the above legible. If you want to understand what the kernel's module-load path is actually doing on your specific host, the observer variant shows you.
 
-Second, the scope of the illusion is narrow. Any post-check against `/proc/modules` catches you. If your target workflow includes such a check, this primitive is useless. Audit the target workflow before deploying.
-
-Third, the BPF load is visible. `bpftool prog show`, `/sys/kernel/tracing`, auditd BPF-load events — all of them reveal that a kretprobe is attached to the module-load syscalls. If your adversarial scenario requires stealth, the load itself is already detectable.
-
-Fourth, the primitive interacts poorly with systems that do real module loading alongside the faked path. If you flip every caller's return with `--all`, you will forge the return of legitimate module loads too — turning a successful legitimate load into a ringbuf event with flipped=0 (not flipped, ret was already 0). But if a legitimate load fails for an ordinary reason (ENOMEM, missing dependency), the primitive flips that to success as well, which might cause the orchestrator to take unexpected actions. Use per-TGID targeting to constrain the blast radius.
-
-Fifth, the primitive does not survive `rmmod` + `insmod` on a module that is already loaded. If the target module is loaded, `insmod` returns EEXIST; the primitive flips EEXIST to zero. That is probably the wrong behavior for most uses. Check the existence of the target module in userspace before relying on the primitive.
-
-## A Digression on insmod vs modprobe
-
-A small note on the userspace tooling. `insmod` is the low-level interface; it calls `finit_module` directly with a file descriptor. `modprobe` is the higher-level interface; it handles dependency resolution, loads dependent modules first, consults `/lib/modules/$(uname -r)/modules.dep`, and ultimately also calls `finit_module` (sometimes repeatedly for dependency chains).
-
-The primitive catches both because it hooks the syscall, not the userspace tool. Whether the caller is `insmod x.ko`, `modprobe x`, or a custom program that calls `syscall(SYS_finit_module, ...)` directly, the kretprobe fires on syscall exit and the return is rewritten.
-
-For modprobe specifically, this means: if modprobe is loading a module that depends on five other modules, and the primitive is in wildcard mode, then any of the six individual loads that fails has its return flipped. Modprobe's internal logic may be confused — it loaded what it thought was a success but the module is not actually present. The observable behavior from the outside depends on what modprobe does when a load "succeeds" but the expected post-conditions are not met. In my testing this varies by modprobe version; some versions notice and error out, some do not.
-
-This is an area where the primitive's semantics become fuzzier the deeper you go into ecosystems that use module loading. The narrow claim — "the syscall return is flipped" — is stable; the impact on higher-level tooling depends on how that tooling reacts to "success without the expected state."
-
-## Why This Is in the Book
-
-I keep asking myself whether chapters like this one — where the primitive's scope is genuinely narrow and the victim class is specific — are worth including. The alternative would be to cut them and only feature the primitives that land big, with real kernel-state consequences.
-
-The argument for including them is that they are representative of what BPF-based kernel adjacent primitives actually look like. Most primitives are narrow. Most primitives have a victim class that is specific to a particular engineering assumption (in this case, "syscall returns are authoritative for module load"). Most primitives need a post-check to be defeated.
-
-A book that only featured the big-impact primitives would be misleading about the shape of the field. The field is small primitives, narrow scopes, and engineering work on the defender side to close the assumption gaps. Showing the small primitive clearly, with its scope, is more useful than showing an imagined big primitive that does not actually exist on real kernels.
-
-The second argument for including this chapter is that the failure mode — the LSM approach that did not fire — is itself instructive. The setup conditions for "BPF LSM bypass of module signing" are specific enough that most readers who think they understand the attack have not thought through the conditions under which it fires. Walking through both the failure and the pivot teaches something about how to read kernel source for real exploitability, not just for the surface-level "is the hook there" question.
-
-## Factual Note
-
-The chapter I started from described intercepting `module_sig_check()`, swapping signature blobs in flight, and loading a malicious driver the kernel believed was legitimate. None of that is what this POC does, and none of it works on the kernels I tested.
-
-The working attack is smaller. Its scope is strictly the syscall boundary. The kernel still rejects the bytes. Only userspace sees a forged return. That is a real primitive, it has a narrow but legitimate adversarial application, and it is what I can actually prove on the test kernel.
-
-The original chapter's description conflated a working primitive (the LSM approach under specific kernel config) with a claimed outcome (loaded malicious driver) without distinguishing the setup conditions. That is the kind of over-claiming this book is trying to avoid. The honest version is: here is the approach that worked, here is the approach that did not, here is why, and here is what each one can and cannot do.
+Three variants, three categories, three different answers to the same question. The chapter title — "eBPF Signed-Driver Swap" — is literally true of only one of them. The other two are honest about what they are. That is the shape of the field.
