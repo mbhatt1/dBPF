@@ -415,10 +415,10 @@ The harness runs the chapter's trigger and writes two artifacts. The first is th
 ```
 [ch01] BEFORE: target_tgid=4422 capset(CAP_SYS_ADMIN) -> EPERM
 [ch01] CH01_WEAPON_PROVEN flips=12
-[ch01] AFTER: target_tgid=4422 denied_ops=3 signals_delivered=3
+=== CH01_WEAPON_PROVEN flips=3 signals=3 ===
 ```
 
-The `flips=3 signals=3` marker is the count of denials the BPF program observed for the target tgid *and* the count of `SIGUSR1`s the kretprobe successfully delivered back into the caller via `bpf_send_signal`. The override attempt is silently no-opped (`cap_capable` is not on the error-injection allowlist on linuxkit 6.12), so the deny still lands at the API boundary. The active effect is the signal: the caller receives `SIGUSR1` on every denied operation.
+The `flips=3 signals=3` marker — emitted verbatim by `trigger.sh` inside `=== … ===` delimiters — is the count of denials the BPF program observed for the target tgid *and* the count of `SIGUSR1`s the kretprobe successfully delivered back into the caller via `bpf_send_signal`. The override attempt is silently no-opped (`cap_capable` is not on the error-injection allowlist on linuxkit 6.12), so the deny still lands at the API boundary. The active effect is the signal: the caller receives `SIGUSR1` on every denied operation.
 
 The second artifact is the live ringbuf trace the loader streams to stdout:
 

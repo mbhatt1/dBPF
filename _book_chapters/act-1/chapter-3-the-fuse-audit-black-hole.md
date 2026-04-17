@@ -117,8 +117,8 @@ The program compiles. The verifier accepts it, which surprised me — my expecta
 <!-- source: kernel/bpf/verifier.c:21826-21832 — check_attach_modify_return -->
 The reason took some digging. `fmod_ret` requires the target to pass `check_attach_modify_return` in `kernel/bpf/verifier.c`. On 6.12 that function allows `fmod_ret` on exactly two classes of targets: (1) functions in the `ALLOW_ERROR_INJECTION` list (`within_error_injection_list(addr)`), and (2) functions whose name starts with `security_` (the LSM hook wrappers). `audit_log_start` is in neither class. No audit functions are.
 
-<!-- source: kernel/bpf/verifier.c:22148-22156 — fmod_ret is rejected at load time -->
-On closer inspection, the verifier does reject `fmod_ret` programs for targets outside the allowed set at load time. The check in `check_attach_btf_id` calls `check_attach_modify_return` and, if the target is not in the error injection list and does not start with `security_`, returns `-EINVAL` with the log message `"<func>() is not modifiable"`. A program declaring `fmod_ret/audit_log_start` should fail at load with this error. In my initial testing I may have been misreading a load that succeeded as `fentry` (without modify-return) rather than as `fmod_ret`; the two are easy to conflate when iterating quickly.
+<!-- source: kernel/bpf/verifier.c:22148-22156 — fmod_ret is rejected at load time IF it gets that far -->
+On closer inspection, the verifier does reject `fmod_ret` programs for targets outside the allowed set at load time. The check in `check_attach_btf_id` calls `check_attach_modify_return` and, if the target is not in the error injection list and does not start with `security_`, returns `-EINVAL` with the log message `"<func>() is not modifiable"`. A program declaring `fmod_ret/audit_log_start` will fail at load with this error *if the loader actually submits it to the verifier*. The real POC in `ch03-fuse-blackhole-fentry` declares the SEC in the object file but the userspace loader decides at runtime — via BTF introspection (`btf_has_func("audit_log_start")`) and a check for BPF LSM support on the boot cmdline — whether to autoload the program at all. On any LSM-capable kernel the loader calls `bpf_program__set_autoload(..., false)` on the fmod_ret program before `__load()` is invoked, so the verifier never sees it and the rejection path never runs. The correct statement is not "the load fails" but "the loader skips this program at runtime when a better path is available." The load-time rejection is what would happen if you blindly enabled the fmod_ret program on a 6.14+ kernel; the POC's loader exists specifically to avoid that.
 
 There was a patch series in mid-2023 to add `audit_log_start` and a few other audit-emission functions to the approved set. I found it by searching lkml for `bpf: audit: allow fmod_ret`. The thread is worth reading in full; I'll paraphrase.
 
@@ -132,8 +132,38 @@ The other variant I considered was `fentry` without the modify-return, which is 
 
 One other thing I verified during the fentry work: the BTF type information for `audit_log_start` is present in the kernel BTF on 6.12, which is a prerequisite for `fentry` attach. You can check with `bpftool btf dump file /sys/kernel/btf/vmlinux format raw | grep audit_log_start`. If the function is missing from BTF (some very stripped-down kernels omit BTF for infrequently-used subsystems), `fentry` fails at load with a clear error. On the kernels I tested — linuxkit 6.12, Debian trixie 6.12, and a Fedora 40 kernel — BTF was complete and fentry attach worked.
 
-<!-- source: kernel/bpf/verifier.c:22154 — the error IS surfaced at load time -->
-To be clear: on 6.12, `fmod_ret/audit_log_start` is rejected at load time with `"audit_log_start() is not modifiable"`. This is the correct behavior. The verifier surfaces the error explicitly, which is better UX than the kprobe-override path where the program loads and the override silently no-ops.
+<!-- source: kernel/bpf/verifier.c:22154 — the error would surface at load time if the loader submitted the program -->
+To be clear: on 6.12, if you hand `fmod_ret/audit_log_start` to the verifier you get `"audit_log_start() is not modifiable"` and a clean `-EINVAL` from `bpf_prog_load(2)`. The POC's loader never sees that error on an LSM-capable kernel because it disables autoload on the fmod_ret program first and routes to the fallback path instead. Either way, the behavior is better UX than the kprobe-override case where the program loads, attaches, runs, and silently no-ops.
+
+## The lsm/syslog Fallback
+
+The fentry POC ships a second program that the chapter has not mentioned so far, and it is the program that actually runs on this linuxkit image. The object file declares:
+
+```c
+SEC("lsm/syslog")
+int BPF_PROG(lsm_syslog, int type, int ret) {
+    if (!is_enabled()) return ret;
+    if (ret != 0) return ret;
+    emit(2, 1, type);
+    return -EPERM;
+}
+```
+
+This is an LSM hook — specifically the `security_syslog` hook, which is called when a process invokes the `syslog(2)` syscall or reads `/dev/kmsg` / `/proc/kmsg`. The `SYSLOG_ACTION_*` codes cover dmesg read, dmesg clear, console-level changes, and a handful of related operations that a security policy would want to gate. Returning `-EPERM` from the fmod_ret-on-LSM-hook denies the operation. This is a legitimate, unambiguously-supported `fmod_ret` target because LSM hook names start with `security_`, which is the second class the verifier allows (see `check_attach_modify_return`).
+
+The fallback is narrower than the primary path in exactly one way: it does not suppress `/var/log/audit/audit.log`. It only denies the dmesg / kmsg read channel. For the attacker scenario where an incident responder runs `dmesg | grep` looking for kernel-level tells, the fallback is enough. For the scenario where the responder runs `ausearch`, it is not. The POC's loader makes this tradeoff explicit: on any kernel with `CONFIG_BPF_LSM=y` and `lsm=...,bpf,...` on the boot cmdline (checked by reading `/sys/kernel/security/lsm`), it disables the fmod_ret program and attaches only the LSM hook. The reasoning in the loader comments is that attempting the fmod_ret attach on a 6.14+ kernel would poison the whole skeleton with a verifier rejection, so the safe move is to skip it when any LSM fallback exists.
+
+This is the behavior a reader reproducing the POC will actually see: the loader prints `attached lsm.s/syslog (fallback)`, the ringbuf emits events with `hook=2` (syslog) rather than `hook=1` (audit_log_start), and the `/var/log/audit/audit.log` file keeps growing normally. The "audit black-hole" in the chapter title is, on a stock LSM-capable kernel, a "syslog black-hole" in practice.
+
+## The Trigger
+
+The POCs ship with `trigger.sh` scripts that make the BEFORE/AFTER state delta explicit. Worth walking through because the scripts are what the harness actually runs to produce the pass/fail markers.
+
+The fentry-variant trigger (`ch03-fuse-blackhole-fentry/trigger.sh`) does four things in order. First, it installs an audit rule for `openat` — `auditctl -a always,exit -F arch=b64 -S openat -k ch03` — so the kernel has something to audit. Second, it runs a baseline loop: five `dd if=$TARGET of=/dev/null bs=1 count=1` invocations with no BPF loaded, counts matching records in `/var/log/audit/audit.log` (grep for `key="ch03"`), and records the delta. Third, it starts the fentry loader in the background and runs the same five-`dd` loop again, recording the after-BPF delta. Fourth, it probes the dmesg read channel (the fallback path's scope) and dumps the loader's log. The script emits `CH03_FE_PROVEN suppressed=N` if the loader's log contains any `SUPPRESSED` lines, `CH03_FE_PROVEN attached=yes` if the loader attached but suppressed nothing (which is the `lsm/syslog` case in a quiet environment), and `CH03_FE_SKIP` if nothing attached.
+
+The registered ch03 variant's trigger (`ch03-fuse-blackhole/trigger.sh`) is a different shape — a visibility demo rather than a suppression demo. It runs the kprobe observer for a few seconds, generates a burst of audit-worthy activity (`/bin/true`, failed execs, file touches), and counts how many `audit_log_start` events the BPF observer streamed to its stdout. It then *optionally* tries to run the sibling fentry loader. The marker it emits is `CH03_PROVEN variant=B before=0 after=N` for the observer case, or `CH03_PROVEN variant=A ...` if the fentry fmod_ret path happened to attach on this kernel.
+
+The important footnote for anyone reading the harness: the regex the harness uses to detect the `SUPPRESSED` marker only fires in the fentry variant's log, not in the kprobe variant's. The registered ch03 emits `CH03_PROVEN` (visibility) and the fentry variant emits `CH03_FE_PROVEN suppressed=N` (real mutation). They are different signals from different POCs. A reader who expects `SUPPRESSED` to appear in the main ch03 run will be disappointed; the main run is the observer, and observation is not suppression.
 
 For completeness, I also tried `tp_btf/audit_log_start` (tracepoint-BTF). There is no such tracepoint. The audit subsystem has tracepoints in a few places (`tracepoint:syscalls:*` is the main one, but it is upstream of the audit subsystem's own construction) but not one on `audit_log_start` itself. So the `tp_btf` attach point does not exist for this target. `raw_tp` and `tracing` attach types likewise do not apply. The only attach types that work on `audit_log_start` are `kprobe`, `kretprobe`, `fentry`, and `fexit`. All four are observation-only on a stock kernel.
 

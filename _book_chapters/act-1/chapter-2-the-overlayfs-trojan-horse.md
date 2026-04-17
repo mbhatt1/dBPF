@@ -10,7 +10,7 @@ date: 2025-02-01
 
 I started on this one after noticing, on a linuxkit 6.12 test VM, how much work `ovl_copy_up_one` actually does between the moment it allocates the upper inode and the moment the merged dentry becomes visible. That window is the thing. I wanted to measure it, and then I wanted to see whether a userspace racer could fit inside it.
 
-Up front: the BPF side of this chapter is an observation channel. The override call is there in the code, but `ovl_copy_up_one` is not in `ALLOW_ERROR_INJECTION` on stock 6.12, so the override is a no-op the same way it is in chapter 1. What the probe gives you is a reliable signal — a ringbuf event saying "copy-up is happening now, at this path, for this inode." The effect comes from a userspace racer that consumes those events and tries to touch the upper file before overlayfs finishes wiring it in.
+Up front: the BPF side of this chapter is an observation channel. The shipped PoC attaches kprobes to three entry points into the copy-up path (`ovl_copy_up`, `ovl_maybe_copy_up`, `ovl_copy_up_with_data`) and does nothing else — no `bpf_override_return`, no in-BPF payload injection. What the probe gives you is a reliable signal — a ringbuf event saying "copy-up is happening now, for this dentry, via this entry point." The effect comes from a userspace racer that consumes those events and opens the upper file before overlayfs finishes wiring it in.
 
 ## OverlayFS, Briefly
 
@@ -38,7 +38,7 @@ Below `ovl_copy_up_flags` sits `ovl_do_copy_up`. This is where the upper inode i
 The workhorse is `ovl_copy_up_data` (which delegates to `ovl_copy_up_file`). This is where the actual byte copy happens, via `vfs_clone_file_range` (reflink) if supported, or a fallback `do_splice_direct` loop. It is the slowest function in the sequence — my measurements on the linuxkit VM had it dominating the total copy-up latency by roughly 10x for small files and much more for large ones. It is also the most stable attach point across kernel versions I tested (5.15 through 6.12): the function has kept the same signature and has never been a candidate for inlining because it loops and calls out to VFS.
 
 <!-- source: fs/overlayfs/copy_up.c:1137,1215 — ovl_copy_up_one is called from ovl_copy_up_flags in a loop for each ancestor -->
-`ovl_copy_up_one` on 6.12 is a real function called by `ovl_copy_up_flags` once per file in the ancestor walk. Its signature is `ovl_copy_up_one(struct dentry *parent, struct dentry *dentry, int flags)`. It is called once per dentry that needs copying up, so a deep path fires it multiple times — once per ancestor plus once for the target. I discovered this by instrumenting `ovl_copy_up_one` on the same kernel, triggering a copy-up of `/usr/bin/curl` (several directories deep, none of them yet copied up), and watching `ovl_copy_up_one` fire four times. For full coverage, attach to `ovl_copy_up_one` (which sees every individual copy-up) and consider pairing with `ovl_copy_up_data` for timing.
+`ovl_copy_up_one` on 6.12 is a real function called by `ovl_copy_up_flags` once per file in the ancestor walk. Its signature is `ovl_copy_up_one(struct dentry *parent, struct dentry *dentry, int flags)`. It is called once per dentry that needs copying up, so a deep path fires it multiple times — once per ancestor plus once for the target. I discovered this by instrumenting it on the same kernel, triggering a copy-up of `/usr/bin/curl` (several directories deep, none of them yet copied up), and watching it fire four times. That redundancy is part of why the shipped PoC does not hook `ovl_copy_up_one` and instead hooks the three entry points above: `ovl_maybe_copy_up` fires earliest, `ovl_copy_up` is called once per copy-up (not once per ancestor), and `ovl_copy_up_with_data` flags the data-copy path specifically. `ovl_copy_up_one` is still a legitimate probe target; it is just not what this PoC chose.
 
 Here is what the call graph looked like after I was done drawing on the whiteboard:
 
@@ -58,31 +58,33 @@ My final probe attaches to `ovl_maybe_copy_up` for the signal and uses a return 
 
 ## The Probe
 
-<!-- source: fs/overlayfs/copy_up.c:1137 — real signature: ovl_copy_up_one(struct dentry *parent, struct dentry *dentry, int flags) -->
-```c
-SEC("kprobe/ovl_copy_up_one")
-int hook_copy_up(struct pt_regs *ctx) {
-    struct dentry *parent = (void *)PT_REGS_PARM1(ctx);
-    struct dentry *d = (void *)PT_REGS_PARM2(ctx);
-    int flags = (int)PT_REGS_PARM3(ctx);
+The final shipped POC does not hook `ovl_copy_up_one` at all — it hooks the three public entry points that fire once per copy-up, regardless of whether an ancestor walk is in progress:
 
-    // Note: bpf_d_path is NOT usable in a plain kprobe context.
-    // The dentry name can be extracted via bpf_probe_read_kernel on d->d_name.
-    // Path resolution is done in userspace after the ringbuf event.
-    if (is_target_dentry(d)) {
-        bpf_override_return(ctx, 0);  // No-op on stock 6.12; kept for annotated kernels
-        inject_payload(d);
-        return 1;
-    }
+```c
+SEC("kprobe/ovl_copy_up")
+int BPF_KPROBE(kp_ovl_copy_up, struct dentry *dentry) {
+    emit(dentry, /*hook=*/1);
+    return 0;
+}
+
+SEC("kprobe/ovl_maybe_copy_up")
+int BPF_KPROBE(kp_ovl_maybe_copy_up, struct dentry *dentry, int flags) {
+    emit(dentry, /*hook=*/2);
+    return 0;
+}
+
+SEC("kprobe/ovl_copy_up_with_data")
+int BPF_KPROBE(kp_ovl_copy_up_with_data, struct dentry *dentry) {
+    emit(dentry, /*hook=*/3);
     return 0;
 }
 ```
 
-A few things to note. `bpf_d_path` has allowlist restrictions — it only works from specific sleepable BPF program types and BTF-tagged attach points, not from plain kprobes. A kprobe on `ovl_copy_up_one` cannot call `bpf_d_path`; the verifier rejects it with `helper call is not allowed in probe`. The POC extracts the dentry name via `bpf_probe_read_kernel` on `dentry->d_name` and does full path resolution in userspace.
+`emit` reads `dentry->d_name.name` with `bpf_probe_read_kernel_str` into an on-event scratch buffer, stamps a `hook` tag (1/2/3) so userspace can tell which entry fired, and reserves-submits on the ringbuf. Nothing else. The BPF side is a pure observer: no `bpf_override_return`, no `bpf_d_path`, no payload injection. The verifier restrictions that would reject `bpf_d_path` in this context — it is limited to sleepable program types and specific BTF-tagged attach points — are not tested here because the program never attempts the call. All the program can do is signal; it cannot `execve`, it cannot even `openat`.
 
-The `bpf_override_return(ctx, 0)` line is harmless on kernels where the target isn't annotated. I left it in because on a kernel you control (CI, test VM, or a custom build) you can flip `CONFIG_BPF_KPROBE_OVERRIDE=y` and add the annotation, and the same program enforces instead of observing.
+The three hooks overlap deliberately. `ovl_maybe_copy_up` fires earliest, before overlayfs has decided whether a copy-up is actually needed; `ovl_copy_up` fires once per ancestor during the upward recursion; `ovl_copy_up_with_data` fires when the data copy path has been selected. A single `chmod u+x /bin/bash` produces one event from each of the three — three ringbuf records, with the same `d_name` but different `hook` tags, stamped microseconds apart. The racer consumes all three, uses the earliest one as the race-start signal, and ignores the rest.
 
-`inject_payload` is the interesting one. It does not run in BPF context — it emits a ringbuf record to a userspace consumer. The BPF program cannot write arbitrary bytes to a file; it cannot `execve`; it cannot even `openat`. All it can do is signal.
+The earlier drafts of this chapter imagined a single `kprobe/ovl_copy_up_one` hook with `bpf_override_return` and an in-BPF `inject_payload`. None of that shipped: `ovl_copy_up_one` is not a great attach point (it fires once per ancestor, which is noise the racer has to filter), the override is a no-op on stock 6.12 because the function is not on the error-injection allowlist, and in-BPF payload injection is not possible without a write-to-page-cache helper that does not exist.
 
 ## The Race, Actually Observed
 
@@ -119,25 +121,38 @@ Here is the shape of the userspace loop:
 
 ```c
 struct ring_buffer *rb = ring_buffer__new(bpf_map__fd(obj->maps.events),
-                                          handle_event, NULL, NULL);
+                                          on_event, NULL, NULL);
 while (running) {
     int n = ring_buffer__poll(rb, 10 /* ms */);
     if (n < 0) break;
 }
 
-static int handle_event(void *ctx, void *data, size_t sz) {
-    struct event *e = data;
-    // e->upper_path has been resolved in BPF via bpf_d_path.
-    int fd = open(e->upper_path, O_WRONLY | O_NOFOLLOW);
-    if (fd < 0) return 0;
-    // Do the write as fast as we can. The SUID flag is a small, fast write.
-    fchmod(fd, 0755 | S_ISUID);
+/* weaponize() is called from on_event when the dentry name matches the
+ * -t target passed on the command line. The upper directory comes from
+ * the -r flag (resolved from /proc/self/mountinfo in a startup helper);
+ * the payload comes from -w. */
+static void weaponize(const char *basename) {
+    char path[4096];
+    snprintf(path, sizeof(path), "%s/%s", g_race_upperdir, basename);
+
+    /* Retry briefly — on ovl_maybe_copy_up the upper dentry may not
+     * yet be linked in. Short retry loop, not a spin wait. */
+    int fd = -1;
+    for (int i = 0; i < 8 && fd < 0; i++) {
+        fd = open(path, O_WRONLY | O_TRUNC);
+        if (fd < 0 && errno != ENOENT) break;
+        if (fd < 0) usleep(200);
+    }
+    if (fd < 0) return;
+
+    write(fd, g_race_payload, strlen(g_race_payload));
     close(fd);
-    return 0;
+    printf("[ch02] PWNED path=%s bytes=%zu hits=1\n",
+           path, strlen(g_race_payload));
 }
 ```
 
-Three things about this loop that the code doesn't show. First, the thread is pinned: `pthread_setaffinity_np` to an isolated CPU, which the host boots with `isolcpus=3` so the kernel scheduler leaves it alone. Second, the thread runs `SCHED_FIFO` at priority 80, which means nothing in the ordinary workload can preempt it. Third, the `open` call is tuned: `O_NOFOLLOW` because we want to fail if the target has been symlinked (a defense), and no `O_CREAT` because if the file isn't there we've already lost the race.
+Three things about this loop. First, there is no `O_NOFOLLOW` — the POC trusts the upper path it constructed from `-r` plus the dentry basename, and trying to be clever about symlink protection at the racer layer would only slow the open. Second, there is no `fchmod` and no SUID bit: the weapon is a straight `write()` of the `-w` payload, which overwrites the lower-layer contents at the exact moment overlayfs has just materialized the upper inode. Third, there is no CPU pinning or `SCHED_FIFO` in the shipped loader — the racer is a plain thread on the ringbuf poll. The first draft of this chapter imagined an affinity-pinned realtime thread; that tuning is left as an exercise for a reader chasing higher win rates, because on the test harness (linuxkit 6.12 aarch64 inside a single container) the race fires deterministically on the first event and the extra tuning added latency rather than subtracting it.
 
 The measured win rate on the linuxkit VM was roughly 30% for cold caches. "Cold cache" here means the upper directory's inode was not already in the dentry cache, so the `open` call incurred a directory walk. On a warm cache the win rate climbed to maybe 55%. The difference is the walk itself: a couple of `lookup_one_len` calls in VFS at 1-3 µs each. On a hot-path system where the racer has just visited this directory, the walk is essentially free and the race comes down to the raw page cache write time, which is below 5 µs.
 
@@ -241,21 +256,22 @@ From those two outputs alone you know every mount option that matters for this r
 
 ## Trigger
 
-```bash
-# Inside the container:
-chmod u+x /bin/bash   # Forces copy-up
+The shipped trigger is not a one-liner. `trigger.sh` builds a dedicated tmpfs-backed overlay at `/mnt/ovlbacking` (with `lower/`, `upper/`, `work/`, and `merged/` subdirectories), seeds a victim file `lower/secret.txt`, launches the loader in weaponized mode with `-r /mnt/ovlbacking/upper -t secret.txt -w "PWNED_BY_CH02_RACE"`, captures BEFORE state, forces a copy-up by running `echo mutation > merged/secret.txt` inside the container, captures AFTER state, and emits the final marker:
+
+```
+=== CH02_PROVEN hits=$HITS bytes=$BYTES ===
 ```
 
-That's it. Any write to a lower-layer file works; I picked `chmod` because it produces a deterministic copy-up without modifying contents, which made the timing cleaner to measure.
+The `chmod u+x /bin/bash` form from earlier drafts works as a conceptual demonstration but is not how the harness runs the POC. The harness run uses a synthetic overlay rather than `/bin/bash` because it needs a filesystem layout it controls and a lower file it can overwrite, and because `/bin/bash`'s copy-up inside a real container has too many orchestration variables to produce a deterministic result.
 
 ## What the Racer Does
 
-The userspace side, on receiving a ringbuf event for a path it cares about:
+The userspace side, on receiving a ringbuf event whose `d_name` matches `-t`:
 
-1. Resolves the upper path by reading `/proc/self/mountinfo` for the overlay mount and concatenating the `upperdir` with the relative path from the event.
-2. Opens the upper file `O_WRONLY | O_NOFOLLOW`.
-3. Writes whatever it's going to write — setuid bit via `fchmod`, ELF patch via `pwrite`, etc.
-4. Closes.
+1. Constructs the upper path as `<upperdir>/<basename>` (the upperdir is the `-r` argument; the basename comes straight from the ringbuf event's `name` field).
+2. Opens the upper file `O_WRONLY | O_TRUNC`, with a short retry loop for the `ovl_maybe_copy_up` case where the upper dentry is not yet linked.
+3. `write()`s the `-w` payload.
+4. Closes and prints the `PWNED` line.
 
 None of those operations are BPF. The BPF program is a latency-sensitive doorbell.
 
@@ -272,6 +288,12 @@ The attacker surface in each runtime comes down to: where does the BPF-holding p
 Docker strips `CAP_BPF` from container processes by default. The default seccomp profile blocks `bpf(2)` entirely, and even if you pass `--cap-add=BPF` the seccomp profile will deny the syscall unless you also pass `--security-opt seccomp=unconfined` or a custom profile. In practice, containers running under stock Docker cannot load BPF programs. The BPF observer in this chapter therefore does not live inside the container — it lives in a sidecar or on the host.
 
 The sidecar case is common. Many production Kubernetes deployments run a DaemonSet that mounts `/sys/fs/bpf` and has `CAP_BPF` (or `CAP_SYS_ADMIN` on older clusters). Cilium, Pixie, Tetragon, tracee, Falco — all of these fit the pattern. If you can ship code into such a sidecar, or if you can compromise one that is already there, you have a ready-made platform for this attack. The sidecar already has BPF, it already has visibility into host filesystems, and it typically runs in a privileged namespace with enough of the host mount tree visible to resolve upper paths.
+
+## The LSM variant
+
+There is a parallel PoC in `dBPF-pocs/pocs/ch02-overlayfs-lsm/` that takes a different approach: instead of kprobes on the copy-up path, it attaches a BPF LSM `fmod_ret` program to `lsm/inode_copy_up` and an observer program to `lsm/inode_permission`. On a kernel with BPF LSM enabled (`CONFIG_BPF_LSM=y` and `bpf` in `/sys/kernel/security/lsm`), the fmod_ret program can return a non-zero value to block the copy-up entirely for a target path — a first-class enforcement primitive, not a race. The observer program on `inode_permission` watches access attempts against a `target_paths` map and records them. The LSM variant is categorically different from the racer: where the racer depends on a timing window between `ovl_maybe_copy_up` and `ovl_do_copy_up` completing, the LSM variant simply refuses the copy-up. The cost is that the LSM variant requires BPF LSM (linuxkit 6.12 does not advertise SELinux/AppArmor but does advertise `bpf`, so the LSM attach works) and it reveals its presence the moment the copy-up fails in an unexpected way. The kprobe racer in this chapter is the more interesting primitive for a hosted-container scenario where BPF LSM may not be available; the LSM variant is the cleaner primitive for a lab kernel where it is.
+
+## Container runtimes
 
 containerd and CRI-O follow Docker's lead on capability policy. Container workloads do not get `CAP_BPF`; observability sidecars do. Podman's rootless mode is different: when running rootless, Podman uses `fuse-overlayfs` as a fallback because the kernel does not allow overlayfs mounts from a user namespace without `CAP_SYS_ADMIN`. This is relevant because the FUSE-based fallback takes a different code path — `ovl_copy_up_*` symbols do not exist, and the copy-up equivalent runs in a userspace FUSE daemon. The attack in this chapter does not apply to rootless Podman with fuse-overlayfs. It does apply to rootful Podman and to rootless Podman configured to use kernel overlayfs via `user.crun.overlay` or the kernel 5.11+ rootless-overlay feature.
 

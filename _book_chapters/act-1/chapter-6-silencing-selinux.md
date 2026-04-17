@@ -417,6 +417,8 @@ Poc("ch06s", "Silence SELinux — synthetic LSM (analog)",
 
 The `ch06s` POC ID distinguishes the synthetic variant from the natural `ch06` POC, which targets SELinux directly. The `needs_bpf_lsm=True` flag causes the harness to skip the POC on kernels where `/sys/kernel/security/lsm` does not contain `bpf`. The `mode="trigger-runs-loader"` mode passes control to the trigger script, which handles the user creation and the signal-driven stage transitions.
 
+The kprobe observer variant is registered as `ch06o` with `pocdir="ch06-silence-selinux"`, hooks `["avc_has_perm", "avc_has_perm_noaudit", "selinux_file_permission"]`, prefix `[ch06]`, and proof marker `r"CH06_PROVEN\s+hook=|CH06_SKIP\s+reason="`. The skip branch of the regex is deliberate: on kernels without SELinux compiled in (the linuxkit harness host) the loader emits `CH06_SKIP reason="SELinux not loaded"` and the harness recognizes that as an honest skip via the `skip_re` pass in `run_poc`; on an SELinux-enforcing kernel the loader emits `CH06_PROVEN hook=<name> events=<n>` on the first captured AVC decision per hook. All three ch06 variants — observer (`ch06o`), LSM mutation (`ch06`), and synthetic (`ch06s`) — are now registered adjacent to each other in `POCS`.
+
 The proof marker is `CH06_CONCEPT_PROVEN`, emitted by the trigger with two fields:
 
 ```bash

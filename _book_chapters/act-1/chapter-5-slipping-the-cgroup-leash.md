@@ -124,32 +124,31 @@ The BPF program in `ch05-cgroup-leash.bpf.c` attaches two tracepoints. The first
 SEC("tp/syscalls/sys_enter_read")
 int tp_read_enter(struct trace_event_raw_sys_enter *ctx)
 {
+    unsigned long id = bpf_get_current_pid_tgid();
     int fd = (int)ctx->args[0];
-    void *ubuf = (void *)ctx->args[1];
-    u64 id = bpf_get_current_pid_tgid();
+    unsigned long buf = (unsigned long)ctx->args[1];
 
-    struct task_struct *task = (void *)bpf_get_current_task();
-    struct files_struct *files = BPF_CORE_READ(task, files);
+    struct task_struct *t = (struct task_struct *)bpf_get_current_task();
+    struct files_struct *files = BPF_CORE_READ(t, files);
+    if (!files) return 0;
     struct fdtable *fdt = BPF_CORE_READ(files, fdt);
+    if (!fdt) return 0;
     unsigned int max_fds = BPF_CORE_READ(fdt, max_fds);
-    if (fd < 0 || (unsigned int)fd >= max_fds) return 0;
+    if ((unsigned int)fd >= max_fds) return 0;
     struct file **farr = BPF_CORE_READ(fdt, fd);
     struct file *f = NULL;
     bpf_probe_read_kernel(&f, sizeof(f), &farr[fd]);
     if (!f) return 0;
 
-    struct dentry *d = BPF_CORE_READ(f, f_path.dentry);
-    char name[NAME_MAX_MATCH] = {};
-    BPF_CORE_READ_STR_INTO(&name, d, d_name.name);
+    const unsigned char *name = BPF_CORE_READ(f, f_path.dentry, d_name.name);
+    char nm[16] = {};
+    bpf_probe_read_kernel_str(&nm, sizeof(nm), name);
 
-    /* Inlined byte-by-byte compare against "cpu.stat" — the verifier
-     * will not bound an open-coded strcmp, and a helper isn't needed. */
-    unsigned int is_cpu_stat = (name[0]=='c' && name[1]=='p' && name[2]=='u' &&
-                                name[3]=='.' && name[4]=='s' && name[5]=='t' &&
-                                name[6]=='a' && name[7]=='t' && name[8]=='\0');
-    if (!is_cpu_stat) return 0;
-
-    struct rctx r = { .buf = (unsigned long)ubuf, .is_cpu_stat = 1 };
+    struct rctx r = { .buf = buf, .is_cpu_stat = 0 };
+    if (nm[0]=='c' && nm[1]=='p' && nm[2]=='u' && nm[3]=='.' &&
+        nm[4]=='s' && nm[5]=='t' && nm[6]=='a' && nm[7]=='t') {
+        r.is_cpu_stat = 1;
+    }
     bpf_map_update_elem(&inflight, &id, &r, BPF_ANY);
     return 0;
 }

@@ -448,7 +448,7 @@ The load artifacts are visible. `bpftool prog list` shows:
 
 Programs of type `raw_tracepoint` attached to `sched_process_fork` are a strong indicator-of-compromise in any environment that isn't running Tetragon, Cilium, or another known consumer of that tracepoint. Most production observability tools attach to higher-level tracepoints (`tcp_connect`, `execve`) or to perf events, not to `sched_process_fork`. If you see an unfamiliar raw-tracepoint program attached to the scheduler fork path, investigate.
 
-`bpftool map list` shows the HASH map named `mapping` and the ringbuf named `events`. The HASH map is keyed by unsigned int (host PID) and valued by 48-byte structs. Dumping it — `bpftool map dump name mapping` — shows every host↔ns PID pair the program has recorded. A defender who dumps this map gets the attacker's full doppelgänger table. This is actually the best single piece of evidence: the map's contents are the attacker's intel, in cleartext.
+`bpftool map list` shows three maps: the HASH named `mapping`, the ringbuf named `events`, and a one-entry `BPF_MAP_TYPE_ARRAY` named `cfg`. The HASH map is keyed by unsigned int (host PID) and valued by the event struct. Dumping it — `bpftool map dump name mapping` — shows every host↔ns PID pair the program has recorded. A defender who dumps this map gets the attacker's full doppelgänger table. This is actually the best single piece of evidence: the map's contents are the attacker's intel, in cleartext. The `cfg` array is also worth eyeballing — it has exactly one u32 slot at key `0`, and if that slot reads `1` the program is armed to deliver SIGUSR1 on every matching fork. A defender who sees `cfg[0] == 1` should treat the program as actively tampering, not just observing.
 
 `/sys/kernel/debug/tracing/events/sched/sched_process_fork/enable` does not indicate BPF attachments — tracepoints use a different enablement bit. The thing to grep for is `/proc/self/fdinfo/<fd>` of the BPF loader, which contains `prog_tag` and `prog_type` for attached programs. The `perf_event_open` syscall shows up in `/proc/*/syscall` if the loader is mid-attach.
 
@@ -474,11 +474,89 @@ Which is also why this chapter is short on clever code. The code isn't clever. T
 
 In the chapters that follow I'll keep circling back to this pattern — "the code is boring, the context is the attack." It's how most of BPF-as-offensive-tool works. The exploits are rarely in the BPF code itself. They're in the set of things the BPF code makes possible for whoever is driving it.
 
+## Active primitive — `bpf_send_signal(SIGUSR1)` into the forked child
+
+Up to this point the chapter has treated ch09 as a pure sensor: observe the fork, extract the `(host_pid, ns_pid, ns_inum)` triple, ship it out via ringbuf, let userspace decide what to do with it. That's the version of the POC that matches the original `pidnss.bt` lineage and that every paragraph about "the BPF program is the sensor; the weapon is `kill`" refers to. It is also no longer the whole story. A late pass upgraded the BPF program to *also* fire SIGUSR1 directly from inside the kernel at the moment a task crosses a PID-namespace boundary, on top of emitting the observation event. This section walks that change because the mechanism is worth understanding independently of the observer primitive.
+
+**Why a `cfg` array at all.** The signal-delivery path is gated by a one-entry `BPF_MAP_TYPE_ARRAY` map named `cfg`:
+
+```c
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __type(key, unsigned int);
+    __type(value, unsigned int);
+    __uint(max_entries, 1);
+} cfg SEC(".maps");
+```
+
+One slot, keyed by `0`, holding a u32. Zero means "observer only, do not signal." One means "armed, deliver SIGUSR1 on every matching fork." The reason the gate exists is that `bpf_send_signal` is a real, visible effect on the target process — it runs the signal's default disposition (SIGUSR1 terminates by default) or whatever handler the target has registered. Every run of the POC that just wanted to see the mapping table would also, without the gate, be killing or interrupting every container init it caught. That's noisy, destructive, and it ruins the "load it for observation, decide later" ergonomic. With `cfg` in place, the BPF program ships in a passive default, and userspace makes one explicit call to flip the bit when it wants the active effect. The same shape — a one-entry config array the loader writes once — shows up in several other PoCs in this repo and is the right idiom for load-time-controlled runtime behavior.
+
+**Where the signal call lives in the program.** The capture helper in `dBPF-pocs/pocs/ch09-pid-doppel/ch09-pid-doppel.bpf.c`, lines 78–90, is:
+
+```c
+e->signal_sent = 0;
+unsigned int zero = 0;
+unsigned int *armed = bpf_map_lookup_elem(&cfg, &zero);
+if (armed && *armed == 1) {
+    // In raw_tp/sched_process_fork, current is the PARENT.
+    // In kprobe/copy_namespaces, current is the task being copied.
+    // For fork tracepoint, we can signal the parent (which demonstrates
+    // the BPF can affect a process at fork time). For copy_namespaces,
+    // we signal the task itself.
+    int err = bpf_send_signal(SIGUSR1);
+    if (err == 0)
+        e->signal_sent = 1;
+}
+```
+
+A few things to notice. First, the lookup-then-check-then-send sequence is intentional: the verifier wants `armed` compared against NULL before the dereference, and the `*armed == 1` check (not just `*armed != 0`) keeps the gate binary. Any future signal variant — SIGSTOP mode, SIGKILL mode — would add new u32 values to the same slot. Second, the helper call is `bpf_send_signal(SIGUSR1)`, not `bpf_send_signal_thread(SIGUSR1)`. The comment block spells out why: from the raw tracepoint on `sched_process_fork`, the kernel's notion of `current` is the *parent* task, not the child. `bpf_send_signal` targets `current`; `bpf_send_signal_thread` also targets `current` but delivers to a specific thread rather than the process group. For the fork hook, signalling the parent is itself a useful demonstration — it proves the BPF program can produce a side effect on a real task at fork time — and it avoids the trickier semantics of trying to signal a child task that the scheduler is still bringing up. From the `kprobe/copy_namespaces` hook, `current` *is* the task being copied into the new namespace, so the same `bpf_send_signal` call hits the child directly. One helper call, two useful targets, depending on which hook fired.
+
+Third, the return-code check. `bpf_send_signal` can fail — for example, if the target is in an interrupt context or the signal is blocked in a way the helper refuses to override — and the BPF program needs to know whether the signal actually went out. The `signal_sent` flag on `struct evt` is set only when `err == 0`; otherwise it stays zero and the event records the attempt as observation-only. That lets the userspace loader distinguish "armed but signal failed" from "armed and signal delivered."
+
+**How the loader arms it.** In `dBPF-pocs/pocs/ch09-pid-doppel/ch09-pid-doppel.c`, right after `ch09_pid_doppel_bpf__load(s)` succeeds and before the attach loop, the loader writes `1` into `cfg[0]`:
+
+```c
+// Arm cross-namespace signaling: set cfg[0] = 1.
+{
+    unsigned int key = 0, val = 1;
+    int e2 = bpf_map__update_elem(s->maps.cfg, &key, sizeof(key),
+                                   &val, sizeof(val), BPF_ANY);
+    if (e2)
+        fprintf(stderr, "[ch09] warning: cfg arm failed: %s\n", strerror(-e2));
+    else
+        fprintf(stderr, "[ch09] cross-namespace SIGUSR1 armed\n");
+}
+```
+
+A single `bpf_map__update_elem` call with `BPF_ANY` as the flags. This happens before the program attaches, which means the BPF program starts life already armed — there is no window where the hooks are firing but the gate is still zero. If the update fails, the loader logs a warning and proceeds, and the program runs as a pure observer; this is a deliberate soft-failure mode. The log line `cross-namespace SIGUSR1 armed` is the human-readable confirmation that the active-primitive path is live for this run.
+
+The loader also counts signal-delivery outcomes. The event handler increments `signal_events` whenever an event arrives with `signal_sent == 1`, and the shutdown summary branches on that counter:
+
+```c
+if (signal_events > 0)
+    printf("[ch09] PID_NS_ESCAPE_PROVEN signals=%llu events=%llu\n",
+           signal_events, total_events);
+else if (total_events > 0)
+    printf("[ch09] CH09_PROVEN events=%llu (observation only)\n", total_events);
+```
+
+Two possible success lines, distinguishing "we actually signalled somebody" from "we only watched." Both count as proof for the harness, but the first is the stronger claim.
+
+**How `signal_sent` propagates into the proof marker.** The field rides the same ringbuf event the mapping fields ride. The userspace handler prints `SIGUSR1_SENT` inline on any event where the flag is set:
+
+```
+[ch09] src=fork host_pid=15882 host_tgid=15882 ns_pid=1 level=1 ns_inum=4026532731 comm=bash SIGUSR1_SENT
+```
+
+That literal string is the one the harness greps for. The proof marker regex in `dBPF-pocs/harness/proof.py` — originally `CH09_PROVEN|PID_NS_ESCAPE_PROVEN` — now accepts `SIGUSR1_SENT` as a third alternative, so a run that delivers at least one signal counts as proven even if the trigger's own `=== CH09_PROVEN ... ===` line never gets produced (for example because the host-side kill part of the trigger got skipped in a stripped-down environment). The full accepted set is `CH09_PROVEN`, `PID_NS_ESCAPE_PROVEN`, or `SIGUSR1_SENT`: any of the three is sufficient. The first is the trigger's end-to-end kill-from-outside marker; the second is the loader's summary marker when `signal_events > 0`; the third is the in-band per-event marker. Together they cover the observer-only path, the kernel-signal path, and the userspace-kill path as three independent pieces of proof that the primitive is doing something.
+
+The practical effect of the upgrade is that ch09 is now two primitives sitting on the same hook. The observer primitive, which is what the older sections of this chapter describe, streams `(host_pid, ns_pid, ns_inum)` to userspace and lets the attacker decide what to do with it. The active primitive, gated by `cfg[0] == 1`, reaches into the kernel's signal machinery and *itself* acts on the target, with the event record reporting that it did. The boundary between "ebpf-as-sensor" and "ebpf-as-effector" is thin — one helper call thin — and this POC sits on both sides of it.
+
 ## Closing Notes
 
 A grab-bag of things I noticed while writing this chapter and the POC that didn't fit cleanly above:
 
-**The `ns_inum` field is the primary key, not the ns_pid.** When I first wrote the ringbuf event I included only `(host_pid, ns_pid)` and quickly discovered that a map keyed by either alone is ambiguous — every container has a PID 1, and PIDs roll over, so host_pid can coincidentally collide with a past ns_pid in a different namespace. Adding `ns_inum` to the event gave me a unique identifier per namespace, and composing `(ns_inum, ns_pid)` as the effective key eliminated the ambiguity. The final struct in `dBPF-pocs/pocs/ch09-pid-doppel/ch09-pid-doppel.bpf.c` carries `host_pid`, `host_tgid`, `ns_pid`, `ns_level`, `ns_inum`, and `comm`.
+**The `ns_inum` field is the primary key, not the ns_pid.** When I first wrote the ringbuf event I included only `(host_pid, ns_pid)` and quickly discovered that a map keyed by either alone is ambiguous — every container has a PID 1, and PIDs roll over, so host_pid can coincidentally collide with a past ns_pid in a different namespace. Adding `ns_inum` to the event gave me a unique identifier per namespace, and composing `(ns_inum, ns_pid)` as the effective key eliminated the ambiguity. The final struct in `dBPF-pocs/pocs/ch09-pid-doppel/ch09-pid-doppel.bpf.c` carries `host_pid`, `host_tgid`, `ns_pid`, `ns_level`, `ns_inum`, `comm`, an `int src` hook-origin tag (`1` for `sched_process_fork`, `2` for `copy_namespaces`), and an `int signal_sent` flag the active-primitive path sets when `bpf_send_signal` returned zero. The last two are late additions tied to the signal-delivery work described below.
 
 **`comm` is 16 bytes max.** `task->comm` is a fixed-size 16-byte buffer in the kernel (including the NUL terminator, so 15 characters max). Long binary names are truncated — `systemd-journald-audit` would appear as `systemd-journal`. This isn't usually a problem for container workloads (most container entrypoints have short names) but occasionally a container running something with a long name produces unhelpful telemetry. The kernel doesn't expose the full cmdline here; if you want the full binary name, you'd need to follow up with a `/proc/<host_pid>/cmdline` read from userspace.
 
