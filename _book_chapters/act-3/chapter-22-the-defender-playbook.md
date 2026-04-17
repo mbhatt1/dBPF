@@ -16,7 +16,7 @@ The preceding twenty-one chapters establish what `CAP_BPF` permits. This chapter
 
 Every primitive in this book required `CAP_BPF`, and most additionally required `CAP_PERFMON` or `CAP_SYS_ADMIN`. The defender's job is to know which workloads on the fleet hold that capability, what they do with it, and how to restrict or revoke it where the answer is "nothing good." If you remember one sentence from this chapter: the threat is not BPF; the threat is ambient grants of `CAP_BPF` to workloads whose lineage and runtime behavior you do not audit.
 
-The rest of the chapter assumes a Linux fleet of mixed hosts (bare metal, VMs, Kubernetes nodes, CI runners) running a recent-ish kernel (5.13+ for per-capability `CAP_BPF` / `CAP_PERFMON` splits; 5.7+ for BPF LSM). On older kernels where `CAP_BPF` was folded into `CAP_SYS_ADMIN`, read "`CAP_SYS_ADMIN`" wherever this chapter says "`CAP_BPF`." The inventory and restriction guidance is the same; the granularity is coarser.
+The rest of the chapter assumes a Linux fleet of mixed hosts (bare metal, VMs, Kubernetes nodes, CI runners) running a recent-ish kernel (5.8+ for per-capability `CAP_BPF` / `CAP_PERFMON` splits, introduced in commit 2c78ee898d8f; 5.7+ for BPF LSM). On older kernels where `CAP_BPF` was folded into `CAP_SYS_ADMIN`, read "`CAP_SYS_ADMIN`" wherever this chapter says "`CAP_BPF`." The inventory and restriction guidance is the same; the granularity is coarser.
 
 ## 2. Inventory `CAP_BPF` on your fleet
 

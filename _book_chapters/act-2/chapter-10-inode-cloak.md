@@ -292,22 +292,17 @@ The verifier, more generally, pushes BPF program design toward "few short operat
 
 ## Kernel Taint Again
 
-`bpf_probe_write_user` taints the kernel with TAINT_USER on first use. This is the kernel announcing, "a userspace-writable helper has been invoked from BPF, and we can no longer vouch for the integrity of userspace memory." The taint is set once per boot and never cleared. It's visible via:
+`bpf_probe_write_user` emits a kernel warning on use. On 6.12, the helper at `kernel/trace/bpf_trace.c:365` calls `pr_warn_ratelimited`, which emits a dmesg warning each time it fires (rate-limited to avoid flooding the log). Note: despite what some references claim, `bpf_probe_write_user` does NOT set the `TAINT_USER` kernel taint flag on 6.12 — it only emits the dmesg warning.
+
+`dmesg` shows lines like:
 
 ```
-$ cat /proc/sys/kernel/tainted
-512
+[ts] BPF: <program_name> is writing to user space memory. This is a potentially dangerous operation.
 ```
 
-Bit 9 (value 512) is TAINT_USER. Combined with other taint bits, the integer can be anything, but any non-zero value that includes bit 9 is evidence that `bpf_probe_write_user` fired — or that something else set TAINT_USER, which has a narrow list of causes (forced module loading with an explicit user flag, `kexec_load` in some configurations, a few obscure paths).
+Because the warning is `pr_warn_ratelimited` (not `pr_warn_once`), it fires repeatedly — not just once per boot — though the rate limiter suppresses rapid-fire repetitions. A defender grepping dmesg for `writing to user space` on a box where no debugging is happening catches this trivially.
 
-`dmesg` also logs a line on first use, typically:
-
-```
-[ts] BPF: <program_tag> loaded with probe_write_user, kernel tainted
-```
-
-The exact wording varies by kernel version. A defender grepping dmesg for `tainted` on a box where no modules should be loading and no debugging is happening catches this trivially.
+For reference, `TAINT_USER` is bit 6 (value 64) per `include/linux/panic.h`, but `bpf_probe_write_user` does not set it on current kernels.
 
 The upside of the taint from a defender's perspective: it's durable. Even if the BPF program is unloaded, the taint bit stays set until the next reboot. A compromise that uses `bpf_probe_write_user` leaves a persistent marker that's readable by any unprivileged user with access to `/proc/sys/kernel/tainted`.
 
@@ -518,7 +513,7 @@ A few things I noticed in assembly that didn't fit cleanly above:
 
 **Why hash the name into a `struct hidden_name` with a fixed 64-byte buffer?** The map key has to be a fixed size; HASH maps don't support variable-length keys. Using a 64-byte struct pads every name to 64 bytes whether the name is short or long. A name like `"a"` is stored as `{'a', 0, 0, ..., 0}`. The lookup key in the BPF program is built the same way: `bpf_probe_read_user_str` copies up to NAME_MAX (also 64) bytes and null-terminates. Both sides agree on the encoding, so exact match works. NAME_MAX on Linux is technically 255, not 64 — we can't hide files with names longer than 63 bytes using this map layout. Directory names in practice are usually short, so the limit is academic, but it's worth flagging.
 
-**`/proc/sys/kernel/tainted` is your friend.** After running this POC, if you cat `/proc/sys/kernel/tainted` on the host, you'll see a non-zero value with bit 9 set. That bit is persistent until reboot. For demo purposes, that's fine. For sustained use, it's a detection surface. If you're thinking about using this primitive outside a demo context, budget for the taint.
+**`dmesg` is your friend.** After running this POC, if you check `dmesg` on the host, you'll see rate-limited warnings about BPF writing to user space memory. These warnings persist in the kernel log until rotation. Note that on 6.12, `bpf_probe_write_user` does not actually set the `TAINT_USER` bit in `/proc/sys/kernel/tainted` — the detection signal is purely in dmesg. For demo purposes, that's fine. For sustained use, it's a detection surface. If you're thinking about using this primitive outside a demo context, budget for the dmesg noise.
 
 That's the chapter. The `d_reclen` swallow is old; the BPF-on-6.12 reproduction is current. The hook choice (syscall tracepoints) is boring but reliable. The verifier pushback (64-iteration loop bound) is annoying but not fatal. The first-entry edge case is real but rare. The FIM blind spot is the load-bearing finding: every FIM I tested trusts readdir, and readdir has always been lie-able-to.
 

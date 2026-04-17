@@ -343,7 +343,7 @@ The two-step read is necessary because the verifier needs to see a bounded point
 
 `f->f_path.dentry` is where the naming information lives. `f_path` is embedded inline in `struct file` as `struct path`, which contains two fields: a `vfsmount` pointer and a `dentry` pointer. The `vfsmount` identifies the mount point; the `dentry` identifies the directory entry. For a regular file or a pseudo-file like `cpu.stat`, the `dentry` has the file's name.
 
-`dentry->d_name` is `struct qstr`. This is a length-prefixed string: a `u32 len`, a `u32 hash`, and a `const unsigned char *name` pointer. The `name` pointer points into slab-allocated memory that is managed by the dcache. Dentries are reference-counted; as long as the file is open, the dentry is pinned and the name pointer is valid. The BPF program reads `d_name.name` (the pointer to the actual bytes) and then does `bpf_probe_read_kernel_str` to copy the bytes into the on-stack buffer:
+`dentry->d_name` is `struct qstr`. This is a length-prefixed string: internally it uses a `HASH_LEN_DECLARE` macro that packs the hash and length into a single `u64 hash_len` field (a union), plus a `const unsigned char *name` pointer. The `name` pointer points into slab-allocated memory that is managed by the dcache. Dentries are reference-counted; as long as the file is open, the dentry is pinned and the name pointer is valid. The BPF program reads `d_name.name` (the pointer to the actual bytes) and then does `bpf_probe_read_kernel_str` to copy the bytes into the on-stack buffer:
 
 ```c
 const unsigned char *name = BPF_CORE_READ(f, f_path.dentry, d_name.name);

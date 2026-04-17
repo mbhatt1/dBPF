@@ -21,7 +21,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
-from rich.console import Console, Group
+from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
@@ -53,7 +53,6 @@ class Poc:
     min_events: int = 1
     timeout: float = 12.0
     pre_cmd: list[str] | None = None  # runs in container before loader
-    needs_bpf_lsm: bool = False      # require BPF LSM in /sys/kernel/security/lsm
     category: str = "real"           # "real" | "analog" | "observer" | "illusion"
 
 
@@ -87,16 +86,16 @@ POCS: list[Poc] = [
         timeout=20,
         proof_marker=r"GHOST_COVERT_CHANNEL_PROVEN"),
     Poc("ch06", "Silencing SELinux (LSM)", "ch06-silence-selinux-lsm",
-        hooks=["bpf-lsm"], prefix="[ch06]", needs_bpf_lsm=True,
+        hooks=["bpf-lsm"], prefix="[ch06]",
         proof_marker=r"CH06_PROVEN|CH06_WEAPON_PROVEN|FLIP\s+hook=",
         category="observer"),
     Poc("ch07", "Device-cgroup Houdini (LSM)", "ch07-devcgroup-houdini-lsm",
-        hooks=["bpf-lsm"], prefix="[ch07]", needs_bpf_lsm=True,
+        hooks=["bpf-lsm"], prefix="[ch07]",
         mode="trigger-runs-loader", timeout=25,
         flip_marker=r"override|FLIP\s+hook=",
         proof_marker=r"CH07_PROVEN|CH07_WEAPON_PROVEN|CH07_CONCEPT_PROVEN|FLIP\s+hook="),
     Poc("ch08", "Keyring Heist (LSM)", "ch08-keyring-heist-lsm",
-        hooks=["bpf-lsm"], prefix="[ch08]", needs_bpf_lsm=True,
+        hooks=["bpf-lsm"], prefix="[ch08]",
         proof_marker=r"CH08_PROVEN|CH08_WEAPON_PROVEN|FLIP\s+pid="),
     Poc("ch09", "PID-NS Doppelganger", "ch09-pid-doppel",
         hooks=["tp:sched/sched_process_fork"], prefix="[ch09]",
@@ -111,7 +110,7 @@ POCS: list[Poc] = [
         proof_marker=r"CH11_PROVEN|IRQ_COVERT_CHANNEL_PROVEN",
         category="observer"),
     Poc("ch12", "Signed-Driver Swap (LSM)", "ch12-signed-driver-swap-lsm",
-        hooks=["bpf-lsm"], prefix="[ch12]", needs_bpf_lsm=True,
+        hooks=["bpf-lsm"], prefix="[ch12]",
         proof_marker=r"CH12_PROVEN|CH12_WEAPON_PROVEN|FLIP\s+hook="),
     Poc("ch13", "Powercap Override", "ch13-powercap-override",
         hooks=["powercap_get_max_power_uw"], prefix="[ch13]",
@@ -147,13 +146,13 @@ POCS: list[Poc] = [
     # aarch64 linuxkit host.
     Poc("ch06s", "Silence SELinux — synthetic LSM (analog)",
         "ch06-silence-selinux-lsm-synthetic",
-        hooks=["bpf-lsm"], prefix="[ch06-synth]", needs_bpf_lsm=True,
+        hooks=["bpf-lsm"], prefix="[ch06-synth]",
         mode="trigger-runs-loader", timeout=25,
         proof_marker=r"CH06_CONCEPT_PROVEN|CH06_SYNTH_PROVEN|_PROVEN",
         category="analog"),
     Poc("ch07w", "Device-cgroup Houdini — workaround (LSM)",
         "ch07-devcgroup-houdini-lsm",
-        hooks=["bpf-lsm"], prefix="[ch07]", needs_bpf_lsm=True,
+        hooks=["bpf-lsm"], prefix="[ch07]",
         mode="trigger-runs-loader", timeout=25,
         proof_marker=r"CH07_CONCEPT_PROVEN|CH07_CONCEPT_PARTIAL|CH07_PROVEN|FLIP\s+hook=|_PROVEN",
         category="analog"),
@@ -205,7 +204,10 @@ def kallsyms_has(name: str) -> bool:
         with KALLSYMS.open() as f:
             for line in f:
                 parts = line.split()
-                if len(parts) >= 3 and parts[2] == name:
+                # Filter to function symbols (T/t/W/w) — skip data (D/B/etc.)
+                if (len(parts) >= 3
+                        and parts[2] == name
+                        and parts[1] in ("T", "t", "W", "w")):
                     return True
     except FileNotFoundError:
         pass
@@ -224,8 +226,7 @@ class RunState:
     proof_line: str = ""       # first proof-marker line captured
     verdict: str = ""
     log: deque[str] = field(default_factory=lambda: deque(maxlen=200))
-    start_ts: float = 0.0
-    end_ts: float = 0.0
+    lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 CATEGORY_LABEL = {
@@ -340,22 +341,25 @@ class Streamer(threading.Thread):
             # Proof-marker detection runs on ALL lines from ANY stream
             # (trigger, loader, etc) — not gated on the event prefix.
             if self.proof_re and self.proof_re.search(line):
-                self.state.proof_hits += 1
-                if not self.state.proof_line:
-                    self.state.proof_line = line.strip()
+                with self.state.lock:
+                    self.state.proof_hits += 1
+                    if not self.state.proof_line:
+                        self.state.proof_line = line.strip()
             if not self.pattern_event.search(line):
                 continue
             # skip obvious status/header lines
             if self.STATUS_SIGS.search(line):
                 if self.flip_re and self.flip_re.search(line):
                     # e.g., ch14 "tag=flipped"
-                    self.state.flipped += 1
-                    self.state.events += 1
+                    with self.state.lock:
+                        self.state.flipped += 1
+                        self.state.events += 1
                 continue
             if self.EVENT_SIGS.search(line):
-                self.state.events += 1
-                if self.flip_re and self.flip_re.search(line):
-                    self.state.flipped += 1
+                with self.state.lock:
+                    self.state.events += 1
+                    if self.flip_re and self.flip_re.search(line):
+                        self.state.flipped += 1
 
 
 def regen_vmlinux(state: RunState):
@@ -363,24 +367,40 @@ def regen_vmlinux(state: RunState):
     tgt.parent.mkdir(parents=True, exist_ok=True)
     with tgt.open("wb") as out:
         subprocess.run(["bpftool", "btf", "dump", "file", str(BTF), "format", "c"],
-                       check=True, stdout=out)
+                       check=True, stdout=out, timeout=30)
+
+
+_built_dirs: set[str] = set()
 
 
 def build_poc(state: RunState) -> bool:
     d = POCS_DIR / state.poc.dir
+    # Skip rebuild if same directory was already built this run (e.g., ch07/ch07w).
+    if state.poc.dir in _built_dirs:
+        binary = d / "build" / state.poc.dir
+        if binary.exists():
+            state.log.append(f"build| reusing prior build of {state.poc.dir}")
+            return True
     # clean everything except vmlinux.h
     build = d / "build"
     for f in build.glob("*"):
         if f.name == "vmlinux.h":
             continue
         try:
-            f.unlink()
-        except IsADirectoryError:
+            if f.is_dir():
+                import shutil
+                shutil.rmtree(f)
+            else:
+                f.unlink()
+        except OSError:
             pass
     regen_vmlinux(state)
-    r = subprocess.run(["make", "-C", str(d)], capture_output=True, text=True)
+    r = subprocess.run(["make", "-C", str(d)], capture_output=True, text=True,
+                       timeout=60)
     for ln in (r.stdout + r.stderr).splitlines():
         state.log.append(f"build| {ln}")
+    if r.returncode == 0:
+        _built_dirs.add(state.poc.dir)
     return r.returncode == 0
 
 
@@ -404,7 +424,8 @@ def dut_python_child() -> tuple[subprocess.Popen, int, str]:
     """Spawn an unprivileged python3 child that waits on a FIFO, then returns
     its pid for -t targeting."""
     import tempfile
-    fifo = tempfile.mktemp(prefix="dut.", suffix=".fifo")
+    tmpdir = tempfile.mkdtemp(prefix="dut.")
+    fifo = os.path.join(tmpdir, "gate.fifo")
     os.mkfifo(fifo)
     # ensure user exists
     subprocess.run(["useradd", "-m", "-s", "/bin/bash", "dut01"],
@@ -435,11 +456,19 @@ sys.stderr.write("child_done\\n")
         ["su", "dut01", "-s", "/bin/bash", "-c", "exec python3 -u -c " + shlex.quote(script)],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
-    # Read pid line from stderr
+    # Read pid line from stderr with a real timeout via select.
+    import select
     pid = None
     t0 = time.time()
     while time.time() - t0 < 3:
+        ready, _, _ = select.select([p.stderr], [], [], 0.5)
+        if not ready:
+            if p.poll() is not None:
+                break  # child exited without printing pid
+            continue
         line = p.stderr.readline().decode(errors="replace")
+        if not line:
+            break  # EOF
         m = re.match(r"pid=(\d+)", line)
         if m:
             pid = int(m.group(1))
@@ -450,14 +479,21 @@ sys.stderr.write("child_done\\n")
 
 
 def release_dut(fifo: str):
+    # Open FIFO non-blocking to avoid hanging if the reader is already dead.
     try:
-        with open(fifo, "w") as f:
-            f.write("go")
-    except Exception:
+        fd = os.open(fifo, os.O_WRONLY | os.O_NONBLOCK)
+        os.write(fd, b"go")
+        os.close(fd)
+    except OSError:
         pass
     try:
         os.unlink(fifo)
-    except Exception:
+    except OSError:
+        pass
+    # Clean up the tmpdir
+    try:
+        os.rmdir(os.path.dirname(fifo))
+    except OSError:
         pass
 
 
@@ -485,7 +521,7 @@ def run_poc(state: RunState, refresh):
     refresh()
     d = POCS_DIR / p.dir
     if p.pre_cmd:
-        r = subprocess.run(p.pre_cmd, capture_output=True, text=True)
+        r = subprocess.run(p.pre_cmd, capture_output=True, text=True, cwd=d)
         for ln in (r.stdout + r.stderr).splitlines():
             state.log.append(f"pre | {ln}")
     loader = d / "build" / p.dir
@@ -494,11 +530,14 @@ def run_poc(state: RunState, refresh):
     dut_proc = None
     dut_fifo = None
     trig_proc = None
+    streamers: list[Streamer] = []
     try:
         if p.mode == "trigger-runs-loader":
             # The trigger launches the loader itself; we just run it.
             trig_proc = spawn(["bash", str(d / p.trigger)], cwd=d)
-            Streamer(trig_proc, state, "trig").start()
+            st = Streamer(trig_proc, state, "trig")
+            st.start()
+            streamers.append(st)
         else:
             args = [str(loader)] + list(p.loader_args)
             if p.mode == "target-tgid":
@@ -510,7 +549,9 @@ def run_poc(state: RunState, refresh):
                     args += ["-a"]
                 # else loader_args already added above
             loader_proc = spawn(args, cwd=d)
-            Streamer(loader_proc, state, "load").start()
+            st = Streamer(loader_proc, state, "load")
+            st.start()
+            streamers.append(st)
             time.sleep(1.2)
 
             if p.mode == "target-tgid" and dut_fifo:
@@ -520,7 +561,9 @@ def run_poc(state: RunState, refresh):
             trig_path = d / p.trigger
             if trig_path.exists():
                 trig_proc = spawn(["bash", str(trig_path)], cwd=d)
-                Streamer(trig_proc, state, "trig").start()
+                st = Streamer(trig_proc, state, "trig")
+                st.start()
+                streamers.append(st)
 
         # wait for trigger or overall timeout
         deadline = time.time() + p.timeout
@@ -533,6 +576,7 @@ def run_poc(state: RunState, refresh):
             time.sleep(0.25)
 
     finally:
+        # Graceful shutdown: SIGINT, wait, then SIGKILL + reap.
         for x in (loader_proc, trig_proc):
             if x and x.poll() is None:
                 x.send_signal(signal.SIGINT)
@@ -540,8 +584,17 @@ def run_poc(state: RunState, refresh):
                     x.wait(timeout=3)
                 except subprocess.TimeoutExpired:
                     x.kill()
-        if dut_proc and dut_proc.poll() is None:
-            dut_proc.kill()
+                    x.wait()  # reap to avoid zombie
+        if dut_proc:
+            if dut_proc.poll() is None:
+                dut_proc.kill()
+            dut_proc.wait()  # reap to avoid zombie
+        if dut_fifo:
+            release_dut(dut_fifo)
+        # Wait for Streamer threads to finish draining pipe data so
+        # verdict reads of events/proof_hits are consistent.
+        for st in streamers:
+            st.join(timeout=2)
 
     # honest SKIP: trigger emitted "=== CHxx_SKIP reason=... ==="
     skip_re = re.compile(r"CH\d+[A-Z_]*_SKIP\s+reason=(.*?)(?:===|$)")

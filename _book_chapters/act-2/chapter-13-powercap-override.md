@@ -433,20 +433,20 @@ long bpf_probe_write_user(void *dst, const void *src, u32 len);
 
 `dst` is a user-space pointer, `src` is a kernel-side buffer (typically a BPF program local), and `len` is the byte count. The helper returns 0 on success or a negative errno on failure (bad pointer, wrong page permissions, etc.).
 
-The security model around this helper is: the writing program must have `CAP_SYS_ADMIN` or `CAP_BPF`, the target process's memory must be writable by the kernel (which it ordinarily is, for pages in the process's address space), and the kernel logs a warning at the first use of this helper per boot. That last point is interesting — the warning appears in `dmesg` exactly once, per boot, per invocation-site. It looks like:
+The security model around this helper is: the writing program must have `CAP_SYS_ADMIN` or `CAP_BPF`, the target process's memory must be writable by the kernel (which it ordinarily is, for pages in the process's address space), and the kernel logs a warning at the first use of this helper per boot. That last point is interesting — the warning appears in `dmesg` repeatedly (rate-limited) whenever the helper is invoked. The actual kernel source at `kernel/trace/bpf_trace.c:365` uses `pr_warn_ratelimited`, not `pr_warn_once`. It looks like:
 
 ```
 BPF tracing program ch13_powercap_override_analog is writing to user space memory.
 This is a potentially dangerous operation.
 ```
 
-The warning is deliberate. The kernel developers who added this helper wanted it to be possible (for legitimate debugging and observability use cases) but also wanted it to be noisy, so that any system with audit-log monitoring would surface the use. A defender running `dmesg -w | grep 'writing to user space'` would see the warning the moment the primitive loads.
+The warning is deliberate. The kernel developers who added this helper wanted it to be possible (for legitimate debugging and observability use cases) but also wanted it to be noisy, so that any system with audit-log monitoring would surface the use. A defender running `dmesg -w | grep 'writing to user space'` would see the warning each time the primitive fires (subject to rate limiting).
 
-This is a meaningful detection signal. Most BPF programs do not touch user-space memory; the ones that do are typically in a narrow set (debugging tools, some profilers). A warning at program-load time for user-space write is high-signal.
+This is a meaningful detection signal. Most BPF programs do not touch user-space memory; the ones that do are typically in a narrow set (debugging tools, some profilers). A warning when user-space write fires is high-signal.
 
-For an attacker, the warning is annoying but not fatal. It fires once per boot; if the defender is not log-monitoring, it evaporates into the kernel log and gets overwritten eventually. For a defender who is log-monitoring, it is a single-line signal that a user-space-writing BPF program has loaded, with the program's name visible.
+For an attacker, the warning is annoying but not fatal. Because it is `pr_warn_ratelimited`, it fires repeatedly — not just once per boot — but the rate limiter suppresses rapid-fire repetitions. If the defender is not log-monitoring, the warnings may evaporate into the kernel log and get overwritten eventually. For a defender who is log-monitoring, each firing is a signal that a user-space-writing BPF program is active, with the program's name visible.
 
-The attacker countermeasures are limited. The warning is `pr_warn_once` in the kernel source; it fires once per load site regardless of how many times the helper is called. Loading multiple user-space-writing programs does not produce multiple warnings (each is once-per-boot). Repeated loads of the same program after `bpf` destroy also do not retrigger the warning (already-fired). The best the attacker can do is load the program early in boot, before log monitoring starts, and hope the warning rolls off.
+The attacker countermeasures are limited. Because the warning is rate-limited rather than once-per-boot, sustained use of the helper produces ongoing dmesg evidence. The best the attacker can do is minimize invocations and hope the rate-limited warnings fall below the defender's log-monitoring noise floor.
 
 For the analog specifically, the warning appears on first load. If you run `dmesg` right after starting the loader, you see it. This is not a defect in the primitive; it is the kernel's security model for user-space writes.
 

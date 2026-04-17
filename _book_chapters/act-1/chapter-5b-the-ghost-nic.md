@@ -50,7 +50,7 @@ int xdp_ghost(struct xdp_md *ctx)
     void *data_end = (void *)(long)ctx->data_end;
 ```
 
-`struct xdp_md` is the BPF-visible view of the XDP context. It has five fields exposed to BPF: `data`, `data_end`, `data_meta`, `ingress_ifindex`, and `rx_queue_index`. The `data` and `data_end` fields are 32-bit unsigned integers on the C side, but the verifier tracks them as packet pointers. The cast through `long` is a convention for converting these to usable `void *` pointers in the program's local scope. The verifier understands the cast and assigns the pointers its packet-pointer type, which is what enables the bounds-check machinery downstream.
+`struct xdp_md` is the BPF-visible view of the XDP context. It has six fields exposed to BPF: `data`, `data_end`, `data_meta`, `ingress_ifindex`, `rx_queue_index`, and `egress_ifindex`. The `data` and `data_end` fields are 32-bit unsigned integers on the C side, but the verifier tracks them as packet pointers. The cast through `long` is a convention for converting these to usable `void *` pointers in the program's local scope. The verifier understands the cast and assigns the pointers its packet-pointer type, which is what enables the bounds-check machinery downstream.
 
 The Ethernet header bounds check is the first work the function does:
 
@@ -353,7 +353,7 @@ Two UDP packets, one with a 23-byte command, one with a 15-byte command. The tri
 
 ## Cross-kernel
 
-XDP has been stable since Linux 4.8 (August 2016). The `xdp_md` struct, the `XDP_PASS`/`XDP_DROP`/`XDP_TX`/`XDP_ABORTED` verdicts, and the basic attach path have not changed in meaningful ways. Programs written against the 4.8 XDP ABI load on 6.12 without modification.
+XDP has been stable since Linux 4.8 (October 2016). The `xdp_md` struct, the `XDP_PASS`/`XDP_DROP`/`XDP_TX`/`XDP_ABORTED` verdicts, and the basic attach path have not changed in meaningful ways. Programs written against the 4.8 XDP ABI load on 6.12 without modification.
 
 What has changed is the verifier's strictness. On 4.x kernels, a program that did the bounds checks in a different order or with coarser granularity was more likely to be accepted. The 5.x verifier tightened the packet-pointer tracking and rejects programs that would have loaded on 4.x — specifically, programs that rely on implicit bounds propagation through variable-length headers. The POC's explicit `ihl < sizeof(*ip)` check is an example of a check that is needed on 5.x+ but was sometimes optional on 4.x.
 

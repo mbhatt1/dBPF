@@ -250,7 +250,7 @@ struct evt {
 
 Three identifier fields (pid, tgid, uid) give the loader a full subject identity. `comm[16]` is the kernel's `task_struct->comm` field, which is a truncated executable name bounded to 15 characters plus a NUL. `stage`, `verdict`, and `matched` are the decision metadata. `path[SENTINEL_MAX]` is the resolved file path.
 
-The total struct size is 12 + 16 + 12 + 128 = 168 bytes. After ringbuf's 8-byte alignment, each event reserves 168 bytes (already aligned). The ringbuf's 1-MB capacity (`1 << 18` bytes = 256 KB; the declared `max_entries` for ringbuf is interpreted as the ringbuf's byte capacity, so 256 KB gives room for roughly 1500 events before backpressure). This is ample headroom for the test workload, which produces one event per matched open.
+The total struct size is 12 + 16 + 12 + 128 = 168 bytes. After ringbuf's 8-byte alignment, each event reserves 168 bytes (already aligned). The ringbuf's 256-KB capacity (`1 << 18` bytes = 256 KB; the declared `max_entries` for ringbuf is interpreted as the ringbuf's byte capacity, so 256 KB gives room for roughly 1500 events before backpressure). This is ample headroom for the test workload, which produces one event per matched open.
 
 ## Why sleepable LSM (lsm.s)
 

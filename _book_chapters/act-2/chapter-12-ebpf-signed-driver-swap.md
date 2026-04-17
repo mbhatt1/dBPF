@@ -386,7 +386,7 @@ None of these are "load an unsigned driver." The unsigned-driver attack requires
 
 A digression on the kernel-source side of things, because it is useful to understand why the allowlist has what it has.
 
-`/sys/kernel/debug/error_injection/list` is populated from source-code annotations. Functions that declare `ALLOW_ERROR_INJECTION(func_name, TYPE)` in their defining source file are added to this list at build time. The type — `ERRNO`, `NULL`, `TRUE`, `FALSE`, or `ANY` — tells the verifier what return values are permissible for the override. For syscall entry wrappers, the type is `ERRNO`, meaning override returns must be valid errno values (negative in the range -MAX_ERRNO to 0, or 0 itself).
+`/sys/kernel/debug/error_injection/list` is populated from source-code annotations. Functions that declare `ALLOW_ERROR_INJECTION(func_name, TYPE)` in their defining source file are added to this list at build time. The type — one of four values defined as `EI_ETYPE_NULL`, `EI_ETYPE_ERRNO`, `EI_ETYPE_ERRNO_NULL`, or `EI_ETYPE_TRUE` in `include/asm-generic/error-injection.h` — tells the verifier what return values are permissible for the override. For syscall entry wrappers, the type is `ERRNO`, meaning override returns must be valid errno values (negative in the range -MAX_ERRNO to 0, or 0 itself).
 
 The syscall wrappers get this annotation because fault injection testing of syscalls is a common kernel test technique. You want to be able to simulate "what happens if `finit_module` fails with ENOMEM right here" as part of the kernel's own self-test infrastructure, and the allowlist is the mechanism that enables that. BPF programs piggyback on this — the same gate that lets the kernel's fault-injection framework rewrite a return lets a BPF program do so.
 
