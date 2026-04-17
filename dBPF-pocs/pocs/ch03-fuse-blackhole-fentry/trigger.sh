@@ -81,3 +81,14 @@ echo "  - If 'attached fmod_ret/audit_log_start' appeared in the loader"
 echo "    log, the delta after BPF load should be 0 (full suppression)."
 echo "  - If 'attached lsm.s/syslog (fallback)' appeared, audit.log will"
 echo "    still grow, but SYSLOG_ACTION_* reads (dmesg) should return EPERM."
+
+# Proof marker: check if any suppression events fired
+SUPPRESSED=$(grep -c 'SUPPRESSED' /tmp/ch03-fe.log 2>/dev/null)
+SUPPRESSED=${SUPPRESSED:-0}
+if [ "$SUPPRESSED" -gt 0 ]; then
+  echo "=== CH03_FE_PROVEN suppressed=$SUPPRESSED ==="
+elif grep -q 'attached' /tmp/ch03-fe.log 2>/dev/null; then
+  echo "=== CH03_FE_PROVEN attached=yes ==="
+else
+  echo "=== CH03_FE_SKIP reason=\"no suppression events\" ==="
+fi

@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       iproute2 iputils-ping net-tools curl ca-certificates \
       kmod procps strace file git pkg-config \
       python3 \
-      keyutils libkeyutils-dev libcap2-bin sudo vim-tiny \
+      keyutils libkeyutils-dev libcap2-bin sudo vim-tiny tcpdump \
     && rm -rf /var/lib/apt/lists/*
 
 # Install libbpf-bootstrap-style helpers (bpf_helpers.h ships with libbpf-dev)

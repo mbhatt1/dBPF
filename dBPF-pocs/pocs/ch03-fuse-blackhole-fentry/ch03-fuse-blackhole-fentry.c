@@ -95,6 +95,15 @@ int main(int argc, char **argv)
     int have_mr = btf_has_func("audit_log_start");
     int have_lsm = check_lsm_bpf_enabled();
 
+    // On kernels where BPF LSM is available, prefer lsm/syslog over
+    // fmod_ret/audit_log_start. The fmod_ret path fails with -EINVAL on
+    // kernel 6.14+ (audit_log_start not in modify_return allowlist) and
+    // the verifier rejects it at load time, poisoning the whole skeleton.
+    // Disable the fmod_ret program when LSM is available.
+    if (have_lsm) {
+        have_mr = 0;  // skip fmod_ret — use LSM instead
+    }
+
     if (!have_mr)
         bpf_program__set_autoload(s->progs.mr_audit_log_start, false);
     if (!have_lsm)

@@ -11,7 +11,11 @@ struct evt {
     char comm[16];
     char parent_comm[16];
     char payload[32];
+    int signal_sent;
 };
+
+static unsigned long long total_events;
+static unsigned long long signal_events;
 
 static volatile sig_atomic_t stop;
 static void on_sig(int s){ (void)s; stop = 1; }
@@ -27,8 +31,13 @@ static int handle(void *ctx, void *data, size_t sz)
     memcpy(comm, e->comm, 16);
     memcpy(pcomm, e->parent_comm, 16);
     memcpy(payload, e->payload, 32);
-    printf("[phantom] pid=%u tgid=%u uid=%u euid=%u comm=%s parent=%s payload='%s'\n",
+    total_events++;
+    if (e->signal_sent) signal_events++;
+    printf("[phantom] pid=%u tgid=%u uid=%u euid=%u comm=%s parent=%s payload='%s'",
            e->pid, e->tgid, e->uid, e->euid, comm, pcomm, payload);
+    if (e->signal_sent)
+        printf(" SIGUSR1_SENT");
+    printf("\n");
     fflush(stdout);
     return 0;
 }
@@ -67,7 +76,7 @@ int main(void)
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
 
-    fprintf(stderr, "[ch04] attached — phantom active (magic: 'PHANTOM\\0')\n");
+    fprintf(stderr, "[ch04] attached — phantom active (magic: 'PHANTOM\\0', SIGUSR1 on exfil)\n");
     while (!stop) {
         int n = ring_buffer__poll(rb, 200);
         if (n < 0 && n != -EINTR) {
@@ -76,6 +85,14 @@ int main(void)
         }
     }
     rc = 0;
+
+    fprintf(stderr, "[ch04] total_events=%llu signal_events=%llu\n",
+            total_events, signal_events);
+    if (signal_events > 0)
+        printf("[ch04] EXFIL_COMPLETE exfil=%llu signals=%llu\n",
+               total_events, signal_events);
+    else if (total_events > 0)
+        printf("[ch04] CH04_PROVEN exfil=%llu\n", total_events);
 
 out:
     if (rb)

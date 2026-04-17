@@ -20,11 +20,15 @@
 
 char LICENSE[] SEC("license") = "GPL";
 
-#define COVERT_VLAN_ID 4242
+#define COVERT_VLAN_ID 142   // 12-bit VID range: 0-4095; old value 4242 overflowed
 #define ETH_P_8021Q    0x8100
 #define VLAN_VID_MASK  0x0FFF
 
 /* vlan_hdr comes from vmlinux.h */
+
+// Workaround: clang-19 BPF backend aggressively dead-code-eliminates
+// XDP packet-parsing logic at -O2. barrier_var() (from bpf_helpers.h)
+// forces the compiler to keep values alive after critical reads.
 
 struct evt {
     unsigned int ifindex_in;
@@ -64,13 +68,17 @@ int xdp_vlan_ghost(struct xdp_md *ctx)
 
     struct ethhdr *eth = data;
     if ((void *)(eth + 1) > data_end) return XDP_PASS;
-    if (eth->h_proto != bpf_htons(ETH_P_8021Q)) return XDP_PASS;
+    __be16 proto = eth->h_proto;
+    barrier_var(proto);
+    if (proto != bpf_htons(ETH_P_8021Q)) return XDP_PASS;
 
     struct vlan_hdr *vh = (void *)(eth + 1);
     if ((void *)(vh + 1) > data_end) return XDP_PASS;
 
     unsigned short tci = bpf_ntohs(vh->h_vlan_TCI);
+    barrier_var(tci);
     unsigned short vid = tci & VLAN_VID_MASK;
+    barrier_var(vid);
     if (vid != COVERT_VLAN_ID) return XDP_PASS;
 
     // Save original MAC addrs + inner proto BEFORE we mutate the buffer.

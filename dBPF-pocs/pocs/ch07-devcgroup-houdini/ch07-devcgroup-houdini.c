@@ -1,3 +1,8 @@
+// ch07 devcgroup-houdini — userspace loader with SIGUSR2 injection.
+//
+// Hooks devcgroup_check_permission kprobe+kretprobe. On denials for
+// targeted tgids, the BPF program sends SIGUSR2 proving real kernel-side
+// control. Supports -t <tgid> targeting and -a (wildcard).
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,17 +22,35 @@ struct evt {
     unsigned int major, minor;
     int access;
     int verdict;
+    int signal_sent;
 };
 
 static volatile sig_atomic_t stop;
 static unsigned long long total_events;
 static unsigned long long denies;
+static unsigned long long signals_sent;
 
 static void on_sig(int s){ (void)s; stop = 1; }
 
 static const char *type_name(short t)
 {
-    switch (t) { case 1: return "B"; case 2: return "C"; case 6: return "block"; default: return "?"; }
+    switch (t) {
+    case 1:  return "blk";
+    case 2:  return "chr";
+    case 6:  return "blk";
+    default: return "?";
+    }
+}
+
+static const char *access_str(int a)
+{
+    static char buf[8];
+    int i = 0;
+    if (a & 1) buf[i++] = 'r';
+    if (a & 2) buf[i++] = 'w';
+    if (a & 4) buf[i++] = 'm';
+    buf[i] = 0;
+    return buf;
 }
 
 static int handle(void *ctx, void *data, size_t sz)
@@ -37,8 +60,15 @@ static int handle(void *ctx, void *data, size_t sz)
     const struct evt *e = data;
     total_events++;
     if (e->verdict != 0) denies++;
-    printf("[ch07] pid=%u\tcomm=%-16s\ttype=%s\tmajor=%u\tminor=%u\taccess=0x%x\tverdict=%d\n",
-           e->pid, e->comm, type_name(e->type), e->major, e->minor, e->access, e->verdict);
+    if (e->signal_sent) signals_sent++;
+
+    const char *verdict = e->verdict == 0 ? "ALLOW" : "DENY";
+    printf("[ch07] hook=devcgroup_check_permission   pid=%-5u comm=%-16s type=%s %u:%u access=%s verdict=%s",
+           e->pid, e->comm, type_name(e->type), e->major, e->minor,
+           access_str(e->access), verdict);
+    if (e->signal_sent)
+        printf("  SIGUSR2_SENT");
+    printf("\n");
     fflush(stdout);
     return 0;
 }
@@ -51,9 +81,13 @@ static int kallsyms_has(const char *sym)
     int found = 0;
     while (fgets(line, sizeof(line), f)) {
         char *p = strchr(line, ' '); if (!p) continue;
+        char type = p[1];
+        if (type != 'T' && type != 't' && type != 'W' && type != 'w')
+            continue;
         p = strchr(p + 1, ' '); if (!p) continue;
         p++;
-        size_t n = strlen(p); while (n && (p[n-1]=='\n'||p[n-1]==' '||p[n-1]=='\t')) p[--n]=0;
+        size_t n = strlen(p);
+        while (n && (p[n-1]=='\n'||p[n-1]==' '||p[n-1]=='\t')) p[--n]=0;
         char *t = strchr(p, '\t'); if (t) *t = 0;
         if (!strcmp(p, sym)) { found = 1; break; }
     }
@@ -63,32 +97,57 @@ static int kallsyms_has(const char *sym)
 
 static void usage(const char *a)
 {
-    fprintf(stderr, "Usage: %s [-v] [-h]\n"
-                    "  -v   verbose libbpf output\n"
-                    "  -h   show this help\n"
-                    "Events to stdout; status to stderr.\n", a);
+    fprintf(stderr,
+        "Usage: %s [-t tgid]... [-a] [-v] [-h]\n"
+        "  -t tgid  target tgid for SIGUSR2 on denial\n"
+        "  -a       wildcard: signal ALL denials\n"
+        "  -v       verbose libbpf output\n"
+        "  -h       show this help\n"
+        "\n"
+        "Hooks devcgroup_check_permission. On device-cgroup denials for\n"
+        "targeted tgids, sends SIGUSR2 to prove kernel-side control.\n",
+        a);
 }
+
+#define MAX_TARGETS 1024
 
 int main(int argc, char **argv)
 {
-    int verbose = 0;
+    int verbose = 0, wildcard = 0;
+    unsigned int targets[MAX_TARGETS];
+    size_t n_targets = 0;
     int c;
-    while ((c = getopt(argc, argv, "vh")) != -1) {
+
+    while ((c = getopt(argc, argv, "t:avh")) != -1) {
         switch (c) {
+        case 't': {
+            if (n_targets >= MAX_TARGETS) {
+                fprintf(stderr, "[ch07] too many -t entries\n");
+                return 2;
+            }
+            char *end;
+            unsigned long v = strtoul(optarg, &end, 10);
+            if (!end || *end || v == 0) {
+                fprintf(stderr, "[ch07] invalid tgid: %s\n", optarg);
+                return 2;
+            }
+            targets[n_targets++] = (unsigned int)v;
+            break;
+        }
+        case 'a': wildcard = 1; break;
         case 'v': verbose = 1; break;
         case 'h': usage(argv[0]); return 0;
         default:  usage(argv[0]); return 2;
         }
     }
-    if (verbose) { /* libbpf will default to printing */ }
+    (void)verbose;
 
     int has = kallsyms_has("devcgroup_check_permission");
     if (has == 0) {
-        fprintf(stderr, "[ch07] CH07_SKIP reason=\"devcgroup_check_permission symbol absent (kernel built without CONFIG_CGROUP_DEVICE or inlined)\"\n");
+        fprintf(stderr, "[ch07] CH07_SKIP reason=\"devcgroup_check_permission absent\"\n");
         return 2;
     }
-    if (has > 0)
-        fprintf(stderr, "[ch07] symbol=devcgroup_check_permission\tstatus=present\n");
+    fprintf(stderr, "[ch07] symbol=devcgroup_check_permission\tstatus=present\n");
 
     int rc = 1;
     struct ring_buffer *rb = NULL;
@@ -97,6 +156,21 @@ int main(int argc, char **argv)
         fprintf(stderr, "[ch07] CH07_SKIP reason=\"open_and_load: %s\"\n", strerror(errno));
         return 1;
     }
+
+    // Populate target_tgids map.
+    if (wildcard) {
+        unsigned int zero = 0, one = 1;
+        bpf_map__update_elem(s->maps.target_tgids,
+                             &zero, sizeof(zero), &one, sizeof(one), BPF_ANY);
+        fprintf(stderr, "[ch07] tag=target\tmode=wildcard\n");
+    }
+    for (size_t i = 0; i < n_targets; i++) {
+        unsigned int t = targets[i], one = 1;
+        bpf_map__update_elem(s->maps.target_tgids,
+                             &t, sizeof(t), &one, sizeof(one), BPF_ANY);
+        fprintf(stderr, "[ch07] tag=target\ttgid=%u\n", t);
+    }
+
     int err = ch07_devcgroup_houdini_bpf__attach(s);
     if (err) {
         fprintf(stderr, "[ch07] CH07_SKIP reason=\"attach: %s\"\n", strerror(-err));
@@ -104,23 +178,32 @@ int main(int argc, char **argv)
     }
 
     rb = ring_buffer__new(bpf_map__fd(s->maps.events), handle, NULL, NULL);
-    if (!rb) { fprintf(stderr, "[ch07] ring_buffer__new: %s\n", strerror(errno)); goto out; }
+    if (!rb) {
+        fprintf(stderr, "[ch07] ring_buffer__new: %s\n", strerror(errno));
+        goto out;
+    }
 
     struct sigaction sa = { .sa_handler = on_sig };
     sigemptyset(&sa.sa_mask);
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
-    fprintf(stderr, "[ch07] attached — devcgroup observer active\n");
+    fprintf(stderr, "[ch07] attached — devcgroup houdini active (SIGUSR2 on denial)\n");
+
     while (!stop) {
         int n = ring_buffer__poll(rb, 200);
-        if (n < 0 && n != -EINTR) { fprintf(stderr, "[ch07] poll: %s\n", strerror(-n)); break; }
+        if (n < 0 && n != -EINTR) break;
     }
     rc = 0;
 
-    if (total_events > 0)
-        fprintf(stderr, "[ch07] CH07_PROVEN events=%llu denies=%llu\n", total_events, denies);
-    else
-        fprintf(stderr, "[ch07] CH07_SKIP reason=\"no deny observed (privileged container bypasses devcgroup; re-run with restricted cgroup)\"\n");
+    fprintf(stderr, "[ch07] total=%llu denies=%llu signals=%llu\n",
+            total_events, denies, signals_sent);
+    if (signals_sent > 0)
+        printf("[ch07] CH07_WEAPON_PROVEN signals=%llu denies=%llu events=%llu\n",
+               signals_sent, denies, total_events);
+    else if (total_events > 0)
+        printf("[ch07] CH07_PROVEN events=%llu denies=%llu\n",
+               total_events, denies);
+
 out:
     if (rb) ring_buffer__free(rb);
     if (s) ch07_devcgroup_houdini_bpf__destroy(s);

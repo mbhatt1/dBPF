@@ -66,8 +66,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "=== baseline (no BPF): unprivileged read of SELinux-labeled file ==="
-su dut06lsm -c "cat '$SECRET' >/dev/null 2>&1; echo baseline_ret=\$?"
+# Use runcon to get a CONFINED SELinux context (user_t is denied shadow_t).
+# Plain `su` stays in unconfined_t which allows everything.
+SECON="user_u:user_r:user_t:s0"
+read_cmd() {
+  if command -v runcon >/dev/null 2>&1; then
+    runcon "$SECON" cat "$SECRET" >/dev/null 2>&1; echo "ret=$?"
+  else
+    su dut06lsm -c "cat '$SECRET' >/dev/null 2>&1; echo ret=\$?"
+  fi
+}
+
+echo "=== baseline (no BPF): confined read of SELinux-labeled file ==="
+read_cmd
+baseline_ret=$?
 
 echo "=== starting BPF LSM loader (wildcard) ==="
 "$HERE/build/ch06-silence-selinux-lsm" -a >"$LOG" 2>&1 &
@@ -76,7 +88,7 @@ sleep 1
 
 echo "=== with BPF LSM active: retry the read ==="
 for _ in 1 2 3; do
-  su dut06lsm -c "cat '$SECRET' >/dev/null 2>&1; echo retry_ret=\$?"
+  read_cmd
 done
 
 sleep 1

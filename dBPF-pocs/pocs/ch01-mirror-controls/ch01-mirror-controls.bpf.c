@@ -1,6 +1,11 @@
-// Ch01 Mirror Controls — observe every cap_capable decision and, when a
-// target pid (via control map) is denied, override the return value to 0
-// (granted) using bpf_override_return.
+// Ch01 Mirror Controls — observe every cap_capable decision. When a target
+// tgid is denied a capability, fire bpf_send_signal(SIGUSR1) to demonstrate
+// real kernel-side control over the target process. The signal proves the
+// BPF program can directly affect the process at the exact moment a
+// capability decision is made.
+//
+// REAL EFFECT: bpf_send_signal delivers a signal to the target process
+// from kretprobe context — no error_injection allowlist required.
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
@@ -8,13 +13,18 @@
 
 char LICENSE[] SEC("license") = "GPL";
 
+#define SIGUSR1 10
+#define SIGUSR2 12
+#define MAX_SIGNALS 16  // rate-limit: don't flood the target
+
 struct evt {
     unsigned int pid;
     unsigned int tgid;
     char comm[16];
     int cap;
     int orig_ret;
-    int flipped;
+    int flipped;       // 1 = signal was sent (real effect)
+    int signal_sent;   // which signal was delivered (SIGUSR1)
 };
 
 struct {
@@ -22,11 +32,11 @@ struct {
     __uint(max_entries, 1 << 18);
 } events SEC(".maps");
 
-// target_tgids: if a tgid is present, its denials will be flipped to grants
+// target_tgids: if a tgid is present, its denials will trigger bpf_send_signal
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, unsigned int);
-    __type(value, unsigned int);
+    __type(value, unsigned int);   // value = max signals to send (0=unlimited)
     __uint(max_entries, 1024);
 } target_tgids SEC(".maps");
 
@@ -36,6 +46,14 @@ struct {
     __type(value, int);           // cap
     __uint(max_entries, 8192);
 } in_flight SEC(".maps");
+
+// Track how many signals we've sent per tgid (rate-limiting).
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __type(key, unsigned int);     // tgid
+    __type(value, unsigned int);   // count
+    __uint(max_entries, 1024);
+} signal_count SEC(".maps");
 
 SEC("kprobe/cap_capable")
 int BPF_KPROBE(kp_cap, const void *cred, void *ns, int cap, unsigned int opts)
@@ -56,10 +74,27 @@ int BPF_KRETPROBE(kr_cap, int ret)
 
     unsigned int tgid = id >> 32;
     unsigned int *hit = bpf_map_lookup_elem(&target_tgids, &tgid);
+    unsigned int zero = 0;
+    int is_target = (hit || bpf_map_lookup_elem(&target_tgids, &zero)) ? 1 : 0;
     int flipped = 0;
-    // Note: internal-function override blocked on this kernel (not in
-    // error_injection allowlist). We mark what WOULD be flipped.
-    if (hit && ret != 0) flipped = 1;
+    int sig_sent = 0;
+
+    // REAL EFFECT: on capability denial for a target tgid, send SIGUSR1.
+    // This proves the BPF program can take direct action on the target
+    // at the exact moment a security decision is made.
+    if (is_target && ret != 0) {
+        unsigned int *cnt = bpf_map_lookup_elem(&signal_count, &tgid);
+        unsigned int cur = cnt ? *cnt : 0;
+        if (cur < MAX_SIGNALS) {
+            int err = bpf_send_signal(SIGUSR1);
+            if (err == 0) {
+                flipped = 1;
+                sig_sent = SIGUSR1;
+                cur++;
+                bpf_map_update_elem(&signal_count, &tgid, &cur, BPF_ANY);
+            }
+        }
+    }
 
     struct evt *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
     if (!e) return 0;
@@ -69,6 +104,7 @@ int BPF_KRETPROBE(kr_cap, int ret)
     e->cap = cap;
     e->orig_ret = ret;
     e->flipped = flipped;
+    e->signal_sent = sig_sent;
     bpf_ringbuf_submit(e, 0);
     return 0;
 }

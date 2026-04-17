@@ -21,6 +21,7 @@ struct evt {
     int cap;
     int orig_ret;
     int flipped;
+    int signal_sent;
 };
 
 static volatile sig_atomic_t stop;
@@ -37,8 +38,8 @@ static int handle(void *ctx, void *data, size_t sz)
         return 0;
     const struct evt *e = data;
     if (e->flipped)
-        printf("[ch01] tag=FLIP\tpid=%u\tcomm=%-16s\tcap=%d\torig=%d\t-> 0\n",
-               e->pid, e->comm, e->cap, e->orig_ret);
+        printf("[ch01] tag=FLIP\tpid=%u\tcomm=%-16s\tcap=%d\torig=%d\tsignal=%d\n",
+               e->pid, e->comm, e->cap, e->orig_ret, e->signal_sent);
     else if (e->orig_ret != 0)
         printf("[ch01] tag=deny\tpid=%u\tcomm=%-16s\tcap=%d\tret=%d\n",
                e->pid, e->comm, e->cap, e->orig_ret);
@@ -55,9 +56,10 @@ static int libbpf_print(enum libbpf_print_level lvl, const char *fmt, va_list ap
 static void usage(const char *prog)
 {
     fprintf(stderr,
-            "Usage: %s [-t tgid]... [-v] [-h]\n"
-            "  -t tgid   target tgid; its denials will be marked FLIP\n"
+            "Usage: %s [-t tgid]... [-a] [-v] [-h]\n"
+            "  -t tgid   target tgid; its denials trigger SIGUSR1\n"
             "            (may be repeated, up to 1024 entries)\n"
+            "  -a        wildcard: signal ALL cap denials\n"
             "  -v        verbose libbpf output\n"
             "  -h        show this help\n"
             "Events are written to stdout; status to stderr.\n",
@@ -101,13 +103,16 @@ static int kallsyms_has(const char *sym)
 
 int main(int argc, char **argv)
 {
-    int verbose = 0;
+    int verbose = 0, wildcard = 0;
     unsigned int targets[MAX_TARGETS];
     size_t n_targets = 0;
 
     int opt;
-    while ((opt = getopt(argc, argv, "t:vh")) != -1) {
+    while ((opt = getopt(argc, argv, "t:avh")) != -1) {
         switch (opt) {
+        case 'a':
+            wildcard = 1;
+            break;
         case 't': {
             if (n_targets >= MAX_TARGETS) {
                 fprintf(stderr, "[ch01] too many -t entries (max %d)\n", MAX_TARGETS);
@@ -196,6 +201,16 @@ int main(int argc, char **argv)
         goto out;
     }
 
+    if (wildcard) {
+        unsigned int zero = 0, one = 1;
+        err = bpf_map__update_elem(s->maps.target_tgids,
+                                   &zero, sizeof(zero),
+                                   &one, sizeof(one), BPF_ANY);
+        if (err)
+            fprintf(stderr, "[ch01] wildcard update failed: %s\n", strerror(-err));
+        else
+            fprintf(stderr, "[ch01] tag=target\tmode=wildcard\n");
+    }
     for (size_t i = 0; i < n_targets; i++) {
         unsigned int tgid = targets[i];
         unsigned int one = 1;

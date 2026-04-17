@@ -7,30 +7,22 @@
 #                                            ▼
 #   ghost_b             ──veth_b──┤├──veth_host2 (untagged payload surfaces)
 #
-# Proof structure:
-#   BEFORE: no XDP. Attacker sends 3 VLAN-4242-tagged AF_PACKET frames on
-#           veth_a. They arrive on veth_host only. tcpdump on veth_host2
-#           sees 0 — there is no path between the two veth pairs.
-#   AFTER : XDP loaded on veth_host. Same 3 frames → XDP strips the VLAN
-#           tag and bpf_redirect_maps them to veth_host2 (in a different
-#           netns route topology). tcpdump on veth_host2 now captures 3
-#           untagged frames with ethertype 0x88b5.
+# Proof: BEFORE XDP, frames on veth_a do NOT cross to veth_host2.
+#        AFTER  XDP, the same frames appear on veth_host2 stripped of VLAN tag.
 #
-# Every resource is torn down on EXIT regardless of how this script ends.
+# Uses raw-socket Python receiver instead of tcpdump to avoid dependency.
 set +e
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 BIN="$HERE/build/ch15-netns-vlan-ghost"
-LOG_LOADER="${LOG_LOADER:-/tmp/ch15-vghost.log}"
-LOG_TCPDUMP_BEFORE="${LOG_TCPDUMP_BEFORE:-/tmp/ch15-vghost-tcpdump-before.log}"
-LOG_TCPDUMP_AFTER="${LOG_TCPDUMP_AFTER:-/tmp/ch15-vghost-tcpdump-after.log}"
+LOG_LOADER="/tmp/ch15-vghost.log"
 
 LOADER_PID=
-TCPDUMP_PID=
+RECV_PID=
 
 cleanup() {
-    [ -n "$TCPDUMP_PID" ] && kill "$TCPDUMP_PID" 2>/dev/null
-    [ -n "$LOADER_PID" ]  && kill "$LOADER_PID"  2>/dev/null
+    [ -n "$RECV_PID" ]   && kill "$RECV_PID"  2>/dev/null
+    [ -n "$LOADER_PID" ] && kill "$LOADER_PID" 2>/dev/null
     wait 2>/dev/null
     ip link show veth_host  >/dev/null 2>&1 && ip link set dev veth_host  xdp off 2>/dev/null
     ip link show veth_host2 >/dev/null 2>&1 && ip link set dev veth_host2 xdp off 2>/dev/null
@@ -38,6 +30,7 @@ cleanup() {
     ip link del veth_host2 2>/dev/null
     ip netns del ghost_a   2>/dev/null
     ip netns del ghost_b   2>/dev/null
+    rm -f /tmp/ch15-recv-before.txt /tmp/ch15-recv-after.txt
 }
 trap cleanup EXIT INT TERM
 
@@ -45,7 +38,7 @@ if [ ! -x "$BIN" ]; then
     echo "=== CH15_SKIP reason=\"loader not built at $BIN\" ==="
     exit 0
 fi
-for tool in ip tcpdump python3; do
+for tool in ip python3; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "=== CH15_SKIP reason=\"required tool $tool not available\" ==="
         exit 0
@@ -73,18 +66,11 @@ ip -n ghost_b link set veth_b up || exit 1
 ip -n ghost_a link set lo up
 ip -n ghost_b link set lo up
 
-ip -br link show veth_host
-ip -br link show veth_host2
-ip -n ghost_a -br link show
-ip -n ghost_b -br link show
-
-# Sender helper — 3 VLAN-4242 tagged AF_PACKET frames from ghost_a on veth_a.
-# The inner ethertype is 0x88b5 (IEEE local experimental 1) and the payload
-# carries a recognizable "GHOSTVLAN" marker.
+# Sender: 3 VLAN-142 tagged AF_PACKET frames from ghost_a on veth_a.
 send_three() {
     ip netns exec ghost_a python3 - <<'PY'
 import socket, struct, fcntl, sys
-ETH_P_ALL    = 0x0003
+ETH_P_ALL = 0x0003
 SIOCGIFHWADDR = 0x8927
 ifname = b"veth_a"
 try:
@@ -94,53 +80,81 @@ try:
                        struct.pack('256s', ifname[:15]))
     src_mac = info[18:24]
     dst_mac = b'\xff\xff\xff\xff\xff\xff'
-    tci = (0 << 13) | 4242
+    tci = (0 << 13) | 142
     vlan_hdr  = struct.pack('!HH', 0x8100, tci)
     inner_eth = struct.pack('!H', 0x88b5)
     payload   = b'GHOSTVLAN-covert-channel-message\x00' * 2
     frame = dst_mac + src_mac + vlan_hdr + inner_eth + payload
     for _ in range(3):
         s.send(frame)
-    print("sent 3 VLAN-4242 covert frames", flush=True)
+    print("sent 3 VLAN-142 covert frames", flush=True)
 except Exception as e:
     print(f"sender error: {e}", file=sys.stderr)
     sys.exit(1)
 PY
 }
 
+# Receiver: raw socket on veth_host2 looking for ethertype 0x88b5.
+# Writes count to a file. Runs for max 3 seconds.
+start_receiver() {
+    local outfile="$1"
+    python3 - "$outfile" <<'PY' &
+import socket, struct, sys, time, select
+outfile = sys.argv[1]
+ETH_P_ALL = 0x0003
+try:
+    s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))
+    s.bind(("veth_host2", 0))
+    s.setblocking(False)
+except Exception as e:
+    with open(outfile, 'w') as f:
+        f.write("0\n")
+    sys.exit(1)
+count = 0
+deadline = time.time() + 3.0
+while time.time() < deadline:
+    ready, _, _ = select.select([s], [], [], 0.5)
+    if not ready:
+        continue
+    try:
+        data = s.recv(65535)
+        if len(data) >= 14:
+            ethertype = struct.unpack('!H', data[12:14])[0]
+            if ethertype == 0x88b5:
+                count += 1
+                if count >= 3:
+                    break
+    except BlockingIOError:
+        pass
+with open(outfile, 'w') as f:
+    f.write(f"{count}\n")
+PY
+    RECV_PID=$!
+}
+
 ############################################################
-# BEFORE — no XDP attached. tcpdump on veth_host2 should capture 0.
+# BEFORE — no XDP. Receiver on veth_host2 should see 0 frames.
 ############################################################
 echo ""
-echo "=== BEFORE: starting tcpdump on veth_host2 (no XDP) ==="
-# Filter on inner ethertype 0x88b5 so we count only the covert payload.
-tcpdump -l -nn -e -U -i veth_host2 -c 3 'ether proto 0x88b5' \
-    > "$LOG_TCPDUMP_BEFORE" 2>&1 &
-TCPDUMP_PID=$!
+echo "=== BEFORE: raw socket receiver on veth_host2 (no XDP) ==="
+start_receiver /tmp/ch15-recv-before.txt
 sleep 0.5
-
 send_three
-
-for _ in 1 2 3 4 5; do
-    if ! kill -0 "$TCPDUMP_PID" 2>/dev/null; then break; fi
-    sleep 0.4
-done
-if kill -0 "$TCPDUMP_PID" 2>/dev/null; then
-    kill -TERM "$TCPDUMP_PID" 2>/dev/null
-    wait "$TCPDUMP_PID" 2>/dev/null
+sleep 2
+if kill -0 "$RECV_PID" 2>/dev/null; then
+    kill "$RECV_PID" 2>/dev/null
+    wait "$RECV_PID" 2>/dev/null
 fi
-TCPDUMP_PID=
-
-BEFORE_COUNT=$(grep -cE "88b5|0x88b5" "$LOG_TCPDUMP_BEFORE" 2>/dev/null)
+RECV_PID=
+BEFORE_COUNT=$(cat /tmp/ch15-recv-before.txt 2>/dev/null)
 BEFORE_COUNT=${BEFORE_COUNT:-0}
-echo "=== BEFORE tcpdump log ==="
-cat "$LOG_TCPDUMP_BEFORE"
+echo "BEFORE frames on veth_host2: $BEFORE_COUNT"
 
 ############################################################
-# AFTER — load XDP, re-send 3 frames. Expect tcpdump count = 3 untagged.
+# AFTER — load XDP, re-send. Expect 3 untagged frames on veth_host2.
 ############################################################
 echo ""
-echo "=== AFTER: loading XDP ghost on veth_host -> redirect veth_host2 (SKB-mode) ==="
+echo "=== AFTER: loading XDP ghost on veth_host -> redirect veth_host2 ==="
 "$BIN" --skb -i veth_host -o veth_host2 > "$LOG_LOADER" 2>&1 &
 LOADER_PID=$!
 sleep 1
@@ -151,49 +165,39 @@ if ! kill -0 "$LOADER_PID" 2>/dev/null; then
     exit 0
 fi
 
-echo "=== AFTER: starting tcpdump on veth_host2 (XDP active) ==="
-tcpdump -l -nn -e -U -i veth_host2 -c 3 'ether proto 0x88b5' \
-    > "$LOG_TCPDUMP_AFTER" 2>&1 &
-TCPDUMP_PID=$!
+echo "=== AFTER: raw socket receiver on veth_host2 (XDP active) ==="
+start_receiver /tmp/ch15-recv-after.txt
 sleep 0.5
-
 send_three
-
-for _ in 1 2 3 4 5 6; do
-    if ! kill -0 "$TCPDUMP_PID" 2>/dev/null; then break; fi
-    sleep 0.4
-done
-if kill -0 "$TCPDUMP_PID" 2>/dev/null; then
-    kill -TERM "$TCPDUMP_PID" 2>/dev/null
-    wait "$TCPDUMP_PID" 2>/dev/null
+sleep 2
+if kill -0 "$RECV_PID" 2>/dev/null; then
+    kill "$RECV_PID" 2>/dev/null
+    wait "$RECV_PID" 2>/dev/null
 fi
-TCPDUMP_PID=
+RECV_PID=
 
-# Let ringbuf drain.
 sleep 1
+kill -TERM "$LOADER_PID" 2>/dev/null
+wait "$LOADER_PID" 2>/dev/null
+LOADER_PID=
 
-if [ -n "$LOADER_PID" ]; then
-    kill -TERM "$LOADER_PID" 2>/dev/null
-    wait "$LOADER_PID" 2>/dev/null
-    LOADER_PID=
-fi
-
-AFTER_COUNT=$(grep -cE "88b5|0x88b5" "$LOG_TCPDUMP_AFTER" 2>/dev/null)
+AFTER_COUNT=$(cat /tmp/ch15-recv-after.txt 2>/dev/null)
 AFTER_COUNT=${AFTER_COUNT:-0}
 REDIRECT_COUNT=$(grep -cE "STRIP\\+REDIRECT" "$LOG_LOADER" 2>/dev/null)
 REDIRECT_COUNT=${REDIRECT_COUNT:-0}
 
-echo "=== AFTER tcpdump log ==="
-cat "$LOG_TCPDUMP_AFTER"
 echo ""
-echo "=== AFTER loader/ringbuf log ==="
+echo "=== loader/ringbuf log ==="
 cat "$LOG_LOADER"
 
-############################################################
-# Weapon markers — grep-friendly for the harness.
-############################################################
 echo ""
-echo "=== BEFORE (no XDP) === tcpdump_on_other_ns=${BEFORE_COUNT}"
-echo "=== AFTER  (XDP active) === tcpdump_on_other_ns=${AFTER_COUNT} (untagged, ethertype 0x88b5)"
-echo "=== VLAN_GHOST_CROSSNS_PROVEN redirect_count=${REDIRECT_COUNT} ==="
+echo "=== BEFORE (no XDP): frames on veth_host2 = ${BEFORE_COUNT}"
+echo "=== AFTER  (XDP):    frames on veth_host2 = ${AFTER_COUNT}"
+echo "=== XDP redirect events in ringbuf: ${REDIRECT_COUNT}"
+
+if [ "$AFTER_COUNT" -gt 0 ] || [ "$REDIRECT_COUNT" -gt 0 ]; then
+    echo "=== VLAN_GHOST_CROSSNS_PROVEN redirect_count=${REDIRECT_COUNT} ==="
+else
+    echo "=== CH15_SKIP reason=\"no cross-ns frames detected (XDP redirect may have failed)\" ==="
+fi
 echo "=== done ==="

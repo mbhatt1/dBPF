@@ -37,9 +37,9 @@ if command -v runcon >/dev/null 2>&1; then
     # Pick a context that's nearly guaranteed not to have permission
     # on /etc/shadow — the user_t generic unconfined label.
     echo "=== runcon user_u:user_r:user_t:s0 cat /etc/shadow (expect deny) ==="
-    runcon user_u:user_r:user_t:s0 -- cat /etc/shadow 2>&1 | head -3
+    runcon user_u:user_r:user_t:s0 cat /etc/shadow 2>&1 | head -3
     echo "=== runcon user_u:user_r:user_t:s0 id (harmless labeled exec) ==="
-    runcon user_u:user_r:user_t:s0 -- id 2>&1 | head -3
+    runcon user_u:user_r:user_t:s0 id 2>&1 | head -3
 else
     echo "(runcon not installed; skipping labeled exec tests)"
 fi
