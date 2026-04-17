@@ -420,7 +420,7 @@ The unexpected XDP attachment on a veth interface deserves special consideration
 
 ## Scope
 
-The primitive documented here is a Class IV primitive in the taxonomy developed in Chapter 21. A Class IV primitive removes a kernel subsystem's visibility from the defender's observability stack by occupying an architectural position below the defender's instrumentation. This is not a netfilter bypass in the sense of evading a specific rule; it is an architectural layer below netfilter by design.
+The primitive documented here is a Class IV primitive in the taxonomy developed in Chapter 20. A Class IV primitive removes a kernel subsystem's visibility from the defender's observability stack by occupying an architectural position below the defender's instrumentation. This is not a netfilter bypass in the sense of evading a specific rule; it is an architectural layer below netfilter by design.
 
 The distinction matters for threat modeling. A netfilter bypass typically exploits a rule misconfiguration, a rule-order bug, or a protocol parsing error in a specific netfilter module. The fix is to tighten the rule. A Class IV primitive does not exploit a bug; it uses a supported kernel feature that runs in a position where the defender's instrumentation cannot reach. The fix is not to tighten a rule; it is to add instrumentation at the position the primitive occupies. XDP program introspection via `bpftool`, baseline diffing, and EDR-level XDP monitoring are the appropriate responses.
 

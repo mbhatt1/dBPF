@@ -40,7 +40,9 @@ struct {
 //   int security_capable(const struct cred *cred, struct user_namespace *ns,
 //                        int cap, unsigned int opts)
 // Return value: 0 = allow, -EPERM = deny. We intercept the ret arg and rewrite.
-SEC("lsm.s/capable")
+// Non-sleepable: no bpf_copy_from_user/bpf_ima_*/bpf_d_path/bpf_get_task_stack used.
+// lsm.s/ fails on kernels where bpf_lsm_capable is not marked sleepable.
+SEC("lsm/capable")
 int BPF_PROG(lsm_capable,
              const struct cred *cred,
              struct user_namespace *ns,

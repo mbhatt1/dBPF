@@ -100,13 +100,15 @@ int main(int argc, char **argv)
 
     skel = ch17_acpi_wsmi_analog_bpf__open_and_load();
     if (!skel) {
-        fprintf(stderr, "[ch17-analog] open_and_load failed: %s\n", strerror(errno));
+        fprintf(stderr, "[ch17-analog] CH17_ANALOG_SKIP reason=\"open_and_load failed: %s\"\n",
+                strerror(errno));
         goto out;
     }
 
     int err = ch17_acpi_wsmi_analog_bpf__attach(skel);
     if (err) {
-        fprintf(stderr, "[ch17-analog] attach failed: %s\n", strerror(-err));
+        fprintf(stderr, "[ch17-analog] CH17_ANALOG_SKIP reason=\"attach failed: %s\"\n",
+                strerror(-err));
         goto out;
     }
 

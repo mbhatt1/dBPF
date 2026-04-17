@@ -608,6 +608,8 @@ That is the implicit argument of the whole book. The chapters are case studies; 
 
 ## Hook points
 
+**Category: REAL.** This is actual VLAN header manipulation and cross-namespace packet redirect, not a userspace illusion. The XDP program physically strips the 802.1Q tag and `bpf_redirect_map` delivers the frame to a device in a different network namespace. The orchestrator's VLAN-enforcement layer is preempted because XDP runs before the bridge and netfilter.
+
 - `SEC("xdp")` `xdp_vlan_ghost` on the ingress veth.
 - `BPF_MAP_TYPE_DEVMAP tx_port` (slot 0 → egress ifindex) drives `bpf_redirect_map`.
 - `BPF_MAP_TYPE_ARRAY cfg` (slot 0 = mode flag, slot 1 = audit copy of egress ifindex).

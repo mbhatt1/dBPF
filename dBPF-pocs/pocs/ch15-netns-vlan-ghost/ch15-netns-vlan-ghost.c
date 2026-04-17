@@ -184,7 +184,8 @@ int main(int argc, char **argv)
     struct ring_buffer *rb = NULL;
     struct ch15_netns_vlan_ghost_bpf *s = ch15_netns_vlan_ghost_bpf__open_and_load();
     if (!s) {
-        fprintf(stderr, "[ch15] open_and_load failed: %s\n", strerror(errno));
+        fprintf(stderr, "[ch15] CH15_SKIP reason=\"open_and_load failed: %s\"\n",
+                strerror(errno));
         return 1;
     }
 

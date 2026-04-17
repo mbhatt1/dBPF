@@ -5,10 +5,10 @@
 // permission hook short-circuits SELinux's verdict entirely: the deny
 // never gets a chance to run.
 //
-// Three sleepable fmod_ret programs cover the common access paths:
-//   lsm.s/file_permission       — vfs read/write/execute on an open file
-//   lsm.s/inode_permission      — path walk / open-time permission check
-//   lsm.s/bprm_check_security   — execve of a label-restricted binary
+// Three fmod_ret programs cover the common access paths:
+//   lsm/file_permission       — vfs read/write/execute on an open file
+//   lsm/inode_permission      — path walk / open-time permission check
+//   lsm/bprm_check_security   — execve of a label-restricted binary
 //
 // Each reads the upstream `ret` arg. If the current tgid is in
 // target_tgids (or wildcard=0 present) AND ret != 0 (a pending deny),
@@ -80,7 +80,8 @@ static __always_inline void emit(int hook, int orig_ret, int flipped)
 
 // int security_file_permission(struct file *file, int mask)
 // Return 0 to allow, -EACCES/-EPERM to deny. fmod_ret trailing arg is ret.
-SEC("lsm.s/file_permission")
+// Non-sleepable: no bpf_d_path/bpf_copy_from_user/etc. used.
+SEC("lsm/file_permission")
 int BPF_PROG(lsm_file_permission, struct file *file, int mask, int ret)
 {
     (void)file; (void)mask;
@@ -96,7 +97,7 @@ int BPF_PROG(lsm_file_permission, struct file *file, int mask, int ret)
 }
 
 // int security_inode_permission(struct inode *inode, int mask)
-SEC("lsm.s/inode_permission")
+SEC("lsm/inode_permission")
 int BPF_PROG(lsm_inode_permission, struct inode *inode, int mask, int ret)
 {
     (void)inode; (void)mask;
@@ -112,7 +113,7 @@ int BPF_PROG(lsm_inode_permission, struct inode *inode, int mask, int ret)
 }
 
 // int security_bprm_check(struct linux_binprm *bprm)
-SEC("lsm.s/bprm_check_security")
+SEC("lsm/bprm_check_security")
 int BPF_PROG(lsm_bprm_check_security, struct linux_binprm *bprm, int ret)
 {
     (void)bprm;

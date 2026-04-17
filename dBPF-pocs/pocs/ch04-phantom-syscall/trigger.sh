@@ -13,6 +13,22 @@ set +e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 BIN="$HERE/build/ch04-phantom-syscall"
 
+cleanup() {
+    [ -n "${LOADER_PID:-}" ] && kill "$LOADER_PID" 2>/dev/null && wait "$LOADER_PID" 2>/dev/null
+    rm -f /tmp/phantom /tmp/phantom.c "${LOADER_LOG:-}"
+    userdel "$UNPRIV_USER" 2>/dev/null
+}
+trap cleanup EXIT INT TERM
+
+if ! command -v cc >/dev/null 2>&1; then
+    echo "=== CH04_SKIP reason=\"cc (C compiler) not available\" ==="
+    exit 0
+fi
+if [ ! -x "$BIN" ]; then
+    echo "=== CH04_SKIP reason=\"loader not built at $BIN\" ==="
+    exit 0
+fi
+
 # --- Build the tiny unprivileged trigger binary ------------------------------
 cat > /tmp/phantom.c <<'EOF'
 #include <stdio.h>
@@ -58,10 +74,6 @@ BEFORE_OUT="$(su "$UNPRIV_USER" -s /bin/bash -c '
 echo "$BEFORE_OUT"
 
 # --- Load the BPF program ----------------------------------------------------
-if [ ! -x "$BIN" ]; then
-    echo "!! loader $BIN not built; run 'make' first" >&2
-    exit 1
-fi
 LOADER_LOG="$(mktemp)"
 "$BIN" >"$LOADER_LOG" 2>&1 &
 LOADER_PID=$!
@@ -106,4 +118,3 @@ echo "=== CH04_PROVEN leaked_fields=${LEAKED} ==="
 # Emit loader log tail for debugging.
 echo "--- loader log tail ---" >&2
 tail -20 "$LOADER_LOG" >&2
-rm -f "$LOADER_LOG"

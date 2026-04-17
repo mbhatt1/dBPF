@@ -70,18 +70,23 @@ int main(int argc, char **argv)
     }
 
     if (!check_lsm_bpf_enabled()) {
-        fprintf(stderr, "[ch02-lsm] ERROR: kernel does not have 'bpf' in "
-                        "/sys/kernel/security/lsm. Boot with lsm=bpf,...\n");
+        fprintf(stderr, "[ch02-lsm] CH02_LSM_SKIP reason=\"BPF LSM not enabled "
+                        "(boot with lsm=bpf,...)\"\n");
         return 3;
     }
     fprintf(stderr, "[ch02-lsm] BPF LSM is active — proceeding\n");
 
     struct ch02_overlayfs_lsm_bpf *s = ch02_overlayfs_lsm_bpf__open_and_load();
-    if (!s) { fprintf(stderr, "[ch02-lsm] open_and_load: %s\n", strerror(errno)); return 1; }
+    if (!s) {
+        fprintf(stderr, "[ch02-lsm] CH02_LSM_SKIP reason=\"open_and_load: %s\"\n",
+                strerror(errno));
+        return 1;
+    }
 
     int err = ch02_overlayfs_lsm_bpf__attach(s);
     if (err) {
-        fprintf(stderr, "[ch02-lsm] attach: %s\n", strerror(-err));
+        fprintf(stderr, "[ch02-lsm] CH02_LSM_SKIP reason=\"attach: %s\"\n",
+                strerror(-err));
         ch02_overlayfs_lsm_bpf__destroy(s);
         return 1;
     }

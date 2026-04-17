@@ -102,7 +102,7 @@ int main(int argc, char **argv)
     struct ch08_keyring_heist_kprobe_bpf *s =
         ch08_keyring_heist_kprobe_bpf__open();
     if (!s) {
-        fprintf(stderr, "[ch08k] open: %s\n", strerror(errno));
+        fprintf(stderr, "[ch08k] CH08K_SKIP reason=\"open: %s\"\n", strerror(errno));
         return 1;
     }
 
@@ -113,14 +113,14 @@ int main(int argc, char **argv)
 
     int err = ch08_keyring_heist_kprobe_bpf__load(s);
     if (err) {
-        fprintf(stderr, "[ch08k] load: %s\n", strerror(-err));
+        fprintf(stderr, "[ch08k] CH08K_SKIP reason=\"load: %s\"\n", strerror(-err));
         ch08_keyring_heist_kprobe_bpf__destroy(s);
         return 1;
     }
 
     err = ch08_keyring_heist_kprobe_bpf__attach(s);
     if (err) {
-        fprintf(stderr, "[ch08k] attach: %s\n", strerror(-err));
+        fprintf(stderr, "[ch08k] CH08K_SKIP reason=\"attach: %s\"\n", strerror(-err));
         ch08_keyring_heist_kprobe_bpf__destroy(s);
         return 1;
     }

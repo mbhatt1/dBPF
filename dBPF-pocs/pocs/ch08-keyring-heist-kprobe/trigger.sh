@@ -45,11 +45,11 @@ trap cleanup EXIT INT TERM
 
 # --- preflight ---
 if ! command -v keyctl >/dev/null 2>&1; then
-    echo 'CH08K_SKIP reason="keyctl(1) not available (install keyutils)"'
+    echo '=== CH08K_SKIP reason="keyctl(1) not available (install keyutils)" ==='
     exit 0
 fi
 if [ ! -x "$LOADER" ]; then
-    echo "CH08K_SKIP reason=\"loader not built at $LOADER (run make first)\""
+    echo "=== CH08K_SKIP reason=\"loader not built at $LOADER (run make first)\" ==="
     exit 0
 fi
 
@@ -58,14 +58,14 @@ if ! id "$DUSER" >/dev/null 2>&1; then
     useradd -M "$DUSER" 2>/dev/null
 fi
 if ! id "$DUSER" >/dev/null 2>&1; then
-    echo "CH08K_SKIP reason=\"cannot create user $DUSER\""
+    echo "=== CH08K_SKIP reason=\"cannot create user $DUSER\" ==="
     exit 0
 fi
 
 # --- root adds the keyring entry under the @u user session keyring ---
 KEY_ID="$(keyctl add user "$KEY_DESC" "$KEY_PAYLOAD" @u 2>/dev/null)"
 if [ -z "$KEY_ID" ]; then
-    echo 'CH08K_SKIP reason="keyctl add user @u failed"'
+    echo '=== CH08K_SKIP reason="keyctl add user @u failed" ==='
     exit 0
 fi
 # Restrictive perms: owner=all(0x3f), user-class=view-only(0x01), g/o=none.
@@ -112,14 +112,14 @@ if ! kill -0 "$LPID" 2>/dev/null; then
         grep 'CH08K_SKIP' "$LOG"
         exit 0
     fi
-    echo 'CH08K_SKIP reason="loader exited during startup"'
+    echo '=== CH08K_SKIP reason="loader exited during startup" ==='
     exit 0
 fi
 
 if ! grep -q 'attached' "$LOG" 2>/dev/null; then
     echo '=== loader did not reach attached state ==='
     cat "$LOG"
-    echo 'CH08K_SKIP reason="loader did not attach in time"'
+    echo '=== CH08K_SKIP reason="loader did not attach in time" ==='
     exit 0
 fi
 echo "=== loader attached pid=$LPID ==="

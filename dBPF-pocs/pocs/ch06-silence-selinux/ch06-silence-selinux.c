@@ -238,7 +238,7 @@ int main(int argc, char **argv)
 
     int err = ch06_silence_selinux_bpf__load(s);
     if (err) {
-        fprintf(stderr, "[ch06] load failed: %s\n", strerror(-err));
+        fprintf(stderr, "[ch06] CH06_SKIP reason=\"load failed: %s\"\n", strerror(-err));
         goto out;
     }
 

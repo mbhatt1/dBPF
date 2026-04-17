@@ -54,6 +54,7 @@ class Poc:
     timeout: float = 12.0
     pre_cmd: list[str] | None = None  # runs in container before loader
     needs_bpf_lsm: bool = False      # require BPF LSM in /sys/kernel/security/lsm
+    category: str = "real"           # "real" | "analog" | "observer" | "illusion"
 
 
 POCS: list[Poc] = [
@@ -73,7 +74,8 @@ POCS: list[Poc] = [
                  "auditctl -e 1 2>/dev/null; "
                  "auditctl -a always,exit -F arch=aarch64 -S execve 2>/dev/null; "
                  "auditctl -a always,exit -F arch=b64 -S execve 2>/dev/null; true"],
-        proof_marker=r"SUPPRESSED|EXFIL|_PROVEN"),
+        proof_marker=r"SUPPRESSED|EXFIL|_PROVEN",
+        category="observer"),
     Poc("ch04", "Phantom Syscall (tail-call)", "ch04-phantom-syscall",
         hooks=["__arm64_sys_write"], prefix="[phantom]", min_events=1,
         proof_marker=r"CH04_PROVEN|EXFIL_COMPLETE"),
@@ -86,7 +88,8 @@ POCS: list[Poc] = [
         proof_marker=r"GHOST_COVERT_CHANNEL_PROVEN"),
     Poc("ch06", "Silencing SELinux (LSM)", "ch06-silence-selinux-lsm",
         hooks=["bpf-lsm"], prefix="[ch06]", needs_bpf_lsm=True,
-        proof_marker=r"CH06_PROVEN|CH06_WEAPON_PROVEN|FLIP\s+hook="),
+        proof_marker=r"CH06_PROVEN|CH06_WEAPON_PROVEN|FLIP\s+hook=",
+        category="observer"),
     Poc("ch07", "Device-cgroup Houdini (LSM)", "ch07-devcgroup-houdini-lsm",
         hooks=["bpf-lsm"], prefix="[ch07]", needs_bpf_lsm=True,
         mode="trigger-runs-loader", timeout=25,
@@ -97,14 +100,16 @@ POCS: list[Poc] = [
         proof_marker=r"CH08_PROVEN|CH08_WEAPON_PROVEN|FLIP\s+pid="),
     Poc("ch09", "PID-NS Doppelganger", "ch09-pid-doppel",
         hooks=["tp:sched/sched_process_fork"], prefix="[ch09]",
-        proof_marker=r"CH09_PROVEN|PID_NS_ESCAPE_PROVEN", timeout=40),
+        proof_marker=r"CH09_PROVEN|PID_NS_ESCAPE_PROVEN", timeout=40,
+        category="observer"),
     Poc("ch10", "Inode Cloak (getdents64)", "ch10-inode-cloak",
         hooks=["__arm64_sys_getdents64"], prefix="[cloak]",
         proof_marker=r"CLOAK_PROVEN"),
     Poc("ch11", "IRQ Chaos", "ch11-irq-chaos",
         hooks=["handle_irq_event", "__handle_irq_event_percpu",
                "handle_irq_event_percpu"], prefix="[irq]",
-        proof_marker=r"CH11_PROVEN|IRQ_COVERT_CHANNEL_PROVEN"),
+        proof_marker=r"CH11_PROVEN|IRQ_COVERT_CHANNEL_PROVEN",
+        category="observer"),
     Poc("ch12", "Signed-Driver Swap (LSM)", "ch12-signed-driver-swap-lsm",
         hooks=["bpf-lsm"], prefix="[ch12]", needs_bpf_lsm=True,
         proof_marker=r"CH12_PROVEN|CH12_WEAPON_PROVEN|FLIP\s+hook="),
@@ -115,14 +120,16 @@ POCS: list[Poc] = [
         hooks=["__arm64_sys_sched_setscheduler"], prefix="[sched]",
         mode="trigger-runs-loader",
         flip_marker=r"flipped=1|flip|override",
-        proof_marker=r"flipped=1|SCHED_WEAPON_PROVEN"),
+        proof_marker=r"flipped=1|SCHED_WEAPON_PROVEN",
+        category="illusion"),
     Poc("ch15", "NetNS VLAN Ghost (XDP VID=4242)", "ch15-netns-vlan-ghost",
         hooks=["veth"], prefix="[vghost]", mode="trigger-runs-loader",
         timeout=20,
         proof_marker=r"VLAN_GHOST_CROSSNS_PROVEN"),
     Poc("ch16", "Seccomp TID Hop", "ch16-seccomp-tid-hop",
         hooks=["__secure_computing"], prefix="[seccomp]",
-        proof_marker=r"SECCOMP_SIDECHANNEL_PROVEN"),
+        proof_marker=r"SECCOMP_SIDECHANNEL_PROVEN",
+        category="observer"),
     Poc("ch17", "ACPI WSMI Ping / firmware", "ch17-acpi-wsmi",
         hooks=["request_firmware", "acpi_evaluate_object"], prefix="[acpi]",
         proof_marker=r"ACPI_PROBE_PROVEN\s+attached=\d+\s+fired=[1-9]"),
@@ -130,7 +137,8 @@ POCS: list[Poc] = [
         hooks=["__arm64_sys_getuid", "__arm64_sys_geteuid"], prefix="[token]",
         mode="override-all", loader_args=["--all"],
         flip_marker=r"FORGE|override|flip|uid=0",
-        proof_marker=r"FORGE\s+pid=|TOKEN_FORGE_PROVEN"),
+        proof_marker=r"FORGE\s+pid=|TOKEN_FORGE_PROVEN",
+        category="illusion"),
     # --- workaround / analog variants ---------------------------------
     # Pedagogical disclaimer: the original chapter POC fails on this
     # kernel (missing SELinux policy, x86-only RAPL, no ACPI interp,
@@ -141,12 +149,14 @@ POCS: list[Poc] = [
         "ch06-silence-selinux-lsm-synthetic",
         hooks=["bpf-lsm"], prefix="[ch06-synth]", needs_bpf_lsm=True,
         mode="trigger-runs-loader", timeout=25,
-        proof_marker=r"CH06_CONCEPT_PROVEN|CH06_SYNTH_PROVEN|_PROVEN"),
+        proof_marker=r"CH06_CONCEPT_PROVEN|CH06_SYNTH_PROVEN|_PROVEN",
+        category="analog"),
     Poc("ch07w", "Device-cgroup Houdini — workaround (LSM)",
         "ch07-devcgroup-houdini-lsm",
         hooks=["bpf-lsm"], prefix="[ch07]", needs_bpf_lsm=True,
         mode="trigger-runs-loader", timeout=25,
-        proof_marker=r"CH07_CONCEPT_PROVEN|CH07_CONCEPT_PARTIAL|CH07_PROVEN|FLIP\s+hook=|_PROVEN"),
+        proof_marker=r"CH07_CONCEPT_PROVEN|CH07_CONCEPT_PARTIAL|CH07_PROVEN|FLIP\s+hook=|_PROVEN",
+        category="analog"),
     Poc("ch08k", "Keyring Heist — kprobe variant",
         "ch08-keyring-heist-kprobe",
         hooks=["key_task_permission", "lookup_user_key"], prefix="[ch08k]",
@@ -156,17 +166,20 @@ POCS: list[Poc] = [
         "ch12-signed-driver-swap-syscall",
         hooks=["__arm64_sys_finit_module", "__arm64_sys_init_module"],
         prefix="[ch12s]", mode="trigger-runs-loader", timeout=25,
-        proof_marker=r"CH12_CONCEPT_PROVEN|CH12_PROVEN|FORGE\s+pid=|_PROVEN"),
+        proof_marker=r"CH12_CONCEPT_PROVEN|CH12_PROVEN|FORGE\s+pid=|_PROVEN",
+        category="illusion"),
     Poc("ch13a", "Powercap Override — userspace sensor analog",
         "ch13-powercap-override-analog",
         hooks=["tp:syscalls/sys_enter_read", "tp:syscalls/sys_exit_read"],
         prefix="[ch13-analog]", mode="trigger-runs-loader", timeout=25,
-        proof_marker=r"CH13_ANALOG_PROVEN|CH13_CONCEPT_PROVEN|_PROVEN"),
+        proof_marker=r"CH13_ANALOG_PROVEN|CH13_CONCEPT_PROVEN|_PROVEN",
+        category="analog"),
     Poc("ch17a", "ACPI WSMI — userspace firmware analog",
         "ch17-acpi-wsmi-analog",
         hooks=["tp:syscalls/sys_enter_openat"],
         prefix="[ch17-analog]", mode="trigger-runs-loader", timeout=25,
-        proof_marker=r"CH17_ANALOG_PROVEN|CH17_CONCEPT_PROVEN|_PROVEN"),
+        proof_marker=r"CH17_ANALOG_PROVEN|CH17_CONCEPT_PROVEN|_PROVEN",
+        category="analog"),
 ]
 
 
@@ -215,6 +228,13 @@ class RunState:
     end_ts: float = 0.0
 
 
+CATEGORY_LABEL = {
+    "real": ("REAL", "green"),
+    "analog": ("ANLG", "yellow"),
+    "observer": ("OBSV", "cyan"),
+    "illusion": ("ILLU", "magenta"),
+}
+
 STATUS_COLOR = {
     "queued": "grey50",
     "building": "cyan",
@@ -241,6 +261,7 @@ def status_label(status: str) -> str:
 def build_table(states: dict[str, RunState], current: str | None) -> Table:
     t = Table(title="dBPF POC Proofs", expand=True, header_style="bold magenta")
     t.add_column("ID", width=5)
+    t.add_column("Cat", width=4, justify="center")
     t.add_column("Name", overflow="fold")
     t.add_column("Hooks", justify="right")
     t.add_column("Events", justify="right")
@@ -252,6 +273,7 @@ def build_table(states: dict[str, RunState], current: str | None) -> Table:
         color = STATUS_COLOR.get(s.status, "white")
         arrow = "▶ " if p.cid == current else "  "
         hooks = f"{len(s.present_hooks)}/{len(p.hooks)}"
+        cat_label, cat_color = CATEGORY_LABEL.get(p.category, ("????", "white"))
         # Prefer showing the captured proof-marker line in the Verdict
         # column when we have one. Truncate to keep the table compact.
         verdict_txt = s.proof_line or s.verdict
@@ -259,6 +281,7 @@ def build_table(states: dict[str, RunState], current: str | None) -> Table:
             verdict_txt = verdict_txt[:77] + "..."
         t.add_row(
             arrow + p.cid,
+            Text(cat_label, style=cat_color),
             p.name,
             hooks,
             str(s.events),
@@ -592,12 +615,15 @@ def main():
     console.print()
     out = Table(title="final verdicts")
     out.add_column("ID")
+    out.add_column("Cat", justify="center")
     out.add_column("Status")
     out.add_column("Events", justify="right")
     out.add_column("Verdict", overflow="fold")
     for p in POCS:
         s = states[p.cid]
+        cat_label, cat_color = CATEGORY_LABEL.get(p.category, ("????", "white"))
         out.add_row(p.cid,
+                    Text(cat_label, style=cat_color),
                     Text(status_label(s.status), style=STATUS_COLOR.get(s.status, "")),
                     str(s.events), s.verdict)
     console.print(out)
@@ -605,6 +631,7 @@ def main():
     # machine-readable
     js = {p.cid: {
         "status": states[p.cid].status,
+        "category": p.category,
         "events": states[p.cid].events,
         "flipped": states[p.cid].flipped,
         "proof_hits": states[p.cid].proof_hits,
@@ -616,9 +643,11 @@ def main():
 
     # summary counts
     counts: dict[str, int] = {}
+    categories: dict[str, int] = {}
     for p in POCS:
         counts[states[p.cid].status] = counts.get(states[p.cid].status, 0) + 1
-    console.print(f"[bold]counts:[/bold] {counts}")
+        categories[p.category] = categories.get(p.category, 0) + 1
+    console.print(f"[bold]counts:[/bold] {counts}  [bold]categories:[/bold] {categories}")
     pathlib.Path("/tmp/proof-result.json").write_text(json.dumps(js, indent=2))
     console.print("[dim]machine-readable: /tmp/proof-result.json[/dim]")
 

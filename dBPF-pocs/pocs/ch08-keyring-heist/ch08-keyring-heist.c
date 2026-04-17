@@ -79,13 +79,22 @@ int main(int argc, char **argv)
     int rc = 1;
     struct ring_buffer *rb = NULL;
     struct ch08_keyring_heist_bpf *s = ch08_keyring_heist_bpf__open();
-    if (!s) { fprintf(stderr, "[ch08] open: %s\n", strerror(errno)); return 1; }
+    if (!s) {
+        fprintf(stderr, "[ch08] CH08_SKIP reason=\"open: %s\"\n", strerror(errno));
+        return 1;
+    }
     if (has_ktp == 0) bpf_program__set_autoload(s->progs.kp_ktp, false);
     if (has_luk == 0) bpf_program__set_autoload(s->progs.kp_luk, false);
     int err = ch08_keyring_heist_bpf__load(s);
-    if (err) { fprintf(stderr, "[ch08] load: %s\n", strerror(-err)); goto out; }
+    if (err) {
+        fprintf(stderr, "[ch08] CH08_SKIP reason=\"load: %s\"\n", strerror(-err));
+        goto out;
+    }
     err = ch08_keyring_heist_bpf__attach(s);
-    if (err) { fprintf(stderr, "[ch08] attach: %s\n", strerror(-err)); goto out; }
+    if (err) {
+        fprintf(stderr, "[ch08] CH08_SKIP reason=\"attach: %s\"\n", strerror(-err));
+        goto out;
+    }
 
     rb = ring_buffer__new(bpf_map__fd(s->maps.events), handle, NULL, NULL);
     if (!rb) { fprintf(stderr, "[ch08] ring_buffer__new: %s\n", strerror(errno)); goto out; }

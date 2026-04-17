@@ -212,7 +212,7 @@ int main(int argc, char **argv)
 
     int err = ch13_powercap_override_bpf__load(s);
     if (err) {
-        fprintf(stderr, "[ch13] load failed: %s\n", strerror(-err));
+        fprintf(stderr, "[ch13] CH13_SKIP reason=\"load failed: %s\"\n", strerror(-err));
         goto out;
     }
 

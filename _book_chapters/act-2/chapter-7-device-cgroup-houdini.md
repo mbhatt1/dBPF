@@ -14,7 +14,7 @@ I started this one expecting an easy win. Device cgroups are the standard contai
 
 The plan on paper:
 
-1. Attach `SEC("lsm.s/inode_mknod")` with fmod_ret semantics.
+1. Attach `SEC("lsm/inode_mknod")` with fmod_ret semantics.
 2. Observe the hook firing when an unprivileged container runs `mknod /dev/mem c 1 1`.
 3. For a target tgid, return 0 from the LSM program. The kernel's LSM chain aggregates return codes via logical AND; if the BPF LSM returns 0 and nobody upstream objected, the `mknod` succeeds.
 4. The container ends up with a live `/dev/mem` character node it can open. Game over, in the classroom sense.
@@ -73,7 +73,7 @@ Read that carefully. The capability check happens *before* `vfs_mknod` is ever c
 
 An unprivileged container, running with a user namespace, has `CAP_MKNOD` in its own user namespace but not in the init user namespace. When the kernel's `capable()` walks the user_ns chain to decide whether the request is permitted, it returns `false` against init. `may_mknod` returns `-EPERM`. `do_mknodat` jumps to `out2`. The dentry is dropped and the syscall returns.
 
-We never reach `vfs_mknod`. We never reach `security_inode_mknod`. The LSM chain is never consulted. Our `lsm.s/inode_mknod` program sits in the kernel with zero invocations, waiting for a call that will never come.
+We never reach `vfs_mknod`. We never reach `security_inode_mknod`. The LSM chain is never consulted. Our `lsm/inode_mknod` program sits in the kernel with zero invocations, waiting for a call that will never come.
 
 This is not a bug. This is the published, intentional design of how LSMs interact with capabilities on Linux. The LSM framework is a *restrictor*. Its philosophical role is to say "no, you cannot do this thing that capabilities say you are allowed to do," not "yes, you can do this thing that capabilities said you could not." The SELinux FAQ has an entry about this. Grsecurity team commentary has covered it. Casey Schaufler (the original LSM framework author) has explained it on LKML more than once. LSMs restrict; they do not re-open.
 
@@ -136,7 +136,7 @@ That closed the last door I had on the natural-denial path. The primitive as ori
 
 Before I could change the demonstration, I hit a second obstacle — one that, in retrospect, I wish I had hit first, because it forced me to understand the loader's relationship with kernel BTF much better than I had before.
 
-While I was still trying the original "three LSM hooks attached, flip whatever fires" approach, I had compiled in three programs: `lsm.s/inode_mknod`, `lsm.s/file_open`, and `lsm.s/dev_open`. The last one is interesting because `security_dev_open` is the LSM hook the kernel calls specifically when a character/block device file is opened — after `security_file_open` runs, and specifically for devices. It would have been a nice belt-and-suspenders hook: even if `inode_mknod` was unreachable because of the cap short-circuit, `dev_open` on an *existing* device node would give me a second attachment point.
+While I was still trying the original "three LSM hooks attached, flip whatever fires" approach, I had compiled in three programs: `lsm/inode_mknod`, `lsm/file_open`, and `lsm/dev_open`. The last one is interesting because `security_dev_open` is the LSM hook the kernel calls specifically when a character/block device file is opened — after `security_file_open` runs, and specifically for devices. It would have been a nice belt-and-suspenders hook: even if `inode_mknod` was unreachable because of the cap short-circuit, `dev_open` on an *existing* device node would give me a second attachment point.
 
 libbpf rejected the skeleton load with:
 
@@ -247,8 +247,8 @@ The loader output on the test kernel:
 [ch07] keep hook=inode_mknod (BTF FUNC bpf_lsm_inode_mknod present)
 [ch07] keep hook=file_open   (BTF FUNC bpf_lsm_file_open present)
 [ch07] prune hook=dev_open reason="no BTF FUNC bpf_lsm_dev_open"
-[ch07] attached lsm.s/inode_mknod
-[ch07] attached lsm.s/file_open
+[ch07] attached lsm/inode_mknod
+[ch07] attached lsm/file_open
 [ch07] active — 2 LSM hook(s) attached; target_tgid=0 stage=off pid=1234
 ```
 
@@ -262,9 +262,11 @@ I also want to be explicit about what "BTF FUNC present" does and doesn't tell y
 
 For the current POC, `bpf_lsm_inode_mknod` is live on every kernel where the LSM chain calls `security_inode_mknod` during mknod, which is every kernel with BPF LSM. `bpf_lsm_file_open` is live during every file open. So presence in BTF + live invocation on the syscall path are both true on our target, and the pruning logic is sufficient.
 
-## The synthetic deny+flip design
+## The synthetic deny+flip design (ANALOG category)
 
-With `dev_open` pruned, I had two hooks that could attach successfully: `lsm.s/inode_mknod` and `lsm.s/file_open`. But the original demonstration — "flip a natural cap-denial to allow" — was dead, because `may_mknod` short-circuits before the LSM chain.
+With `dev_open` pruned, I had two hooks that could attach successfully: `lsm/inode_mknod` and `lsm/file_open`. But the original demonstration — "flip a natural cap-denial to allow" — was dead, because `may_mknod` short-circuits before the LSM chain.
+
+This is why the LSM variant is classified as **ANALOG** in the POC taxonomy: it does not intercept a real device-cgroup denial. It cannot, because `devcgroup_check_permission` fires *before* the LSM chain — specifically inside `may_mknod` in the VFS layer — so by the time `lsm/inode_mknod` runs, the cgroup's verdict has already been applied and the syscall has already failed. Instead, the LSM variant synthesizes its own denial via a BPF map-driven stage system and then flips that same synthetic denial to an allow. The mechanism (fmod_ret return-value override) is real; the denial being flipped is not a natural one from the device cgroup. The kprobe observer variant (`ch07-devcgroup-houdini`) is also classified as OBSERVER because kprobes cannot mutate return values on this function.
 
 I needed a different way to prove the primitive in-kernel. The pattern I used is the same one `ch06-silence-selinux-lsm-synthetic` established: the same BPF program implements both the denier and the flipper, selected at runtime by a control map. This models the attacker capability (deny-then-flip) without running afoul of LSM chain short-circuit semantics.
 
@@ -415,7 +417,7 @@ This is the `new` major/minor encoding that Linux switched to many years ago —
 The three hook-specific programs each call `run_stage` with the appropriate mode and dev:
 
 ```c
-SEC("lsm.s/inode_mknod")
+SEC("lsm/inode_mknod")
 int BPF_PROG(lsm_inode_mknod,
              struct inode *dir, struct dentry *dentry,
              unsigned short mode, unsigned int dev, int ret)
@@ -424,7 +426,7 @@ int BPF_PROG(lsm_inode_mknod,
     return run_stage(H_INODE_MKNOD, (unsigned int)mode, dev);
 }
 
-SEC("lsm.s/file_open")
+SEC("lsm/file_open")
 int BPF_PROG(lsm_file_open, struct file *file, int ret)
 {
     (void)ret;
@@ -446,7 +448,7 @@ One more subtlety about the `file_open` hook: the `i_rdev` field is only meaning
 The third program, `lsm_dev_open`, is the one that gets pruned on linuxkit. Its source is in the file but autoload-disabled at load time; I include it here because the pruning logic is what makes it safe to leave in the source tree even on kernels where the hook isn't present:
 
 ```c
-SEC("lsm.s/dev_open")
+SEC("lsm/dev_open")
 int BPF_PROG(lsm_dev_open, struct file *file, int ret)
 {
     (void)ret;
@@ -546,7 +548,7 @@ Modern runtimes implement device cgroup restrictions using a `BPF_PROG_TYPE_CGRO
 
 The cgroup device program runs in `devcgroup_check_permission()`, which is called from `may_mknod` (for mknod) and from the file_open path (for open). It runs *inside* the LSM-chain-visible region — after the `capable(CAP_MKNOD)` check but before the LSM chain's inode_mknod hook, for mknod; as part of the LSM chain indirectly via `security_file_open`, for open.
 
-An attacker-owned BPF LSM program — one the attacker has `CAP_SYS_ADMIN` and `CAP_BPF` to load — attached at `fmod_ret lsm.s/inode_mknod` sits *after* the cgroup device program in the effective decision pipeline. So the sequence for a container process attempting to `mknod /dev/mem c 1 1` is:
+An attacker-owned BPF LSM program — one the attacker has `CAP_SYS_ADMIN` and `CAP_BPF` to load — attached at `fmod_ret lsm/inode_mknod` sits *after* the cgroup device program in the effective decision pipeline. So the sequence for a container process attempting to `mknod /dev/mem c 1 1` is:
 
 1. `do_mknodat` — path resolution.
 2. `may_mknod` — `capable(CAP_MKNOD)` check. In the container's user_ns with `CAP_MKNOD` mapped (which is the whole point of a privileged-enough container to even try this), this passes.

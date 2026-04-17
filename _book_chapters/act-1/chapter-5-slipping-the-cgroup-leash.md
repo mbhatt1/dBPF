@@ -121,7 +121,7 @@ out:
 The BPF program in `ch05-cgroup-leash.bpf.c` attaches two tracepoints. The first fires on syscall entry:
 
 ```c
-SEC("tracepoint/syscalls/sys_enter_read")
+SEC("tp/syscalls/sys_enter_read")
 int tp_enter_read(struct trace_event_raw_sys_enter *ctx)
 {
     int fd = (int)ctx->args[0];
@@ -174,7 +174,7 @@ If the comparison matches, the program stashes `(ubuf, nbytes)` in a per-(pid, t
 The paired exit tracepoint runs after the kernel's read path has written bytes into the user buffer and is preparing to return:
 
 ```c
-SEC("tracepoint/syscalls/sys_exit_read")
+SEC("tp/syscalls/sys_exit_read")
 int tp_exit_read(struct trace_event_raw_sys_exit *ctx)
 {
     long ret = ctx->ret;
@@ -296,8 +296,7 @@ Poc("ch05", "Slipping the Cgroup Leash", "ch05-cgroup-leash",
     prefix="[ch05]",
     mode="trigger",
     proof_marker=r"CH05_PROVEN\s+before_usage=(\d+)\s+after_usage=(\d+)\s+zeroed=(\w+)",
-    hooks=["tracepoint/syscalls/sys_enter_read",
-           "tracepoint/syscalls/sys_exit_read"]),
+    hooks=["__arm64_sys_read"]),
 ```
 
 The `mode="trigger"` tells the harness runner to spawn the loader, then run `trigger.sh`, then match the marker against the combined stdout. The trigger script reads `cpu.stat` once before the loader attaches (recording `before_usage`), runs the loader in the background, reads again (recording `after_usage`), then synthesizes the marker line `CH05_PROVEN before_usage=123456 after_usage=0 zeroed=yes patched_events=1`.

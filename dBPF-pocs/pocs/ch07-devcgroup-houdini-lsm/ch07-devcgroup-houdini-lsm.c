@@ -237,7 +237,7 @@ int main(int argc, char **argv)
 
     char skip_reason[256] = {0};
     if (!check_lsm_bpf_enabled(skip_reason, sizeof(skip_reason))) {
-        fprintf(stderr, "CH07_SKIP reason=\"%s\"\n", skip_reason);
+        fprintf(stderr, "[ch07] CH07_LSM_SKIP reason=\"%s\"\n", skip_reason);
         return 3;
     }
     fprintf(stderr, "[ch07] BPF LSM is active — proceeding\n");
@@ -247,7 +247,7 @@ int main(int argc, char **argv)
     struct ch07_devcgroup_houdini_lsm_bpf *s =
         ch07_devcgroup_houdini_lsm_bpf__open();
     if (!s) {
-        fprintf(stderr, "[ch07] open: %s\n", strerror(errno));
+        fprintf(stderr, "[ch07] CH07_LSM_SKIP reason=\"open: %s\"\n", strerror(errno));
         return 1;
     }
 
@@ -294,7 +294,7 @@ int main(int argc, char **argv)
 
     if (available_count == 0) {
         fprintf(stderr,
-            "CH07_SKIP reason=\"no LSM hook target present in BTF; "
+            "[ch07] CH07_LSM_SKIP reason=\"no LSM hook target present in BTF; "
             "cannot attach\"\n");
         ch07_devcgroup_houdini_lsm_bpf__destroy(s);
         return 3;
@@ -302,7 +302,7 @@ int main(int argc, char **argv)
 
     int err = ch07_devcgroup_houdini_lsm_bpf__load(s);
     if (err) {
-        fprintf(stderr, "[ch07] load: %s\n", strerror(-err));
+        fprintf(stderr, "[ch07] CH07_LSM_SKIP reason=\"load: %s\"\n", strerror(-err));
         ch07_devcgroup_houdini_lsm_bpf__destroy(s);
         return 1;
     }
@@ -331,7 +331,7 @@ int main(int argc, char **argv)
     }
 
     if (attached == 0) {
-        fprintf(stderr, "CH07_SKIP reason=\"no LSM hook successfully "
+        fprintf(stderr, "[ch07] CH07_LSM_SKIP reason=\"no LSM hook successfully "
                         "attached\"\n");
         ch07_devcgroup_houdini_lsm_bpf__destroy(s);
         return 3;

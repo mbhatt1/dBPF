@@ -510,9 +510,28 @@ The LSM approach is the one that refused to die. I kept coming back to it. I tri
 - Declaring the argument as a pointer to a locally-defined `struct key` that mirrors the kernel layout (attach accepted but CO-RE relocations fail because my local type is not the kernel's named type).
 - Declaring the argument as `struct __key_reference_with_attributes *` (the typedef target — doesn't exist as a real struct, rejected).
 - Attaching with `SEC("lsm.s/key_permission")` for sleepable semantics (same FWD error, sleepable doesn't affect attach-point validation).
-- Attaching to `security_key_alloc` instead (different hook, different argument types, doesn't have the FWD issue — but fires at key creation, not access, so it's a different primitive entirely. I explored this briefly; it's a potentially useful sibling chapter but not what I wanted here.)
 
-None of these worked cleanly. The cleanest exit was the kprobe variant. If you're building on this work and you have a kernel where the LSM path loads (distro kernels mostly), you can use the LSM variant for slightly nicer semantics. For a portable POC that works across minimal kernels with incomplete BTF, the kprobe is the right answer.
+None of these worked cleanly for the `BPF_PROG()` macro approach, because `BPF_PROG()` unpacks *all* arguments from the context — including arg0 (`key_ref`), whose type is FWD — and the verifier rejects the context access at offset 0.
+
+The workaround that ultimately landed in `ch08-keyring-heist-lsm` is to bypass `BPF_PROG()` entirely and use a **raw context** signature: `int lsm_key_permission(unsigned long long *ctx)`. With raw context, the program manually reads only the context slots it needs at their known offsets, skipping the FWD-typed arg0:
+
+```c
+SEC("lsm/key_permission")
+int lsm_key_permission(unsigned long long *ctx)
+{
+    unsigned int need_perm = (unsigned int)ctx[2];  // arg2: need_perm
+    int ret = (int)ctx[3];                          // arg3: chain result
+    // ctx[0] is key_ref (FWD type) — deliberately skipped
+    // ctx[1] is cred — skipped
+    ...
+}
+```
+
+This loads successfully because the verifier never sees a typed access to the FWD `key_ref_t` at ctx[0]. The trade-off: the LSM variant cannot read the key's serial number or type name (those require dereferencing `key_ref`, which lives at ctx[0]). The `serial` and `type_name` fields in the ringbuf event are always zero in the LSM variant. The kprobe variant (`ch08-keyring-heist-kprobe`) still reads them via `PT_REGS_PARM1` and CO-RE, because kprobes are not subject to the FWD check. So the two variants are complementary: the LSM variant can *mutate* (flip deny to allow via fmod_ret), while the kprobe variant can *observe* the full key metadata.
+
+I also tried attaching to `security_key_alloc` instead (different hook, different argument types, doesn't have the FWD issue — but fires at key creation, not access, so it's a different primitive entirely. I explored this briefly; it's a potentially useful sibling chapter but not what I wanted here.)
+
+Before the raw-context workaround landed, the cleanest exit was the kprobe variant. If you're building on this work and you have a kernel where the LSM path loads (distro kernels mostly), you can use the LSM variant for slightly nicer semantics. For a portable POC that works across minimal kernels with incomplete BTF, the kprobe is the right answer.
 
 The other thing that refused to die was my initial attempt to hook `__key_instantiate_and_link` to catch key *creation*. That function sees the key as it's being set up — before permission checks, before keyring linkage, at the point where the kernel is populating the struct. If you hooked there, you'd catch every new key as it came into existence, including keys you'd otherwise never have observed access on. I spent two hours on it. The function isn't exported, and its parameters include a non-trivial `struct key_preparsed_payload` that I couldn't read cleanly with CO-RE because several of its fields are genuinely union-wrapped. I punted.
 
@@ -554,4 +573,4 @@ The primitive itself is not novel. The CO-RE plumbing, the FWD-workaround walk, 
 
 ## Summary
 
-The chapter in one paragraph: you can read kernel keyring metadata from a BPF program attached to `key_task_permission`, even on kernels where the cleaner `SEC("lsm/key_permission")` path is blocked by a BTF forward-declaration issue. The workaround is to drop to `SEC("kprobe/key_task_permission")`, extract the `struct key *` from PT_REGS_PARM1, mask off the possession bits, and CO-RE against vmlinux.h's full `struct key` definition. The syscall boundary continues to enforce; the decision-point leaks. The marker `CH08_CONCEPT_PROVEN syscall_rc_unchanged=yes description_in_ringbuf=yes` captures exactly what is proven and what is not.
+The chapter in one paragraph: you can read kernel keyring metadata from a BPF program attached to `key_task_permission`, even on kernels where the cleaner `SEC("lsm/key_permission")` path is blocked by a BTF forward-declaration issue. The observation workaround is to drop to `SEC("kprobe/key_task_permission")`, extract the `struct key *` from PT_REGS_PARM1, mask off the possession bits, and CO-RE against vmlinux.h's full `struct key` definition. For the mutation variant (`ch08-keyring-heist-lsm`), the workaround is to bypass the `BPF_PROG()` macro and use a raw context signature (`unsigned long long *ctx`), reading only the args at known offsets and skipping the FWD-typed `key_ref` at ctx[0] -- this allows fmod_ret to flip deny-to-allow, at the cost of losing access to key serial and type metadata. The syscall boundary continues to enforce for the observer; the decision-point leaks. The marker `CH08_CONCEPT_PROVEN syscall_rc_unchanged=yes description_in_ringbuf=yes` captures exactly what is proven and what is not.

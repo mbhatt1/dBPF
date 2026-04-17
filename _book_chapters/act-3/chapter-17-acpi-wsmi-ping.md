@@ -670,6 +670,7 @@ sudo bash ./trigger.sh
 
 ## Limitations / arch notes
 
-- No ACPI, no firmware → honest skip. If `/proc/kallsyms` contains none of the six candidates, the loader prints `CH17_SKIP` and exits 2.
-- aarch64 linuxkit has no ACPI interpreter. The POC substitutes the firmware-request path, which is a best-effort moral equivalent. The substituted-path marker records this honestly in the first ringbuf event.
+- No ACPI, no firmware → honest skip. If `/proc/kallsyms` contains none of the six candidates, the loader prints `CH17_SKIP` and exits 2. On aarch64 linuxkit specifically, ACPI symbols are absent (no ACPI interpreter — `CONFIG_ACPI` is off) and `request_firmware` symbols are present but nothing fires them at runtime because the `test_firmware` module is absent and no hardware drivers call the firmware-request path.
+- The trigger script now emits a proper `CH17_SKIP reason="no firmware trigger available on <arch> linuxkit (test_firmware module absent, no ACPI)"` when on aarch64 without the `test_firmware` trigger node, making the skip reason explicit in harness output.
+- The analog variant (`ch17-acpi-wsmi-analog`, harness entry `ch17a`) demonstrates the primitive shape on a synthetic surface: `tp/syscalls/sys_enter_openat` + `bpf_probe_write_user` against a fake `fw_requester` process. This is **category ANALOG** — same motion (intercept kernel-mediated string, rewrite before side-effect resolves), different and synthetic surface.
 - Override is out of scope for this POC. A real ACPI WSMI bypass would need `bpf_override_return` on `acpi_ex_execute_method` (not error-injectable on stock kernels) or a BPF LSM hook on `kernel_read_file` with `class=FIRMWARE`. Neither is wired up here.

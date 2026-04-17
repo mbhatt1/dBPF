@@ -98,13 +98,13 @@ The loader (`ch07-devcgroup-houdini-lsm/ch07-devcgroup-houdini-lsm.c`) consults 
 [ch07] keep hook=inode_mknod (BTF FUNC bpf_lsm_inode_mknod present)
 [ch07] keep hook=file_open   (BTF FUNC bpf_lsm_file_open present)
 [ch07] prune hook=dev_open reason="no BTF FUNC bpf_lsm_dev_open"
-[ch07] attached lsm.s/inode_mknod
-[ch07] attached lsm.s/file_open
+[ch07] attached lsm/inode_mknod
+[ch07] attached lsm/file_open
 ```
 
 There is also a structural reason why a natural device-cgroup denial will not route through the BPF LSM slot on a mainstream distro even when all three hooks are present. `fs/namei.c::do_mknodat()` calls `capable(CAP_MKNOD)` before invoking the LSM chain via `security_inode_mknod()`. The `capability` module is registered first in the LSM chain on every mainstream distro; `bpf` is registered last. A capability-based denial returns `-EPERM` from the `capability` slot before the BPF LSM program is ever reached. The BPF program cannot flip a denial it never sees.
 
-**Workaround variant (proven on this kernel).** `ch07-devcgroup-houdini-lsm/` uses the same synthetic deny-and-flip pattern as ch06: a single sleepable LSM program with a stage-control map that introduces its own denial in `STAGE_DENY` and then removes it in `STAGE_FLIP`. The primitive being proven is "a BPF LSM program can deny or allow a device operation at the outer `inode_mknod`/`file_open` hook" — the chain-ordering and missing-hook issues that disarm the natural path are sidestepped by synthesizing the denial inside BPF itself.
+**Workaround variant (proven on this kernel).** `ch07-devcgroup-houdini-lsm/` uses the same synthetic deny-and-flip pattern as ch06: a single LSM program with a stage-control map that introduces its own denial in `STAGE_DENY` and then removes it in `STAGE_FLIP`. The primitive being proven is "a BPF LSM program can deny or allow a device operation at the outer `inode_mknod`/`file_open` hook" — the chain-ordering and missing-hook issues that disarm the natural path are sidestepped by synthesizing the denial inside BPF itself.
 
 Marker on success: `CH07_CONCEPT_PROVEN before_rc=N after_rc=0 flips=M`.
 
@@ -116,7 +116,7 @@ Marker on success: `CH07_CONCEPT_PROVEN before_rc=N after_rc=0 flips=M`.
 
 ## Skip 3 — Chapter 8 keyring heist (LSM variant)
 
-**Claim.** A BPF LSM `fmod_ret` program attached to `security_key_permission` (via `SEC("lsm.s/key_permission")`) can flip a denied keyring access into a permitted one. The kernel's keyring subsystem computes the permission bits for a `key_ref_t`, rejects the access with `-EACCES`, and the BPF program replaces that with `0` before the caller regains control.
+**Claim.** A BPF LSM `fmod_ret` program attached to `security_key_permission` (via `SEC("lsm/key_permission")`) can flip a denied keyring access into a permitted one. The kernel's keyring subsystem computes the permission bits for a `key_ref_t`, rejects the access with `-EACCES`, and the BPF program replaces that with `0` before the caller regains control.
 
 **What the kernel refused.** The verifier refuses the program at load time:
 

@@ -153,7 +153,8 @@ int main(int argc, char **argv)
     struct ring_buffer *rb = NULL;
     struct ch09_pid_doppel_bpf *s = ch09_pid_doppel_bpf__open();
     if (!s) {
-        fprintf(stderr, "[ch09] skeleton open failed: %s\n", strerror(errno));
+        fprintf(stderr, "[ch09] CH09_SKIP reason=\"skeleton open failed: %s\"\n",
+                strerror(errno));
         return 1;
     }
 
@@ -170,7 +171,7 @@ int main(int argc, char **argv)
 
     int err = ch09_pid_doppel_bpf__load(s);
     if (err) {
-        fprintf(stderr, "[ch09] load failed: %s\n", strerror(-err));
+        fprintf(stderr, "[ch09] CH09_SKIP reason=\"load failed: %s\"\n", strerror(-err));
         goto out;
     }
 

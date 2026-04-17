@@ -1,53 +1,48 @@
-# ch01 LSM variant — REAL capability override
+# Ch01 -- Mirror Controls (LSM variant)
 
-Sibling POC to `ch01-mirror-controls/`. The original uses kprobe/kretprobe
-on `cap_capable` and calls `bpf_override_return` — **blocked** by the
-error_injection allowlist on most kernels (including Docker Desktop
-linuxkit 6.12). This variant uses the first-class primitive: BPF LSM
-`fmod_ret` on `security_capable`.
+**Category**: REAL
+**Primitive**: LSM fmod_ret on `security_capable`
+**Hook(s)**: `SEC("lsm/capable")`
+**Architecture**: aarch64 + x86_64
 
-## Primitive
-`SEC("lsm.s/capable")` — the `.s` suffix means sleepable; `fmod_ret`
-semantics let the program's return value replace the LSM hook's.
+## What this demonstrates
 
-## Host prereqs
-- `CONFIG_BPF_LSM=y` in the kernel config.
-- Boot cmdline contains `bpf` in `lsm=...` (check
-  `cat /sys/kernel/security/lsm`).
-- Typically satisfied by: Fedora 38+ default, or any distro after adding
-  `lsm=landlock,lockdown,yama,bpf,integrity,apparmor,selinux` to GRUB.
-- **Docker Desktop linuxkit** lacks this; use `dbpf-selinux` image on a
-  proper Linux VM or bare host.
+Overrides the kernel's capability check at the LSM layer. The sleepable BPF LSM program's return value replaces the hook's verdict, flipping capability denials to grants for targeted tgids. This is the first-class override primitive -- not gated by the error-injection allowlist.
 
-## Build
-```
-docker run --rm -v "$PWD/../..":/work -w /work dbpf-selinux \
-  bash -c 'cd pocs/ch01-mirror-controls-lsm && make'
-```
+## What this does NOT do
 
-## Run
-```
-sudo ./build/ch01-mirror-controls-lsm --help
+Does not work on kernels without BPF LSM enabled. Docker Desktop linuxkit lacks `CONFIG_BPF_LSM`; the loader exits with code 3 and a clear diagnostic. Requires a proper Linux host or VM with `lsm=bpf` in the boot cmdline.
+
+## Prerequisites
+
+- `CONFIG_BPF_LSM=y` in the kernel config
+- Boot cmdline contains `bpf` in `lsm=...` (check `cat /sys/kernel/security/lsm`)
+- `CAP_SYS_ADMIN` (fmod_ret on LSM hooks requires full sysadmin, not just CAP_BPF)
+- Typically satisfied by Fedora 38+ default
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `ch01-mirror-controls-lsm.bpf.c` | Kernel-side BPF LSM program (fmod_ret on capable) |
+| `ch01-mirror-controls-lsm.c` | Userspace loader with wildcard/targeted modes |
+| `trigger.sh` | Activity generator |
+| `Makefile` | Build (uses shared/common.mk) |
+
+## Build & Run
+
+```bash
+# Inside the harness container:
+make
 sudo ./build/ch01-mirror-controls-lsm -a             # flip every deny
 sudo ./build/ch01-mirror-controls-lsm -t 12345       # targeted tgid
-sudo bash trigger.sh                                 # end-to-end demo
+# In another terminal:
+bash trigger.sh
 ```
 
-## Evidence (expected on BPF-LSM host)
-```
-[ch01-lsm] BPF LSM is active — proceeding
-[ch01-lsm] mode=wildcard
-[ch01-lsm] active — cap denials for targeted tgids will be flipped
-[ch01-lsm] FLIP pid=1234 comm=cat             cap=2 orig=-1 -> 0 (allowed)
-```
-And from the trigger: `cat /etc/shadow` as the unprivileged user
-**succeeds** with BPF loaded (vs `Permission denied` baseline).
+## Detection
 
-## Limitations
-- Fails attach on kernels without BPF LSM — loader exits with code 3
-  and a clear diagnostic.
-- fmod_ret on LSM hooks requires `CAP_SYS_ADMIN` (not just CAP_BPF).
-
-## Blog post
-
-See the chapter write-up: [`2025-01-31-the-mirror-controls`](../../../_posts/2025-01-31-the-mirror-controls.md) in the Diabolical eBPF Field Manual.
+- `bpftool prog list type lsm` shows the attached sleepable program on `capable`.
+- `cat /sys/kernel/debug/tracing/enabled_functions` may show the BPF trampoline.
+- Kernel `bpf()` syscall audit records program load from a non-init namespace.
+- A sudden disappearance of capability denials for specific processes is a tell.

@@ -93,9 +93,15 @@ int main(int argc, char **argv)
     int rc = 1;
     struct ring_buffer *rb = NULL;
     struct ch07_devcgroup_houdini_bpf *s = ch07_devcgroup_houdini_bpf__open_and_load();
-    if (!s) { fprintf(stderr, "[ch07] open_and_load: %s\n", strerror(errno)); return 1; }
+    if (!s) {
+        fprintf(stderr, "[ch07] CH07_SKIP reason=\"open_and_load: %s\"\n", strerror(errno));
+        return 1;
+    }
     int err = ch07_devcgroup_houdini_bpf__attach(s);
-    if (err) { fprintf(stderr, "[ch07] attach: %s\n", strerror(-err)); goto out; }
+    if (err) {
+        fprintf(stderr, "[ch07] CH07_SKIP reason=\"attach: %s\"\n", strerror(-err));
+        goto out;
+    }
 
     rb = ring_buffer__new(bpf_map__fd(s->maps.events), handle, NULL, NULL);
     if (!rb) { fprintf(stderr, "[ch07] ring_buffer__new: %s\n", strerror(errno)); goto out; }

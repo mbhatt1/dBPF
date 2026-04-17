@@ -4,11 +4,13 @@
 // environment.
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
 #include <errno.h>
 #include <bpf/libbpf.h>
+#include <bpf/bpf.h>
 #include "ch03-fuse-blackhole.skel.h"
 
 #define MSG_MAX 96
@@ -23,8 +25,8 @@ struct evt {
     char         fmt_preview[MSG_MAX];
 };
 
-static volatile int stop;
-static void sig(int _) { stop = 1; }
+static volatile sig_atomic_t stop;
+static void sig(int _) { (void)_; stop = 1; }
 
 static const char *hook_name(int h) {
     switch (h) {
@@ -88,14 +90,14 @@ int main(int argc, char **argv) {
 
     struct ch03_fuse_blackhole_bpf *s = ch03_fuse_blackhole_bpf__open_and_load();
     if (!s) {
-        fprintf(stderr, "open_and_load failed: %s\n", strerror(errno));
+        fprintf(stderr, "[ch03] CH03_SKIP reason=\"open_and_load failed: %s\"\n",
+                strerror(errno));
         return 1;
     }
     if (ch03_fuse_blackhole_bpf__attach(s)) {
-        fprintf(stderr, "attach failed: %s\n", strerror(errno));
-        fprintf(stderr, "NOTE: If audit_log_* symbols are not attachable on this\n"
-                        "      kernel, the chapter's 'black-hole' primitive is not\n"
-                        "      reachable here. This POC is a faithful observer.\n");
+        fprintf(stderr, "[ch03] CH03_SKIP reason=\"attach failed: %s "
+                        "(audit_log_* symbols not attachable on this kernel)\"\n",
+                strerror(errno));
         ch03_fuse_blackhole_bpf__destroy(s);
         return 1;
     }
@@ -110,13 +112,16 @@ int main(int argc, char **argv) {
     struct ring_buffer *rb = ring_buffer__new(bpf_map__fd(s->maps.events),
                                               handle, NULL, NULL);
     if (!rb) {
-        fprintf(stderr, "ringbuf new failed\n");
+        fprintf(stderr, "[ch03] ring_buffer__new failed: %s\n", strerror(errno));
         ch03_fuse_blackhole_bpf__destroy(s);
         return 1;
     }
 
-    signal(SIGINT, sig);
-    signal(SIGTERM, sig);
+    struct sigaction sa = { .sa_handler = sig };
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+
     fprintf(stderr, "[audit] attached — streaming audit_log_start/end/format\n");
     while (!stop) {
         int n = ring_buffer__poll(rb, 200);

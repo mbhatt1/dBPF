@@ -29,7 +29,7 @@ struct evt {
     char hidden[NAME_MAX_LEN];
 };
 
-static volatile int stop;
+static volatile sig_atomic_t stop;
 static void sig(int _sig){ (void)_sig; stop = 1; }
 
 static void usage(const char *argv0)
@@ -110,11 +110,13 @@ int main(int argc, char **argv)
 
     struct ch10_inode_cloak_bpf *s = ch10_inode_cloak_bpf__open_and_load();
     if (!s) {
-        fprintf(stderr, "[ch10] open_and_load failed: %s\n", strerror(errno));
+        fprintf(stderr, "[ch10] CH10_SKIP reason=\"open_and_load failed: %s\"\n",
+                strerror(errno));
         return 1;
     }
     if (ch10_inode_cloak_bpf__attach(s)) {
-        fprintf(stderr, "[ch10] attach failed: %s\n", strerror(errno));
+        fprintf(stderr, "[ch10] CH10_SKIP reason=\"attach failed: %s\"\n",
+                strerror(errno));
         ch10_inode_cloak_bpf__destroy(s);
         return 1;
     }

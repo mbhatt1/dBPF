@@ -5,9 +5,15 @@
 # basename.
 set +e
 HERE="$(cd "$(dirname "$0")" && pwd)"
+LPID=""
+
 if ! grep -q bpf /sys/kernel/security/lsm 2>/dev/null; then
-  echo "[trigger] ERROR: host kernel does not have BPF LSM active"
-  exit 2
+  echo "=== CH02_SKIP reason=\"BPF LSM not active in /sys/kernel/security/lsm\" ==="
+  exit 0
+fi
+if [ ! -x "$HERE/build/ch02-overlayfs-lsm" ]; then
+  echo "=== CH02_SKIP reason=\"loader not built at $HERE/build/ch02-overlayfs-lsm\" ==="
+  exit 0
 fi
 
 ROOT="$(mktemp -d /tmp/ch02-ovl.XXXXXX)"

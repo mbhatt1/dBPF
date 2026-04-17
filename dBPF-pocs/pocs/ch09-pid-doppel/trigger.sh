@@ -31,12 +31,12 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if ! command -v unshare >/dev/null 2>&1; then
-    echo "ERROR: unshare not installed (apt-get install util-linux)" >&2
-    exit 1
+    echo "=== CH09_SKIP reason=\"unshare not installed (needs util-linux)\" ==="
+    exit 0
 fi
 if [ ! -x "$LOADER" ]; then
-    echo "ERROR: loader not built at $LOADER (run 'make')" >&2
-    exit 1
+    echo "=== CH09_SKIP reason=\"loader not built at $LOADER\" ==="
+    exit 0
 fi
 
 # ---------------------------------------------------------------------------

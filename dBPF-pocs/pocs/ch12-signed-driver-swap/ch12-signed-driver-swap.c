@@ -189,7 +189,8 @@ int main(int argc, char **argv)
 
     struct ch12_signed_driver_swap_bpf *s = ch12_signed_driver_swap_bpf__open();
     if (!s) {
-        fprintf(stderr, "[ch12] skeleton open failed: %s\n", strerror(errno));
+        fprintf(stderr, "[ch12] CH12_SKIP reason=\"skeleton open failed: %s\"\n",
+                strerror(errno));
         return 1;
     }
 
@@ -207,7 +208,7 @@ int main(int argc, char **argv)
 
     int err = ch12_signed_driver_swap_bpf__load(s);
     if (err) {
-        fprintf(stderr, "[ch12] load failed: %s\n", strerror(-err));
+        fprintf(stderr, "[ch12] CH12_SKIP reason=\"load failed: %s\"\n", strerror(-err));
         ch12_signed_driver_swap_bpf__destroy(s);
         return 1;
     }

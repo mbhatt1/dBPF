@@ -8,7 +8,7 @@ Act I: Foundations of Breach
 
 **Chapter 6: Silencing SELinux**
 
-> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) for the skip reasoning and [the surviving workaround variant in dBPF-pocs](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs) (e.g. `ch06-silence-selinux-lsm-synthetic/`).
+> **Note**: This primitive's natural hook did not fire on the test kernel. See [Chapter 21]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) for the skip reasoning. Three POC variants exist: `ch06-silence-selinux` (REAL observer, kprobes on AVC internals), `ch06-silence-selinux-lsm` (REAL mutation, non-sleepable `lsm/` fmod_ret on three hooks), and `ch06-silence-selinux-lsm-synthetic` (ANALOG, sleepable `lsm.s/file_open` that synthesizes both denial and flip). The synthetic variant is categorized as ANALOG because it manufactures the deny/flip cycle itself rather than flipping a natural SELinux denial.
 
 The primitive this chapter documents is the use of a BPF LSM program to turn a policy denial into a policy allow. On a kernel with a policy-enforcing LSM active — SELinux on RHEL/Fedora/Amazon Linux 2023, SELinux-in-Android, or AppArmor on Ubuntu — the primitive is direct: the BPF LSM program attaches to the same hook the static LSM uses, and when the static LSM would have returned a negative errno, the BPF program returns `0`. The decision flip is the primitive.
 
@@ -75,7 +75,7 @@ The LSM chain's combination rule is all-must-grant. A BPF LSM program returning 
 
 The flip, in this form, is not actually a flip. It is a second policy layer that also grants. To actually override a static LSM deny, a different mechanism is needed, and the mechanism is `fmod_ret`. BPF LSM `fmod_ret` programs run after the static LSMs and can set the LSM hook's final return value directly. Not every LSM hook supports `fmod_ret`; the set of supported hooks is defined in `kernel/bpf/bpf_lsm.c` via `BTF_SET_START(bpf_lsm_hooks)`. On 6.12 the set is extensive but not universal. `file_open`, `file_permission`, `inode_permission`, and roughly 200 other hooks are included.
 
-A real flipper on a SELinux-enforcing kernel uses `SEC("lsm/file_permission")` with the understanding that fmod_ret semantics apply — the program runs after the static LSMs and the final return value is the BPF program's return. When the static LSM returned `-EACCES` and the BPF program returns `0`, the chain result is `0` and the denial is flipped. This is the primitive the chapter documents.
+A real flipper on a SELinux-enforcing kernel uses non-sleepable LSM hooks — `SEC("lsm/file_permission")`, `SEC("lsm/inode_permission")`, `SEC("lsm/bprm_check_security")` — with the understanding that fmod_ret semantics apply. Non-sleepable (`lsm/` not `lsm.s/`) because the programs use no sleepable helpers (`bpf_d_path`, `bpf_copy_from_user`, etc.); they only inspect pointer arguments and the trailing return value. The program runs after the static LSMs and the final return value is the BPF program's return. When the static LSM returned `-EACCES` and the BPF program returns `0`, the chain result is `0` and the denial is flipped. This is the primitive the chapter documents.
 
 On the test kernel this primitive is silent. The static LSM chain never returns `-EACCES` for file opens (because the only static LSM is capability, which does not gate file opens), so the BPF program always sees a chain that already allows. Returning `0` from the BPF program changes nothing. Returning `-EACCES` from the BPF program would introduce a denial where none existed, which is the inverse of the primitive. The natural environment for the flip is missing.
 
@@ -478,25 +478,39 @@ Each field is verified from two independent sources: the userspace exit code of 
 
 The `verdict=-13` in the grep is the string representation of `-EACCES`. Linux's `errno.h` defines `EACCES` as `13`; the BPF program returns `-13` (negative, because LSM return values use the negative-errno convention). The userspace consumer formats the verdict with `%d`, producing `-13` for the denier's return. The trigger's grep matches on this exact string, so any change to the BPF program's error value would require updating the grep. The coupling is acceptable because the errno is a stable ABI.
 
+## The three POC variants
+
+The chapter has three POC variants, each targeting a different aspect of the primitive:
+
+- **`ch06-silence-selinux`** (REAL, observer). Kprobes on SELinux internals (`kprobe/avc_has_perm`, `kprobe/avc_has_perm_noaudit`, `kprobe/selinux_file_permission`). Pure observation — streams every AVC decision to a ringbuf without mutation. On kernels where SELinux is not compiled in, the loader disables the programs and exits cleanly. This variant is the reconnaissance channel that tells an attacker which accesses SELinux is evaluating.
+
+- **`ch06-silence-selinux-lsm`** (REAL, mutation). Three BPF LSM fmod_ret programs — `lsm/file_permission`, `lsm/inode_permission`, `lsm/bprm_check_security` — covering the common access paths. Each reads the upstream `ret` arg; if the current tgid is in the target map and `ret != 0` (a pending deny), it flips the return to `0` (allow). Non-sleepable (`lsm/` not `lsm.s/`) because the programs use no sleepable helpers (`bpf_d_path`, `bpf_copy_from_user`, etc.). This is the real enforcement-override primitive.
+
+- **`ch06-silence-selinux-lsm-synthetic`** (ANALOG). A single sleepable `lsm.s/file_open` program that synthesizes both the denial and the flip via a map-driven stage toggle. Sleepable because it uses `bpf_d_path()` to resolve the sentinel file's path. Exists so the primitive is demonstrable on harness kernels that lack SELinux.
+
 ## On an SELinux-enforcing kernel
 
-The non-synthetic variant `ch06-silence-selinux-lsm` exists for SELinux-enforcing kernels. The BPF program there attaches to `SEC("lsm/file_permission")` with target-tgid filtering:
+The real mutation variant `ch06-silence-selinux-lsm` exists for SELinux-enforcing kernels. The BPF program attaches three non-sleepable LSM fmod_ret programs covering the common permission-check paths. Non-sleepable (`lsm/` not `lsm.s/`) because none of the programs use sleepable helpers like `bpf_d_path` or `bpf_copy_from_user` — they only inspect pointer arguments and the trailing `ret` value. The core pattern, shown for `file_permission`:
 
 ```c
+// Non-sleepable: no bpf_d_path/bpf_copy_from_user/etc. used.
 SEC("lsm/file_permission")
-int BPF_PROG(flip_file_permission, struct file *file, int mask)
+int BPF_PROG(lsm_file_permission, struct file *file, int mask, int ret)
 {
-    struct task_struct *task = bpf_get_current_task_btf();
-    u32 tgid = BPF_CORE_READ(task, tgid);
-    u32 *hit = bpf_map_lookup_elem(&target_tgids, &tgid);
-    if (hit && *hit) {
-        return 0;  // Allow unconditionally for target processes.
+    (void)file; (void)mask;
+    unsigned int tgid = bpf_get_current_pid_tgid() >> 32;
+    int flipped = 0;
+    int new_ret = ret;
+    if (is_target_tgid(tgid) && ret != 0) {
+        new_ret = 0;
+        flipped = 1;
     }
-    return 0;
+    emit(H_FILE_PERMISSION, ret, flipped);
+    return new_ret;
 }
 ```
 
-The program returns `0` for every target process regardless of what the static LSM chain would have returned. On a SELinux-enforcing kernel, this turns every would-be AVC denial into an allow for processes in the target TGID map. The natural denials (confined domain trying to read a `/root/` file, for example) are flipped.
+The same pattern is repeated for `lsm/inode_permission` (path-walk / open-time checks) and `lsm/bprm_check_security` (execve of label-restricted binaries). Each reads the upstream `ret` arg — the result of the static LSM chain — and flips it to `0` when the current tgid is in the target map. On a SELinux-enforcing kernel, this turns every would-be AVC denial into an allow for processes in the target TGID map across all three access paths. The natural denials (confined domain trying to read a `/root/` file, for example) are flipped.
 
 The semantic difference from the synthetic variant is that the denier stage is not needed. SELinux provides the denials; the BPF program provides the flip. On the SELinux-enforcing kernel, a test script would:
 
@@ -509,7 +523,7 @@ The flip is externally observable via the audit log, by the test program's own e
 
 The fmod_ret mechanics are identical between the variants. Both use BPF LSM programs attached via the standard attach path. Both run after the static LSMs. Both's return values become the LSM hook's final return value. The only difference is whether the static LSMs are doing anything at the hook — on SELinux-enforcing, they are; on synthetic, they are not, so the BPF program simulates what they would have done.
 
-This is the honest framing for the synthetic variant. It is not a weaker primitive; it is the same primitive demonstrated on a kernel where the natural environment for the primitive does not exist. The mechanism — BPF LSM program, fmod_ret semantics, sleepable hook, `bpf_d_path` subject match — is identical.
+This is the honest framing for the synthetic variant. It is not a weaker primitive; it is the same primitive demonstrated on a kernel where the natural environment for the primitive does not exist. The core mechanism — BPF LSM program, fmod_ret semantics, return-value override — is identical. The synthetic variant uses a sleepable hook (`lsm.s/file_open`) with `bpf_d_path` for path-based subject matching; the real variant uses non-sleepable hooks (`lsm/file_permission`, `lsm/inode_permission`, `lsm/bprm_check_security`) with tgid-based filtering, which requires no sleepable helpers.
 
 The production case for the primitive's use on SELinux-enforcing kernels deserves a specific example. Consider a containerized workload on an Amazon Linux 2023 EKS node. The workload runs in a container whose SELinux type is `container_t`, with policy rules that deny reading `/var/log/audit/audit.log` (type `auditd_log_t`). An attacker who has gained code execution inside the container and has obtained `CAP_BPF` (for example, by exploiting a privileged sidecar container sharing the pod's PID namespace) can load a BPF LSM program with `SEC("lsm/file_permission")` that returns `0` for the attacker's TGID when the file being opened has type `auditd_log_t`. The audit log is now readable from inside the container, despite the SELinux policy's denial.
 
@@ -576,7 +590,7 @@ The sixth detection layer is the BTF allowlist itself. An LSM program must match
 
 ## Scope
 
-The primitive documented here is a Class I primitive in the taxonomy developed in Chapter 21. A Class I primitive is real, effective, and available on a stock production kernel. The natural variant is Class I on any kernel with a policy-enforcing LSM active; the synthetic variant is a demonstration of the same mechanism on a kernel that lacks the natural environment, so it is more of a teaching tool than a deployed primitive.
+The primitive documented here is a Class I primitive in the taxonomy developed in Chapter 20. A Class I primitive is real, effective, and available on a stock production kernel. The natural variant is Class I on any kernel with a policy-enforcing LSM active; the synthetic variant is a demonstration of the same mechanism on a kernel that lacks the natural environment, so it is more of a teaching tool than a deployed primitive.
 
 The real variant is effective on:
 
@@ -587,7 +601,7 @@ The real variant is effective on:
 
 The synthetic variant exists for kernels where neither SELinux nor AppArmor is active — notably linuxkit (as used by Docker Desktop), some Alpine-based container images, and reduced-footprint embedded distributions. On those kernels the natural primitive has nothing to flip, and the synthetic variant is the only way to demonstrate the mechanism end-to-end.
 
-The distinction between the two variants is pedagogical rather than semantic. The mechanism — BPF LSM program attached to an LSM hook, returning `0` to allow or a negative errno to deny, with the return value combined into the LSM chain's final decision — is identical. The synthetic variant manufactures both sides of the combination; the natural variant receives one side (the denial) from the static LSM and provides the other side (the flip) from BPF.
+The distinction between the three variants maps to the POC category labels: the observer (`ch06-silence-selinux`) and the real mutation variant (`ch06-silence-selinux-lsm`) are both REAL; the synthetic (`ch06-silence-selinux-lsm-synthetic`) is ANALOG. The core mechanism — BPF LSM program attached to an LSM hook, returning `0` to allow or a negative errno to deny, with the return value combined into the LSM chain's final decision — is identical across the mutation variants. The synthetic variant manufactures both sides of the combination; the natural variant receives one side (the denial) from the static LSM and provides the other side (the flip) from BPF. The observer variant uses kprobes rather than LSM hooks and provides the reconnaissance feed.
 
 A defender evaluating their exposure to this primitive asks two questions:
 

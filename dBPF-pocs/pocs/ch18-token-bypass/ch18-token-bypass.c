@@ -166,7 +166,8 @@ int main(int argc, char **argv)
     struct ring_buffer *rb = NULL;
     struct ch18_token_bypass_bpf *s = ch18_token_bypass_bpf__open();
     if (!s) {
-        fprintf(stderr, "[token] skeleton open failed: %s\n", strerror(errno));
+        fprintf(stderr, "[token] CH18_SKIP reason=\"skeleton open failed: %s\"\n",
+                strerror(errno));
         return 1;
     }
 
@@ -192,7 +193,7 @@ int main(int argc, char **argv)
 
     int err = ch18_token_bypass_bpf__load(s);
     if (err) {
-        fprintf(stderr, "[token] load failed: %s\n", strerror(-err));
+        fprintf(stderr, "[token] CH18_SKIP reason=\"load failed: %s\"\n", strerror(-err));
         goto out;
     }
 

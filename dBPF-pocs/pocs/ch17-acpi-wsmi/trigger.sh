@@ -38,5 +38,12 @@ else
     echo "  /sys/firmware absent — no fallback path available"
 fi
 
-echo
-echo "=== ch17 trigger finished; check loader stdout for ACPI_PROBE_PROVEN or CH17_SKIP ==="
+# If test_firmware is absent and we're on aarch64 (no ACPI interpreter),
+# nothing in the trigger actually invokes request_firmware. Emit a skip.
+ARCH=$(uname -m)
+if [ ! -w "$TRIG" ] && [ "$ARCH" != "x86_64" ]; then
+    echo "=== CH17_SKIP reason=\"no firmware trigger available on $ARCH linuxkit (test_firmware module absent, no ACPI)\" ==="
+else
+    echo
+    echo "=== ch17 trigger finished; check loader stdout for ACPI_PROBE_PROVEN or CH17_SKIP ==="
+fi

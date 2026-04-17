@@ -27,15 +27,15 @@ trap cleanup EXIT INT TERM
 
 # --- Preflight: BPF LSM available ---
 if ! grep -q bpf /sys/kernel/security/lsm 2>/dev/null; then
-  echo 'CH12_SKIP reason="kernel lacks bpf in /sys/kernel/security/lsm"'
+  echo '=== CH12_SKIP reason="kernel lacks bpf in /sys/kernel/security/lsm" ==='
   exit 0
 fi
 if ! command -v insmod >/dev/null 2>&1; then
-  echo 'CH12_SKIP reason="insmod(8) not available"'
+  echo '=== CH12_SKIP reason="insmod(8) not available" ==='
   exit 0
 fi
 if [ ! -x "$LOADER" ]; then
-  echo "CH12_SKIP reason=\"loader not built at $LOADER\""
+  echo "=== CH12_SKIP reason=\"loader not built at $LOADER\" ==="
   exit 0
 fi
 
@@ -72,7 +72,7 @@ if ! kill -0 "$LPID" 2>/dev/null; then
     grep '^CH12_SKIP' "$LOG"
     exit 0
   fi
-  echo 'CH12_SKIP reason="loader crashed on startup"'
+  echo '=== CH12_SKIP reason="loader crashed on startup" ==='
   exit 0
 fi
 
@@ -114,5 +114,5 @@ elif [ "$FLIPS" -gt 0 ]; then
   # Flip fired even if the post-gate ELF validator returned the same errno.
   echo "CH12_PROVEN flipped=$FLIPS hook=$HOOK"
 else
-  echo 'CH12_SKIP reason="no kernel_read_file/load_data/locked_down flip observed (module-sig path not taken)"'
+  echo '=== CH12_SKIP reason="no kernel_read_file/load_data/locked_down flip observed (module-sig path not taken)" ==='
 fi

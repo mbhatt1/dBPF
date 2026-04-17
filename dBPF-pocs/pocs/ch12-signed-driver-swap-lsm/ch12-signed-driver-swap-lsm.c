@@ -1,4 +1,4 @@
-// ch12 LSM-variant loader: attaches three SEC("lsm.s/*") fmod_ret programs:
+// ch12 LSM-variant loader: attaches three SEC("lsm/*") fmod_ret programs:
 //   - kernel_read_file
 //   - kernel_load_data
 //   - locked_down
@@ -97,7 +97,7 @@ int main(int argc, char **argv)
 
     char skip_reason[256] = {0};
     if (!check_lsm_bpf_enabled(skip_reason, sizeof(skip_reason))) {
-        fprintf(stderr, "CH12_SKIP reason=\"%s\"\n", skip_reason);
+        fprintf(stderr, "[ch12] CH12_LSM_SKIP reason=\"%s\"\n", skip_reason);
         return 3;
     }
     fprintf(stderr, "[ch12] BPF LSM is active - proceeding\n");
@@ -105,13 +105,15 @@ int main(int argc, char **argv)
     struct ch12_signed_driver_swap_lsm_bpf *s =
         ch12_signed_driver_swap_lsm_bpf__open_and_load();
     if (!s) {
-        fprintf(stderr, "[ch12] open_and_load: %s\n", strerror(errno));
+        fprintf(stderr, "[ch12] CH12_LSM_SKIP reason=\"open_and_load: %s\"\n",
+                strerror(errno));
         return 1;
     }
 
     int err = ch12_signed_driver_swap_lsm_bpf__attach(s);
     if (err) {
-        fprintf(stderr, "[ch12] attach: %s\n", strerror(-err));
+        fprintf(stderr, "[ch12] CH12_LSM_SKIP reason=\"attach: %s\"\n",
+                strerror(-err));
         ch12_signed_driver_swap_lsm_bpf__destroy(s);
         return 1;
     }

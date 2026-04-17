@@ -1,123 +1,47 @@
-# ch10 — Inode Cloak
+# Ch10 -- Inode Cloak
 
-Hide files from `getdents64` by rewriting `d_reclen` of the preceding dirent
-to swallow the hidden entry. No filesystem writes; purely in-flight mutation
-of the kernel→user buffer via `bpf_probe_write_user`.
+**Category**: REAL
+**Primitive**: tracepoint + bpf_probe_write_user for getdents64 dirent rewriting
+**Hook(s)**: `SEC("tp/syscalls/sys_enter_getdents64")`, `SEC("tp/syscalls/sys_exit_getdents64")`
+**Architecture**: aarch64 + x86_64
 
-## Mechanism
+## What this demonstrates
 
-A pair of tracepoints brackets every `getdents64` syscall:
+Hides files from `getdents64` by rewriting `d_reclen` of the preceding dirent to swallow the hidden entry. No filesystem writes; purely in-flight mutation of the kernel-to-user buffer via `bpf_probe_write_user`. `ls`, `find`, and any tool that calls `getdents64` will not see the cloaked files, but `stat` and `open` by name still work.
 
-1. **`tp/syscalls/sys_enter_getdents64`** stashes the userspace `dirp` buffer
-   pointer in a per-(pid,tgid) HASH map.
-2. **`tp/syscalls/sys_exit_getdents64`** walks the returned dirent stream
-   (bounded to 64 entries / call), and for each entry whose `d_name` matches
-   a key in the `hidden` HASH map:
-   - Extends the **previous** dirent's `d_reclen` to cover the hidden one
-     (the matched record is "swallowed" by its predecessor).
-   - If the hit is the very first entry, zero its `d_ino` as a best-effort
-     scrub.
-   - Emit a ringbuf event so the loader can audit which name was cloaked
-     for which (pid, comm).
+## What this does NOT do
 
-The hidden set is a `BPF_MAP_TYPE_HASH<struct{char[64]}, u8>` and is
-populated from the loader at startup.
+This is a readdir-layer cloak only -- `stat`, `open`, `inotify`, and filesystem snapshot tools see the file as normal. Buffer walk is bounded to 64 dirents per syscall (verifier loop ceiling); directories with more entries may leak names past the bound. Only hooks `getdents64`, not the legacy 32-bit `getdents`.
 
-## Hook points
-- `tp/syscalls/sys_enter_getdents64`
-- `tp/syscalls/sys_exit_getdents64`
+## Prerequisites
 
-## Build
-    docker run --rm -v "$PWD/../..":/work -w /work dbpf-base \
-      bash -c 'cd pocs/ch10-inode-cloak && make'
+- `CONFIG_BPF_EVENTS=y` and `bpf_probe_write_user` available
+- `CONFIG_FTRACE_SYSCALLS=y` (syscall tracepoints enabled)
+- `CAP_BPF` + `CAP_SYS_ADMIN` (or root)
+- Docker: `--privileged --pid=host`
 
-## Run
+## Files
 
-The loader takes any number of filenames as positional args, or repeated
-`-H/--hidden <name>` flags. With no args it falls back to the original
-demo defaults (`.backdoor`, `evil.so`).
+| File | Purpose |
+|------|---------|
+| `ch10-inode-cloak.bpf.c` | Kernel-side BPF program (tracepoint pair + dirent rewriting) |
+| `ch10-inode-cloak.c` | Userspace loader (populates hidden-name hash map) |
+| `trigger.sh` | Activity generator (creates test files, runs ls/find/stat) |
+| `Makefile` | Build (uses shared/common.mk) |
 
-    # default fallback set
-    ./build/ch10-inode-cloak
+## Build & Run
 
-    # explicit set
-    ./build/ch10-inode-cloak secret.key payload.bin
-
-    # mixed
-    ./build/ch10-inode-cloak -H .ssh_audit notes_private.txt
-
-    # help
-    ./build/ch10-inode-cloak --help
-
-Privileged container demo:
-
-    docker run --rm --privileged --pid=host \
-      -v "$PWD/../..":/work -w /work \
-      -v /sys/kernel/debug:/sys/kernel/debug -v /sys/fs/bpf:/sys/fs/bpf \
-      dbpf-base bash -c 'cd pocs/ch10-inode-cloak && \
-        ./build/ch10-inode-cloak & sleep 1; bash trigger.sh; sleep 1; kill %1'
-
-## Evidence
-
-Captured against `dbpf-base` on Docker Desktop linuxkit aarch64 with the
-default hidden set (`.backdoor`, `evil.so`):
-
+```bash
+# Inside the harness container:
+make
+sudo ./build/ch10-inode-cloak .backdoor evil.so
+# In another terminal:
+bash trigger.sh
 ```
-[ch10] hidden=.backdoor
-[ch10] hidden=evil.so
-[ch10] attached — cloak active (Ctrl-C to stop)
-=== ground truth (raw filesystem, /bin/ls -f bypasses some buffering) ===
-.
-..
-.backdoor
-evil.so
-notes.txt
-visible
-=== ls -la /tmp/cloak (BPF rewrites d_reclen here) ===
-total 0
--rw-r--r-- 1 root root 0 Apr 14 12:00 notes.txt
--rw-r--r-- 1 root root 0 Apr 14 12:00 visible
-=== find /tmp/cloak (also calls getdents64) ===
-/tmp/cloak/notes.txt
-/tmp/cloak/visible
-=== stat visible (cloak is readdir-only; stat still works) ===
-  File: /tmp/cloak/visible
-  Size: 0 ...
-=== stat .backdoor (still resolvable by name) ===
-  File: /tmp/cloak/.backdoor
-  Size: 0 ...
-[cloak] pid=1234	comm=ls	hiding=.backdoor
-[cloak] pid=1234	comm=ls	hiding=evil.so
-[cloak] pid=1235	comm=find	hiding=.backdoor
-[cloak] pid=1235	comm=find	hiding=evil.so
-```
-
-Note that `ls`/`find` no longer report `.backdoor` or `evil.so` even though
-`stat` resolves them by name — the cloak operates only on directory reads.
 
 ## Detection
-- `strace -e getdents64 ls /tmp/cloak` — strace observes the **post**-mutation
-  buffer; comparing with a syscall-level inspector that reads the buffer
-  before BPF runs (e.g. another tracepoint at higher prio) reveals the diff.
+
+- `strace -e getdents64 ls /tmp/cloak` -- strace observes the post-mutation buffer; comparing with a syscall-level inspector that reads the buffer before BPF runs reveals the diff.
 - `bpftool prog show` lists the two tracepoint programs and their map fds.
 - `bpftool map dump name hidden` reveals the cloaked filename set.
-- `cat /sys/kernel/debug/tracing/events/syscalls/sys_exit_getdents64/enable`
-  shows the tracepoint is enabled.
-
-## Limitations / arch notes
-- Requires `bpf_probe_write_user`, which is gated on
-  `kernel.unprivileged_bpf_disabled` and on the kernel having
-  `CONFIG_BPF_KPROBE_OVERRIDE`/write helpers compiled in.
-- Buffer walk is bounded to 64 dirents per syscall (verifier loop ceiling).
-  Directories with more entries than that may leak names past the bound.
-- Cloak runs **only** on `getdents64`; legacy `getdents` (32-bit) is not
-  hooked.
-- This is a readdir-layer cloak only — `stat`, `open`, `inotify`, and
-  filesystem snapshot tools see the file as normal.
-- On Docker Desktop linuxkit aarch64 the default seccomp profile permits
-  the necessary tracepoints; running the demo from inside a non-privileged
-  container will fail at `bpf()` syscall load time.
-
-## Blog post
-
-See the chapter write-up: [`2025-02-10-inode-cloak`](../../../_posts/2025-02-10-inode-cloak.md) in the Diabolical eBPF Field Manual.
+- `cat /sys/kernel/debug/tracing/events/syscalls/sys_exit_getdents64/enable` shows the tracepoint is enabled.

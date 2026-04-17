@@ -33,7 +33,7 @@ struct evt {
     int hook;
 };
 
-static volatile int stop;
+static volatile sig_atomic_t stop;
 static void sig(int _sig){ (void)_sig; stop = 1; }
 
 static unsigned long long total_events;
@@ -205,13 +205,14 @@ int main(int argc, char **argv)
         }
     }
     if (!present_mask) {
-        fprintf(stderr, "[ch11] no IRQ kprobe targets present on this kernel\n");
+        fprintf(stderr, "[ch11] CH11_SKIP reason=\"no IRQ kprobe targets present "
+                        "on this kernel\"\n");
         ch11_irq_chaos_bpf__destroy(s);
         return 2;
     }
 
     if (ch11_irq_chaos_bpf__load(s)) {
-        fprintf(stderr, "[ch11] load failed: %s\n", strerror(errno));
+        fprintf(stderr, "[ch11] CH11_SKIP reason=\"load failed: %s\"\n", strerror(errno));
         ch11_irq_chaos_bpf__destroy(s);
         return 1;
     }

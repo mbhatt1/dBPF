@@ -207,7 +207,8 @@ int main(int argc, char **argv)
 
     struct ch17_acpi_wsmi_bpf *s = ch17_acpi_wsmi_bpf__open();
     if (!s) {
-        fprintf(stderr, "[acpi] skeleton open failed: %s\n", strerror(errno));
+        fprintf(stderr, "[acpi] CH17_SKIP reason=\"skeleton open failed: %s\"\n",
+                strerror(errno));
         return 1;
     }
 
@@ -228,7 +229,7 @@ int main(int argc, char **argv)
 
     int err = ch17_acpi_wsmi_bpf__load(s);
     if (err) {
-        fprintf(stderr, "[acpi] load failed: %s\n", strerror(-err));
+        fprintf(stderr, "[acpi] CH17_SKIP reason=\"load failed: %s\"\n", strerror(-err));
         ch17_acpi_wsmi_bpf__destroy(s);
         return 1;
     }

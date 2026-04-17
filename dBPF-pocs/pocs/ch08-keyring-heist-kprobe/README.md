@@ -1,82 +1,45 @@
-# ch08 Keyring Heist — KPROBE variant
+# Ch08 -- Keyring Heist (kprobe variant)
 
-Sibling POC to `ch08-keyring-heist/` (observer) and `ch08-keyring-heist-lsm/`
-(real LSM override). This variant exists to sidestep a BTF-specific
-loader failure: on some kernels (observed on linuxkit 6.12 aarch64) the
-BTF metadata for `security_key_permission` forward-declares `struct key`
-(BTF FWD kind) instead of defining it, so the verifier refuses the LSM
-`fmod_ret` program with:
+**Category**: REAL
+**Primitive**: kprobe on keyring access functions (BTF FWD workaround)
+**Hook(s)**: `SEC("kprobe/key_task_permission")`, `SEC("kprobe/lookup_user_key")`
+**Architecture**: aarch64 + x86_64
 
-```
-arg0 type FWD is not a struct
-```
+## What this demonstrates
 
-even though `struct key` is fully defined in `vmlinux.h`.
+Sidesteps a BTF-specific loader failure where `security_key_permission` forward-declares `struct key` (BTF FWD kind) instead of defining it. This variant attaches kprobes at `key_task_permission` and `lookup_user_key`, pulling the first argument via `PT_REGS_PARM1` and letting CO-RE resolve `struct key` fields against `vmlinux.h`. Reads `{serial, type->name, description}` for every keyring access.
 
-This variant attaches as kprobes at `key_task_permission` and
-`lookup_user_key` instead. Kprobe programs take `struct pt_regs *`; we
-pull the first argument out via `PT_REGS_PARM1` as an opaque pointer and
-let CO-RE resolve `struct key` fields against `vmlinux.h`, which is
-unaffected by the LSM hook's FWD-typed BTF.
+## What this does NOT do
 
-Clearly marked as a variant: this is READ-ONLY observation from the
-access-denied syscall path. It does not mutate the syscall return, does
-not alter the kernel's access decision, and does not touch credentials.
-For actual override, use `ch08-keyring-heist-lsm/` on a kernel whose BTF
-doesn't forward-declare `struct key`.
+Observer-only. The unprivileged `keyctl print` still returns EACCES before and after attach -- the kernel's access decision is preserved. Does not read `key->payload`. For actual override, use `ch08-keyring-heist-lsm/` on a kernel whose BTF doesn't forward-declare `struct key`.
 
-## Mechanism
+## Prerequisites
 
-Kprobe both call sites that carry a `struct key *` at their first
-argument. From each, CO-RE reads
-`{serial, type->name, description}` and emits a ringbuf event. The
-kernel keeps executing the access check normally; the BPF program just
-observes the pointer the kernel is already about to use.
+- Both symbols present in `/proc/kallsyms`
+- CO-RE BTF available (vmlinux BTF shipped with the kernel)
+- `keyctl(1)` from `keyutils` (the trigger uses it)
 
-## Hook(s)
+## Files
 
-- `kprobe/key_task_permission`
-- `kprobe/lookup_user_key`
+| File | Purpose |
+|------|---------|
+| `ch08-keyring-heist-kprobe.bpf.c` | Kernel-side BPF program (kprobes with PT_REGS_PARM1 for BTF FWD workaround) |
+| `ch08-keyring-heist-kprobe.c` | Userspace loader and ringbuf consumer |
+| `trigger.sh` | Activity generator |
+| `Makefile` | Build (uses shared/common.mk) |
 
-## Host prereqs
+## Build & Run
 
-- Both symbols present in `/proc/kallsyms` (true on linuxkit 6.12 aarch64).
-- CO-RE BTF available (vmlinux BTF shipped with the kernel).
-- `keyctl(1)` from `keyutils` (the trigger uses it).
-
-## Build / Run
-
-```
-cd pocs/ch08-keyring-heist-kprobe && make
+```bash
+# Inside the harness container:
+make
 sudo ./build/ch08-keyring-heist-kprobe
-sudo bash trigger.sh
+# In another terminal:
+bash trigger.sh
 ```
 
-## Evidence
+## Detection
 
-Per-event loader lines:
-```
-[ch08k] hook=key_task_permission pid=12345 comm=keyctl serial=0x2bd1a0e3 type=user desc='ch08-research-entry'
-```
-
-Trigger verdict line (note: syscall rc unchanged; only the side-stream
-reveals metadata):
-```
-=== CH08_CONCEPT_PROVEN syscall_rc_unchanged=yes description_in_ringbuf=yes ===
-```
-
-On missing prereqs, both loader and trigger emit
-`CH08K_SKIP reason="..."` and exit 0.
-
-## Limitations
-
-- Observer-only. The unprivileged `keyctl print` still returns EACCES
-  before and after attach — the kernel's access decision is preserved.
-- Does not read `key->payload` (that would require invoking the key's
-  `type->read` method, which isn't safe from BPF).
-- Kprobe attachment is kernel-version sensitive on function signatures;
-  argument position is currently fixed at PARM1 for both hooks.
-
-## Blog post
-
-See the chapter write-up: [`2025-02-08-keyring-heist`](../../../_posts/2025-02-08-keyring-heist.md) in the Diabolical eBPF Field Manual.
+- `bpftool prog show | grep key_` lists the attached kprobes.
+- `/sys/kernel/debug/tracing/kprobe_events` shows live entries.
+- The `events` ringbuf appears in `bpftool map show`.

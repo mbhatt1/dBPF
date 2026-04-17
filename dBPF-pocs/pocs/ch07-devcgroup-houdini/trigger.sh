@@ -5,6 +5,11 @@ set +e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE" || exit 1
 
+if ! command -v mknod >/dev/null 2>&1 && ! command -v dd >/dev/null 2>&1; then
+    echo "=== CH07_SKIP reason=\"mknod/dd not available\" ==="
+    exit 0
+fi
+
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"; userdel dut07 2>/dev/null' EXIT
 

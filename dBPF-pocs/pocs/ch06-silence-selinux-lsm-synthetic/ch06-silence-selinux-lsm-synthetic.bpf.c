@@ -95,6 +95,7 @@ static __always_inline int str_eq_n(const char *a, const char *b, int n)
     return 1;
 }
 
+// SLEEPABLE REQUIRED: uses bpf_d_path() which is a sleepable BPF helper.
 SEC("lsm.s/file_open")
 int BPF_PROG(ch06_synth_file_open, struct file *file)
 {

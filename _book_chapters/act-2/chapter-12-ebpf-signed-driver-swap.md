@@ -16,6 +16,18 @@ The answer is yes, with a very specific definition of "yes." The primitive I end
 
 Before I got to that working primitive, I spent a week on an approach that did not work. I want to describe that failed approach in detail, because the reason it failed is the same reason several chapters in this book are workaround variants rather than their original designs. The pattern matters more than the specific failure.
 
+## Three Variants, Three Categories
+
+Before diving into the details, it is worth laying out all three POC variants for this chapter and what each one does, because they are fundamentally different primitives despite sharing a chapter title:
+
+1. **Observer (kprobe)** -- `ch12-signed-driver-swap`. Attaches kprobes to `load_module`, `module_sig_check`, and `mod_verify_sig` (plus a kretprobe on `mod_verify_sig` to capture the return value). Pure observation: streams ringbuf events showing which module-load gates fire and what they return. Cannot mutate anything. Category: **REAL** (observer) -- the hooks fire on actual module loads, and the data reported is the kernel's real decisions.
+
+2. **LSM mutator (fmod_ret)** -- `ch12-signed-driver-swap-lsm`. Attaches BPF LSM fmod_ret programs to three hooks in the module-load path: `SEC("lsm/kernel_read_file")`, `SEC("lsm/kernel_load_data")`, and `SEC("lsm/locked_down")`. For targeted tgids, flips any non-zero chain result to 0. This is a **REAL** mutator: on a kernel with `CONFIG_MODULE_SIG_FORCE=y` and a validly-formed ELF with a bad signature, flipping `kernel_read_file` to 0 would allow the module to actually load into kernel memory. `lsmod` would show it. The module's init function would run. This is the "load an unsigned driver" primitive people imagine when they read the chapter title. It requires specific kernel config conditions (signature enforcement on, valid ELF with bad sig) and did not fire on the linuxkit test kernel because `CONFIG_MODULE_SIG_FORCE` is off.
+
+3. **Syscall forger (kretprobe)** -- `ch12-signed-driver-swap-syscall`. Attaches kretprobes to `__arm64_sys_finit_module` and `__arm64_sys_init_module`, using `bpf_override_return(ctx, 0)` to forge the syscall return to 0 for target tgids. Category: **ILLUSION** -- the kernel still rejects the module bytes internally, `lsmod` shows nothing, `/proc/modules` is unchanged, but the userspace-visible syscall return says 0. Any tool that trusts only the return code is fooled; any tool that checks `/proc/modules` or `/sys/module/` catches the forgery.
+
+The three variants sit on a spectrum from "observe only" to "real kernel-state change" to "userspace-only lie," and each has a different set of conditions under which it fires.
+
 ## The LSM Approach That Didn't Fire
 
 My first cut was a BPF LSM program. On modern kernels with `CONFIG_BPF_LSM=y` — which the linuxkit Docker Desktop kernel and most Ubuntu/Debian distros enable — you can attach BPF programs to LSM hook points and use the `fmod_ret` return-override mechanism to change the hook's verdict. The plan was to target `mod_verify_sig`, the LSM hook that runs after the kernel has extracted the signature from an incoming module blob but before the loader decides whether to accept or reject based on it. If I could flip that hook's return from "signature invalid" to "signature valid," the loader would proceed to actually load the module.
@@ -442,12 +454,13 @@ On a kernel with `CONFIG_MODULE_SIG_FORCE=y` but where my test payload is a non-
 
 The two conditions combined — signature enforcement on, validly-formed ELF with bad signature — are the only configuration where the LSM bypass works. That configuration is what a serious production kernel with strict module signing looks like. It is also what this chapter does not have a test environment for.
 
-The syscall-entry primitive works on any kernel where the module-load syscalls are in the error-injection allowlist, which is a much more permissive condition. Different conditions, different ROIs:
+The syscall-entry primitive works on any kernel where the module-load syscalls are in the error-injection allowlist, which is a much more permissive condition. Different conditions, different ROIs across all three variants:
 
-- **LSM approach** — actually loads unsigned modules on kernels that enforce signing. Rare kernel config; real bypass.
-- **Syscall-entry approach** — forges return code for any reason of loader failure on any kernel with injectable module-load syscalls. Common kernel config; userspace illusion only.
+- **Observer (kprobe)** -- `ch12-signed-driver-swap` -- watches `load_module`, `module_sig_check`, `mod_verify_sig`. Fires on any kernel where those symbols exist in kallsyms. Pure observation, no mutation. Category: **REAL** (observer).
+- **LSM mutator (fmod_ret)** -- `ch12-signed-driver-swap-lsm` -- attaches to `SEC("lsm/kernel_read_file")`, `SEC("lsm/kernel_load_data")`, `SEC("lsm/locked_down")`. Actually loads unsigned modules on kernels that enforce signing. Rare kernel config; real bypass. Category: **REAL** (mutator).
+- **Syscall forger (kretprobe)** -- `ch12-signed-driver-swap-syscall` -- forges return code for any reason of loader failure on any kernel with injectable module-load syscalls. Common kernel config; userspace illusion only. The kernel still rejects the module; `lsmod` is unchanged. Category: **ILLUSION**.
 
-Neither is strictly better; they do different things. The LSM approach is the one people imagine when they hear "signed-driver swap," and it is genuinely more powerful where it fires. The syscall-entry approach is the one I could prove on the test kernel and is what survives in the repository.
+No single variant is strictly better; they do different things. The LSM approach is the one people imagine when they hear "signed-driver swap," and it is genuinely more powerful where it fires. The syscall-entry approach is the one I could prove on the test kernel and is what survives in the repository. The observer variant provides forensic visibility into the module-load decision path regardless of whether mutation is possible.
 
 ## Detection
 

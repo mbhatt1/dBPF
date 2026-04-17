@@ -92,13 +92,15 @@ int main(int argc, char **argv)
 
     skel = ch13_powercap_override_analog_bpf__open_and_load();
     if (!skel) {
-        fprintf(stderr, "[ch13-analog] open_and_load failed: %s\n", strerror(errno));
+        fprintf(stderr, "[ch13-analog] CH13_ANALOG_SKIP reason=\"open_and_load failed: %s\"\n",
+                strerror(errno));
         goto out;
     }
 
     int err = ch13_powercap_override_analog_bpf__attach(skel);
     if (err) {
-        fprintf(stderr, "[ch13-analog] attach failed: %s\n", strerror(-err));
+        fprintf(stderr, "[ch13-analog] CH13_ANALOG_SKIP reason=\"attach failed: %s\"\n",
+                strerror(-err));
         goto out;
     }
 

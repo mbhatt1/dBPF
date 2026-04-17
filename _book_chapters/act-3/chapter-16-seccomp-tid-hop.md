@@ -639,6 +639,8 @@ This honest framing is the chapter's final and most important takeaway.
 
 ## Hook points
 
+**Category: REAL (observer only).** `__secure_computing` is NOT in `/sys/kernel/debug/error_injection/list` on 6.12.54-linuxkit aarch64, so `bpf_override_return` cannot be used --- attempting it would either fail at load or silently degrade. The shipped program is strictly an observer. It does not and cannot mutate seccomp decisions on stock kernels. The chapter should not be read as implying mutation is possible without a custom kernel that adds the `ALLOW_ERROR_INJECTION` annotation to `__secure_computing`.
+
 - `SEC("kprobe/__secure_computing")` — fires before every seccomp evaluation. Present in `/proc/kallsyms` on 6.12.54 aarch64.
 - `SEC("kretprobe/__secure_computing")` — captures the final return value (0 = allow, non-zero = filtered).
 - Maps: `events` (ringbuf), `target_tgids` (hash, wildcard via key 0), `inflight` (hash keyed by pid_tgid).

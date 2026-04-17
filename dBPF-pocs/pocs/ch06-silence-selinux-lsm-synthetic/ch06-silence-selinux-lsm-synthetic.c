@@ -192,7 +192,7 @@ int main(int argc, char **argv)
 
     if (!check_bpf_lsm()) {
         fprintf(stderr,
-                "CH06_SYNTH_SKIP reason=\"BPF LSM not enabled "
+                "[ch06-synth] CH06_SYNTH_SKIP reason=\"BPF LSM not enabled "
                 "(need 'bpf' in /sys/kernel/security/lsm)\"\n");
         return 3;
     }
@@ -202,7 +202,7 @@ int main(int argc, char **argv)
     struct ch06_silence_selinux_lsm_synthetic_bpf *s =
         ch06_silence_selinux_lsm_synthetic_bpf__open_and_load();
     if (!s) {
-        fprintf(stderr, "[ch06-synth] open_and_load failed: %s\n",
+        fprintf(stderr, "[ch06-synth] CH06_SYNTH_SKIP reason=\"open_and_load failed: %s\"\n",
                 strerror(errno));
         return 1;
     }
@@ -221,7 +221,8 @@ int main(int argc, char **argv)
 
     int err = ch06_silence_selinux_lsm_synthetic_bpf__attach(s);
     if (err) {
-        fprintf(stderr, "[ch06-synth] attach failed: %s\n", strerror(-err));
+        fprintf(stderr, "[ch06-synth] CH06_SYNTH_SKIP reason=\"attach failed: %s\"\n",
+                strerror(-err));
         ch06_silence_selinux_lsm_synthetic_bpf__destroy(s);
         return 1;
     }

@@ -20,9 +20,9 @@
 // `bpf_lsm_<hook>` BTF FUNC is absent (linuxkit 6.12 aarch64 has
 // inode_mknod and file_open but not dev_open).
 //
-//   lsm.s/inode_mknod   — gate mknod(2) of char/block nodes
-//   lsm.s/file_open     — gate open(2) of existing char/block nodes
-//   lsm.s/dev_open      — (optional) post-open hook
+//   lsm/inode_mknod   — gate mknod(2) of char/block nodes
+//   lsm/file_open     — gate open(2) of existing char/block nodes
+//   lsm/dev_open      — (optional) post-open hook
 //
 // Stages:
 //   STAGE_OFF   — pass through unchanged
@@ -151,7 +151,8 @@ static __always_inline int run_stage(int hook, unsigned int mode,
 // The trailing `int ret` is libbpf's synthesis of the accumulated
 // upstream LSM result (BPF LSM programs see the chain ret via this
 // extra arg).
-SEC("lsm.s/inode_mknod")
+// Non-sleepable: no sleepable helpers used. lsm.s/ breaks on many kernels.
+SEC("lsm/inode_mknod")
 int BPF_PROG(lsm_inode_mknod,
              struct inode *dir, struct dentry *dentry,
              unsigned short mode, unsigned int dev, int ret)
@@ -161,7 +162,7 @@ int BPF_PROG(lsm_inode_mknod,
 }
 
 // int security_file_open(struct file *file)
-SEC("lsm.s/file_open")
+SEC("lsm/file_open")
 int BPF_PROG(lsm_file_open, struct file *file, int ret)
 {
     (void)ret;
@@ -177,7 +178,7 @@ int BPF_PROG(lsm_file_open, struct file *file, int ret)
 // Not present on every kernel; loader's BTF prune will disable this
 // program via bpf_program__set_autoload(false) when the bpf_lsm_dev_open
 // FUNC is missing from vmlinux BTF.
-SEC("lsm.s/dev_open")
+SEC("lsm/dev_open")
 int BPF_PROG(lsm_dev_open, struct file *file, int ret)
 {
     (void)ret;

@@ -571,31 +571,35 @@ Pinning is a separate primitive. It is also a separate detection surface: `ls /s
 - `kretprobe/__arm64_sys_geteuid` → `bpf_override_return(ctx, 0)`
 
 ```c
-// @interactive: true
-// @copyable: true
-// eBPF Token Bypass - Proof of Concept
-// This demonstrates bypassing authentication and authorization at the kernel level
-
-#include <linux/bpf.h>
-#include <bpf/bpf_helpers.h>
-#include <linux/cred.h>
-#include <linux/capability.h>
-#include <linux/fs.h>
-
-SEC("kprobe/security_file_permission")
-int forge_tokens(struct pt_regs *ctx) {
-    struct cred *new_cred = prepare_kernel_cred(NULL);
-    if (!new_cred) return 0;
-    new_cred->uid.val = 0;
-    new_cred->gid.val = 0;
-    commit_creds(new_cred);
+// NOTE: arch-specific symbols. On x86_64 use __x64_sys_getuid / __x64_sys_geteuid.
+SEC("kretprobe/__arm64_sys_getuid")
+int BPF_KRETPROBE(kr_getuid, long ret)
+{
+    int flip = 0;
+    if (is_target() && ret != 0) {
+        bpf_override_return(ctx, 0);
+        flip = 1;
+    }
+    emit(ret, 0, flip);
     return 0;
 }
 
+// NOTE: arch-specific symbol. On x86_64 use __x64_sys_geteuid.
+SEC("kretprobe/__arm64_sys_geteuid")
+int BPF_KRETPROBE(kr_geteuid, long ret)
+{
+    int flip = 0;
+    if (is_target() && ret != 0) {
+        bpf_override_return(ctx, 0);
+        flip = 1;
+    }
+    emit(ret, 1, flip);
+    return 0;
+}
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-(The snippet above is the original draft — `prepare_kernel_cred` / `commit_creds` are not callable from BPF context. The shipped program uses `bpf_override_return(ctx, 0)` from kretprobes on `__arm64_sys_getuid` and `__arm64_sys_geteuid`, which is a userspace-facing illusion and not a real credential swap.)
+**Category: ILLUSION.** Forging `getuid`/`geteuid` makes `id` show `uid=0(root)` but the kernel's `current->cred->uid` is unchanged. Actual privilege checks (VFS permission via `inode_permission`, capability gates via `cap_capable`, LSM hooks) all consult `current->cred` directly and deny. The "tell": `gid` is still 1001 because `getgid` is not hooked --- `id` output shows `uid=0(root) gid=1001 groups=1001`, which no real root session would produce.
 
 ## Build
 

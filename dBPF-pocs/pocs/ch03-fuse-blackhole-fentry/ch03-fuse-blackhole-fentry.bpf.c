@@ -15,7 +15,7 @@
 //     can use this path. The loader checks at runtime and refuses to
 //     attach if the symbol is absent from the allowlist.
 //
-//  2) SEC("lsm.s/syslog") — fallback. fmod_ret on the syslog LSM hook
+//  2) SEC("lsm/syslog") — fallback. fmod_ret on the syslog LSM hook
 //     denies dmesg-channel audit-adjacent reads (SYSLOG_ACTION_READ_ALL
 //     and friends). Narrower scope than suppressing audit records, but
 //     works on any CONFIG_BPF_LSM=y kernel without touching the
@@ -90,7 +90,8 @@ int BPF_PROG(mr_audit_log_start, struct audit_context *actx, unsigned int gfp, i
 // Returning -EPERM denies SYSLOG_ACTION_* — dmesg-channel audit peek is
 // blocked. Narrower than full audit record suppression but widely
 // available (any CONFIG_BPF_LSM=y kernel).
-SEC("lsm.s/syslog")
+// Non-sleepable: no sleepable helpers used.
+SEC("lsm/syslog")
 int BPF_PROG(lsm_syslog, int type, int ret)
 {
     if (!is_enabled())

@@ -519,15 +519,34 @@ The loader greps `/proc/kallsyms` at startup and refuses to run if the
 target symbol is missing (wrong arch / non-kprobe-eligible kernel).
 
 ```c
-SEC("kprobe/sched_setscheduler")
-int impersonate_realtime(struct pt_regs *ctx) {
-    pid_t pid = PT_REGS_PARM1(ctx);
-    struct sched_param *param = (struct sched_param *)PT_REGS_PARM3(ctx);
-    param->sched_priority = MAX_RT_PRIO - 1; // highest priority
-    return 0; // bypass CAP_SYS_NICE
+// NOTE: arch-specific symbol. On x86_64 use __x64_sys_sched_setscheduler.
+SEC("kprobe/__arm64_sys_sched_setscheduler")
+int BPF_KPROBE(kp_sched, struct pt_regs *regs)
+{
+    struct evt e = {};
+    unsigned long id = bpf_get_current_pid_tgid();
+    e.pid = id & 0xffffffff;
+    e.tgid = id >> 32;
+    bpf_get_current_comm(&e.comm, sizeof(e.comm));
+    bpf_map_update_elem(&inflight, &id, &e, BPF_ANY);
+    return 0;
+}
+
+// NOTE: arch-specific symbol. On x86_64 use __x64_sys_sched_setscheduler.
+SEC("kretprobe/__arm64_sys_sched_setscheduler")
+int BPF_KRETPROBE(kr_sched, long ret)
+{
+    // ... target lookup, then:
+    if (match && ret != 0) {
+        bpf_override_return(ctx, 0);
+        flipped = 1;
+    }
+    // emit ringbuf event with orig_ret and flipped flag
 }
 char LICENSE[] SEC("license") = "GPL";
 ```
+
+**Category: ILLUSION.** `bpf_override_return` on `__arm64_sys_sched_setscheduler` (x86 equivalent: `__x64_sys_sched_setscheduler`) changes the return value visible to userspace from `-EPERM` to `0` (success). The kernel's `task->policy` remains `SCHED_OTHER`; the runqueue placement is unchanged. Tools trusting the return value (chrt, pthread_setschedparam callers, systemd CPUSchedulingPolicy) are fooled. Kernel enforcement is untouched.
 
 ## Build
 
