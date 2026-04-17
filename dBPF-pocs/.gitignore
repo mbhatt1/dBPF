@@ -25,6 +25,12 @@ __pycache__/
 *.pyc
 *.pyo
 
+# --- QEMU local disk images (too large for git) ---
+# Fetch or build these locally; do not commit.
+qemu/*.qcow2
+qemu/*.img
+qemu/*.raw
+
 # --- OS / editor cruft ---
 .DS_Store
 *.bak
