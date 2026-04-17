@@ -118,9 +118,6 @@ POCS: list[Poc] = [
     Poc("ch12", "Signed-Driver Swap (LSM)", "ch12-signed-driver-swap-lsm",
         hooks=["bpf-lsm"], prefix="[ch12]",
         proof_marker=r"CH12_PROVEN|CH12_WEAPON_PROVEN|FLIP\s+hook="),
-    Poc("ch13", "Powercap Override", "ch13-powercap-override",
-        hooks=["powercap_get_max_power_uw"], prefix="[ch13]",
-        skip_reason="x86-only (no RAPL symbols on aarch64 linuxkit)"),
     Poc("ch14", "SCHED_FIFO Impersonator", "ch14-sched-fifo",
         hooks=["__arm64_sys_sched_setscheduler"], prefix="[sched]",
         mode="trigger-runs-loader",
@@ -135,56 +132,33 @@ POCS: list[Poc] = [
         hooks=["__secure_computing"], prefix="[seccomp]",
         proof_marker=r"SECCOMP_SIDECHANNEL_PROVEN",
         category="observer"),
-    Poc("ch17", "ACPI WSMI Ping / firmware", "ch17-acpi-wsmi",
-        hooks=["request_firmware", "acpi_evaluate_object"], prefix="[acpi]",
-        proof_marker=r"ACPI_PROBE_PROVEN\s+arch=\S+\s+substituted=\S+"),
     Poc("ch18", "Token Bypass (getuid override)", "ch18-token-bypass",
         hooks=["__arm64_sys_getuid", "__arm64_sys_geteuid"], prefix="[token]",
         mode="override-all", loader_args=["--all"],
         flip_marker=r"FORGE|override|flip|uid=0",
         proof_marker=r"FORGE\s+pid=|TOKEN_FORGE_PROVEN",
         category="illusion"),
-    # --- workaround / analog variants ---------------------------------
-    # Pedagogical disclaimer: the original chapter POC fails on this
-    # kernel (missing SELinux policy, x86-only RAPL, no ACPI interp,
-    # no drivers that invoke request_firmware, etc). The *-variant rows
-    # demonstrate the same primitive on a surface that exists on this
-    # aarch64 linuxkit host.
-    Poc("ch06s", "Silence SELinux — synthetic LSM (analog)",
-        "ch06-silence-selinux-lsm-synthetic",
-        hooks=["bpf-lsm"], prefix="[ch06-synth]",
-        mode="trigger-runs-loader", timeout=25,
-        proof_marker=r"CH06_CONCEPT_PROVEN|CH06_SYNTH_PROVEN|_PROVEN",
-        category="analog"),
-    Poc("ch07w", "Device-cgroup Houdini — workaround (LSM)",
-        "ch07-devcgroup-houdini-lsm",
-        hooks=["bpf-lsm"], prefix="[ch07]",
-        mode="trigger-runs-loader", timeout=25,
-        proof_marker=r"CH07_CONCEPT_PROVEN|CH07_CONCEPT_PARTIAL|CH07_PROVEN|FLIP\s+hook=|_PROVEN",
-        category="analog"),
+    # --- workaround kprobe variant -----------------------------------
+    # Kept because it is a real kprobe against a real kernel surface,
+    # not a synthetic or analog. The LSM variant (ch08) skips on kernels
+    # where struct key is forward-declared in BTF; the kprobe version
+    # sidesteps that by reading through vmlinux.h BTF directly.
     Poc("ch08k", "Keyring Heist — kprobe variant",
         "ch08-keyring-heist-kprobe",
         hooks=["key_task_permission", "lookup_user_key"], prefix="[ch08k]",
         mode="trigger-runs-loader", timeout=20,
         proof_marker=r"CH08_CONCEPT_PROVEN|CH08_PROVEN|_PROVEN"),
-    Poc("ch12s", "Signed-Driver Swap — syscall kretprobe (analog)",
+    # --- syscall-level illusion ---------------------------------------
+    # Real kretprobe on a real syscall wrapper. category="illusion"
+    # because the return value is forged (finit_module returns 0) but
+    # the module never actually loads. Kept alongside ch14/ch18 as an
+    # honestly-labeled syscall-return forge.
+    Poc("ch12s", "Signed-Driver Swap — syscall kretprobe (illusion)",
         "ch12-signed-driver-swap-syscall",
         hooks=["__arm64_sys_finit_module", "__arm64_sys_init_module"],
         prefix="[ch12s]", mode="trigger-runs-loader", timeout=25,
         proof_marker=r"CH12_CONCEPT_PROVEN|CH12_PROVEN|FORGE\s+pid=|_PROVEN",
         category="illusion"),
-    Poc("ch13a", "Powercap Override — userspace sensor analog",
-        "ch13-powercap-override-analog",
-        hooks=["tp:syscalls/sys_enter_read", "tp:syscalls/sys_exit_read"],
-        prefix="[ch13-analog]", mode="trigger-runs-loader", timeout=25,
-        proof_marker=r"CH13_ANALOG_PROVEN|CH13_CONCEPT_PROVEN|_PROVEN",
-        category="analog"),
-    Poc("ch17a", "ACPI WSMI — userspace firmware analog",
-        "ch17-acpi-wsmi-analog",
-        hooks=["tp:syscalls/sys_enter_openat"],
-        prefix="[ch17-analog]", mode="trigger-runs-loader", timeout=25,
-        proof_marker=r"CH17_ANALOG_PROVEN|CH17_CONCEPT_PROVEN|_PROVEN",
-        category="analog"),
 ]
 
 

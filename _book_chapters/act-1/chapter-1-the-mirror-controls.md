@@ -6,554 +6,234 @@ date: 2025-01-31
 
 # Chapter 1: The Mirror Controls
 
-> **See also**: [Blog post]({{ site.baseurl }}/the-mirror-controls.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch01-mirror-controls) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+> **See also**: [Blog post]({{ site.baseurl }}/the-mirror-controls.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch01-mirror-controls-lsm) · [Legacy kprobe variant](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch01-mirror-controls)
 
-I was poking at `cap_capable` on a linuxkit 6.12 VM, trying to understand what an unprivileged observer could actually see from a kprobe. The function is the single choke point every capability check routes through (`security/commoncap.c`), so if you want to know who is asking for what, this is where you sit. What I wanted to know next was whether I could do anything about the answer.
+I started this chapter wanting to override a capability check from BPF, spent a week figuring out why that does not work on a stock kernel, and ended up writing two proofs of concept. The second one — a BPF LSM program that returns `0` from `lsm/inode_permission` where the kernel would have returned `-EACCES` — is the one that actually grants access. That is the primary for this chapter. The first one (the kprobe on `cap_capable` with `bpf_send_signal`) is a cautionary tale and lives in a sidebar near the end.
 
-The short version: on a stock kernel, you cannot. `cap_capable` is not in `ALLOW_ERROR_INJECTION`, so `bpf_override_return` against it loads but never fires. The verifier accepts the program; the kernel silently ignores the override. I confirmed this by checking `/sys/kernel/debug/kprobes/list` and then by reading `kernel/bpf/verifier.c` around `check_attach_btf_id`. The result is that this chapter is about an observation channel, not a bypass. If you want the bypass you need a kernel built with `CONFIG_BPF_KPROBE_OVERRIDE=y` and the target function annotated — two conditions that almost never coincide in production.
+The primitive, stated plainly: on a kernel with `CONFIG_BPF_LSM=y` and `bpf` present in `/sys/kernel/security/lsm`, a BPF program can attach as a fmod_ret hook on `security_inode_permission`, and its return value replaces the kernel's. If the kernel was going to deny a VFS access with `-EACCES`, the BPF program returns `0` and the read or write proceeds. There is no error-injection allowlist to clear, no silent no-op, no illusion layered on top of a real deny. The kernel actually permits the access, and the caller's subsequent code runs against real filesystem state. That is what I could not do with a kprobe.
 
-## A walk through kernel/capability.c
+## Preconditions and the skip story
 
-The function I was reading sits in `security/commoncap.c` on 6.12, not `kernel/capability.c` — the latter holds the syscall entry points (`SYS_capset`, `SYS_capget`) while the LSM-side decision logic moved to `security/commoncap.c` when the default-capability LSM was formalized. Both files are worth having open. The syscall entry is where a capset-style userspace call lands; the LSM hook is where an in-kernel `capable()` call lands. They share the decision function.
+The LSM fmod_ret path only exists on kernels that were built and booted to accept it. Three knobs matter:
 
-The 6.12 signature for `cap_capable`:
+1. **`CONFIG_BPF_LSM=y`** at kernel build time. Without this, the `BPF_PROG_TYPE_LSM` program type is not registered and the loader fails at `BPF_PROG_LOAD` with `-EINVAL`. Fedora 38+ ships it on by default; Ubuntu LTS and Debian stable ship it off historically but have been turning it on in recent spins; Docker Desktop's linuxkit VM does not ship it.
+2. **`bpf` in `/sys/kernel/security/lsm`**. The kernel is built with LSM stacking support, and the active LSM set is determined by the `lsm=` boot cmdline (or the CONFIG default). The BPF LSM has to be in that active set or fmod_ret programs have no chain to attach into. The loader reads `/sys/kernel/security/lsm`, looks for the substring `bpf`, and exits with `CH01_SKIP reason="BPF LSM not active"` if it is absent. The trigger does the same check with `grep -q bpf /sys/kernel/security/lsm` before it does anything else.
+3. **Kernel 6.14+ for `lsm/inode_permission` specifically.** I tried `lsm/capable` first. On kernels where `security_capable` short-circuits around the LSM chain for non-root processes — which is the common case from about 6.12 onward — a BPF LSM program attached to `capable` never fires on the calls that would actually matter. `inode_permission` is called from inside `do_inode_permission`, which is invoked on every `vfs_read` / `vfs_write` and on every path that opens a file. That hook fires reliably. On 6.14+ the fmod_ret machinery around it is stable; on older kernels the attach succeeds but the trampoline behavior has enough edge cases that I would not trust it without retesting per-version.
+
+If any of the three is missing, the honest thing to do is skip. The loader and the trigger both do. `trigger.sh` emits `=== CH01_SKIP reason="BPF LSM not active in /sys/kernel/security/lsm" ===` and exits zero; the loader emits `[ch01-lsm] CH01_SKIP reason="BPF LSM not active"` and exits with a non-zero code. There is no fallback to the kprobe variant inside this PoC. A reader on linuxkit or on a default Debian kernel will see the skip and move on, which is what I wanted — the chapter's claim is about what you can do on a kernel with BPF LSM, not about what you can fake on one without.
+
+## The BPF program, line by line
+
+The whole kernel-side program is 97 lines in `ch01-mirror-controls-lsm.bpf.c`. The load-bearing parts are the SEC string, the return-value convention, the target-tgid filter, and the uid-0 guard.
+
+The section name:
 
 ```c
-int cap_capable(const struct cred *cred,
-                struct user_namespace *targ_ns,
-                int cap, unsigned int opts)
-{
-    struct user_namespace *ns = targ_ns;
-
-    for (;;) {
-        if (ns == cred->user_ns)
-            return cap_raised(cred->cap_effective, cap) ? 0 : -EPERM;
-        if (ns->level <= cred->user_ns->level)
-            return -EPERM;
-        if ((ns->parent == cred->user_ns) && uid_eq(ns->owner, cred->euid))
-            return 0;
-        ns = ns->parent;
-    }
-}
+SEC("lsm/inode_permission")
+int BPF_PROG(lsm_inode_permission, struct inode *inode, int mask, int ret)
 ```
 
-The loop walks up the user-namespace hierarchy. At each level it checks whether the calling credential's effective capability set has the requested bit set. The check is `cap_raised`, which is a bitmask test. The return convention is `0` for granted, `-EPERM` for denied. Hooking this function at kprobe entry gives you the four arguments; hooking it at kretprobe gives you the decision.
+The `lsm/` prefix is what gets the program classified as `BPF_PROG_TYPE_LSM`. The suffix names the LSM hook — here, `inode_permission` — and libbpf resolves that against the BTF of `security_inode_permission` at load time. If the kernel does not have BTF for that hook, load fails. The prefix would be `lsm.s/` for a sleepable LSM program; `inode_permission` is non-sleepable on 6.14, so we use the plain `lsm/` form. A mismatch here fails attach with `-EINVAL` and a kernel log line about the hook not being sleepable, which is the trap that cost me an afternoon.
 
-The function sits in the LSM chain, which is the part that matters for anyone trying to override the decision. On a kernel with a single LSM loaded — the default-capability LSM — `cap_capable` is the final word on capability checks. On a kernel with multiple LSMs (SELinux, AppArmor, Yama), the `security_capable` dispatcher walks the LSM list and combines the verdicts. The standard combination is "all LSMs must grant for the capability to be granted." Any LSM returning `-EPERM` causes the check to fail.
+The `BPF_PROG` macro handles the argument unpacking. The important thing about the signature is the third parameter: `int ret`. fmod_ret programs are passed the return value the hook chain has accumulated so far — the verdict the kernel is currently about to act on. The program can inspect it, decide, and return its own value. **The program's return value replaces the hook's return value.** That is the fmod_ret convention and it is the load-bearing fact of this chapter. Return `0` and the access is permitted; return a negative errno and it is denied.
 
-The relationship to `ns_capable` is worth mapping. `ns_capable` is the common entry point from kernel code that wants to check a capability in a specific user namespace. Its implementation in 6.12 looks approximately like:
+The filter decision is straightforward:
 
-<!-- source: kernel/capability.c:351-384 -->
 ```c
-static bool ns_capable_common(struct user_namespace *ns,
-                              int cap,
-                              unsigned int opts)
+static __always_inline int is_target(void)
 {
-    int capable;
-
-    if (unlikely(!cap_valid(cap))) {
-        pr_crit("capable() called with invalid cap=%u\n", cap);
-        BUG();
-    }
-
-    capable = security_capable(current_cred(), ns, cap, opts);
-    if (capable == 0) {
-        current->flags |= PF_SUPERPRIV;
-        return true;
-    }
-    return false;
-}
-
-bool ns_capable(struct user_namespace *ns, int cap)
-{
-    return ns_capable_common(ns, cap, CAP_OPT_NONE);
-}
-```
-
-Every `ns_capable` call flows into `security_capable`, which dispatches to the LSM chain, which on a default kernel calls `cap_capable`. The kprobe at `cap_capable` therefore sees every capability check in the system. This is the "mirror" in the chapter's title — the function is a single reflective surface for every capability decision.
-
-The related function `capable_wrt_inode_uidgid` handles the inode-aware capability check used by filesystems. It checks `cap_capable` plus an additional inode-ownership predicate. A kprobe on `cap_capable` also sees the checks that flow through `capable_wrt_inode_uidgid`, because they end up calling `cap_capable` internally. A kprobe on `capable_wrt_inode_uidgid` separately sees only the inode-aware subset. Both attachment points are useful; which one you want depends on whether you care about the inode context or not.
-
-<!-- source: security/commoncap.c:67 -->
-Line numbers, with the usual drift caveat: on 6.12 `security/commoncap.c` the `cap_capable` function sits around line 67. On 5.15 it was around line 205. The function has been stable for enough releases that a rough offset is reliable.
-
-The `opts` argument is the interesting one. It is a bitmask of `CAP_OPT_*` values:
-
-<!-- source: include/linux/security.h:68-72 -->
-- `CAP_OPT_NONE` (0): standard check.
-- `CAP_OPT_NOAUDIT` (BIT(1), i.e. 1 << 1): do not generate an audit record for this check.
-- `CAP_OPT_INSETID` (BIT(2), i.e. 1 << 2): being called from within a setid or setgroups syscall.
-
-The `NOAUDIT` bit is the most-frequently-set. It is used by the kernel's internal code to test a capability without generating spam in the audit log. A kernel that calls `ns_capable_noaudit` on the way to a decision sets this bit; the resulting `cap_capable` invocation flows through with the bit set. The kprobe sees the bit and can surface it to the consumer.
-
-This is load-bearing for interpretation. A `cap_capable` invocation with `CAP_OPT_NOAUDIT` is almost always part of a permission-probe by the kernel itself (checking "does the caller have this capability, without logging the check"). A `cap_capable` invocation without the bit is typically a user-triggered operation whose result will be audited upstream. The defender looking at a stream of `cap_capable` events wants to distinguish these two classes; the `opts` field is how.
-
-A concrete example. `sys_prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, ...)` internally tests `CAP_SETPCAP` before allowing the ambient-capability bit to be raised. The test is done with `ns_capable_noaudit`; the `cap_capable` invocation has `CAP_OPT_NOAUDIT` set. The failure does not produce an audit record. A kprobe sees both the test and the bit, and a defender consuming the stream can tell "the kernel probed for CAP_SETPCAP during a prctl call" from "the user's process explicitly requested CAP_SETPCAP." The distinction matters for anomaly detection.
-
-## The kprobe/kretprobe pairing pattern
-
-`bcc/tools/capable.py` has used the kprobe/kretprobe pair against `cap_capable` since 2016, and the shape of the pattern has not changed meaningfully since. The pattern is worth internalizing because the same shape applies to every decision function in the kernel — `security_file_permission`, `avc_has_perm`, `may_open`, `inode_permission`, and so on. Learn it once; apply it to any decision point.
-
-The pattern has three components: an entry kprobe that captures the arguments, a return kretprobe that captures the verdict, and a shared map that lets the return side find the entry it corresponds to. The map's key is a per-thread identifier; the value is whatever the entry captured.
-
-```c
-struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __type(key, unsigned long);   // pid_tgid
-    __type(value, int);           // cap
-    __uint(max_entries, 8192);
-} in_flight SEC(".maps");
-
-SEC("kprobe/cap_capable")
-int BPF_KPROBE(kp_cap, const void *cred, void *ns, int cap, unsigned int opts)
-{
-    unsigned long id = bpf_get_current_pid_tgid();
-    bpf_map_update_elem(&in_flight, &id, &cap, BPF_ANY);
-    return 0;
-}
-
-SEC("kretprobe/cap_capable")
-int BPF_KRETPROBE(kr_cap, int ret)
-{
-    unsigned long id = bpf_get_current_pid_tgid();
-    int *cap_p = bpf_map_lookup_elem(&in_flight, &id);
-    if (!cap_p) return 0;
-    bpf_map_delete_elem(&in_flight, &id);
-    // ret is the kernel's verdict; *cap_p is the capability that was asked for
-    return 0;
-}
-```
-
-The key design deserves attention. `bpf_get_current_pid_tgid()` returns a 64-bit value where the upper 32 bits are the thread group ID (the "PID" as seen by userspace) and the lower 32 bits are the kernel thread ID (the "TID" as seen by `gettid()`). Using the combined value as the map key is what gives you thread-local correlation: two threads in the same process making overlapping `cap_capable` calls get separate map entries because their TIDs differ.
-
-An earlier version of this code I wrote used only the upper 32 bits (the TGID) as the key. Under single-threaded test loads it worked fine. Under a multi-threaded test, map entries from one thread's entry got joined to another thread's return, producing garbage correlation. The fix is the full `pid_tgid` as the key. This is not a novel observation — it is the same fix bcc applied in 2016 — but it is the kind of fix that is easy to regress in a rewrite.
-
-The map size of 8192 entries is a rough budget. On a busy system, `cap_capable` fires thousands of times per second, and entries stay in the map only for the duration of the function (tens of microseconds typically). 8192 is plenty of headroom for correlation; the more common problem is the opposite, where a map fills because the return probe failed to fire on some path and the entries never got evicted.
-
-The ringbuf emit format. When the kretprobe has both sides in hand, it writes a fixed-size struct to a ringbuf:
-
-```c
-struct evt {
-    unsigned int pid;
-    unsigned int tgid;
-    char comm[16];
-    int cap;
-    int orig_ret;
-    int flipped;
-    int signal_sent;
-};
-```
-
-The struct is seven fields, 44 bytes on aarch64 with alignment. Ringbuf reservations are aligned to 8 bytes, so the practical per-event cost is 48 bytes. The `signal_sent` field is 1 when the kretprobe successfully delivered a SIGUSR1 into the target task via `bpf_send_signal`, 0 otherwise — the rest of this chapter explains why that matters. A 256-KB ringbuf holds about 5000 events before the consumer has to drain. On the test harness, `capset` fires three to five `cap_capable` checks per call, so a 256-KB ringbuf absorbs roughly 1500 `capset` invocations before backpressure. Good enough.
-
-Common bugs in this pattern, from worst to most-common:
-
-**Entry without return.** The kprobe fires but the kretprobe does not. This happens when the function has multiple exit paths and one of them is not a return (a `jmp` to a different function's body, for example), or when the function is inlined and the kretprobe binds to the inlined-out copy. `cap_capable` does not have this problem — it has a single return path — but related functions do. The symptom is growing `in_flight` map size and missing correlation.
-
-**Return without entry.** The kretprobe fires but there is no matching entry in the map. This happens when the kprobe was attached after the function started executing, or when the map eviction policy removed the entry before the return. The code checks for this with `if (!cap_p) return 0;` and silently drops the event. In a high-load test this manifests as a small percentage of events being unattributable; if the percentage is more than a few, the map is undersized.
-
-**Race on map eviction under load.** If two threads in the same process call `cap_capable` with the same `cap` argument in close succession, and the map's LRU eviction (for `BPF_MAP_TYPE_HASH_LRU`) fires between their entries, the return side may see a stale entry for a different thread. The plain `BPF_MAP_TYPE_HASH` used in the POC avoids this by never evicting, but has the opposite problem: under sustained load the map fills and `BPF_ANY` updates fail with `-E2BIG`. The tradeoff is: hash is predictable but limited; LRU is unbounded but subject to eviction races. The POC accepts the bounded-but-predictable side because the test workload never approaches the 8192-entry limit.
-
-**Missing `comm` resolution.** `bpf_get_current_comm` reads from `task_struct->comm`, which is a 16-byte buffer. If the executable name is longer than 15 characters, the name is truncated. This is a display issue, not a correctness issue, but it has tripped up defenders reading ringbuf output who mistake a truncated name for a different process. The chapter's userspace consumer renders the `comm` field verbatim and makes the truncation explicit when it happens.
-
-**Ringbuf drop under backpressure.** `bpf_ringbuf_reserve` returns `NULL` if the ringbuf is full. The code checks for this with `if (!e) return 0;` and silently drops the event. A burst of `cap_capable` calls that fills the ringbuf before the userspace consumer drains it will lose events. The symptom is gaps in the trace that the defender has no way to detect from the trace alone. The mitigation is a larger ringbuf (`1 << 18` or `1 << 20`) and a consumer loop that drains as fast as possible. The POC uses `1 << 18`; on the test workload the ringbuf never fills, but on a loaded production system it would.
-
-**Stale target_tgids entries.** The `target_tgids` map is keyed on TGID. If a process exits and its TGID is reused by a later process, the reused TGID will be treated as a target. The POC does not hook process exit and does not clean up the map. A long-running deployment would need to attach to `sched/sched_process_exit` and evict the exiting TGID from the map. For a demo, the TGID-reuse window is too narrow to matter; for a real tool, it is a correctness hole worth closing.
-
-The pattern, debugged, is about 75 lines of BPF C. The userspace loader is another 120 lines. Total code size is small because the BPF subsystem does most of the work. The skeleton generated by `bpftool gen skeleton` reduces the loader further; the POC uses the skeleton path for brevity.
-
-## What `cap_capable` Hands You
-
-The signature hasn't changed meaningfully since 5.x:
-
-```c
-int cap_capable(const struct cred *cred,
-                struct user_namespace *targ_ns,
-                int cap, unsigned int opts);
-```
-
-Four arguments. That matters because `PT_REGS_PARM4_CORE` on x86_64 is `rcx`, and I've seen write-ups miss the fourth arg entirely. The `cred` pointer is stable for the life of the task; `cap` is the integer capability index (`CAP_SYS_ADMIN` is 21, `CAP_NET_ADMIN` is 12); `opts` carries the noaudit bit.
-
-## The Probe
-
-```c
-SEC("kprobe/cap_capable")
-int hook_cap_check(struct pt_regs *ctx) {
-    const struct cred *cred = (void *)PT_REGS_PARM1(ctx);
-    int cap = (int)PT_REGS_PARM3(ctx);
-
-    u32 pid = bpf_get_current_pid_tgid() >> 32;
-    if (should_elevate(pid, cap)) {
-        bpf_override_return(ctx, 0);
-        return 1; // Grant capability silently
-    }
-
-    return 0; // Let normal checks proceed
-}
-```
-
-The `bpf_override_return` line loads fine. On a stock Debian or Ubuntu kernel it will not change the return value. I verified by attaching, calling `capset` from an unprivileged shell, and watching the syscall still fail with `EPERM`. The kprobe fires; the override is a no-op. `dmesg` says nothing either way.
-
-## The Kprobe-Then-Kretprobe Dance
-
-To observe the decision rather than change it, you need both sides. The entry kprobe gives you the arguments; the kretprobe gives you the verdict. Pair them with a per-PID map keyed on `tgid << 32 | tid` so you can correlate entry and return under concurrency.
-
-- Entry: capture `cred`, `cap`, `opts`, stash in a map.
-- Return: read `PT_REGS_RC(ctx)`, join against the map, emit to ringbuf.
-
-This is the shape of any decision-point observer: two probes, one map, one ringbuf. Nothing novel — it's the same pattern `bcc/tools/capable.py` has used since 2016. What you get in return is a per-syscall feed of "who asked for what capability and what did the kernel say."
-
-## Why ALLOW_ERROR_INJECTION isn't granted here
-
-The obvious question, once the observation channel is working, is why `cap_capable` is not in the error-injection allowlist. The maintainers have been clear about this when the question comes up on the kernel list: `cap_capable` is a decision function, not a syscall boundary. The two categories have different safety properties with respect to error injection.
-
-A syscall boundary is a natural error injection target because the syscall's callers already know they might get an error. `do_unlinkat` may return `-ENOMEM`, `-ENOENT`, `-EACCES`. The filesystem code paths that invoke it have error-handling for each case. Flipping the return value to a different errno produces a well-defined outcome: the caller sees an error it already knew how to handle. This is the fuzz-testing use case the annotation was built for.
-
-A decision function has a different shape. Its callers do not "handle" a granted or denied decision; they act on it. A `capable(CAP_SYS_ADMIN)` check that returns true results in the privileged code path being taken. A `cap_capable` override that flips the result from `-EPERM` to `0` does not produce an error the caller knows how to handle; it produces a silent elevation the caller does not know it received. The safety properties of error injection do not extend to this case.
-
-The concrete argument the maintainers make is that overriding `cap_capable` would let a BPF program grant arbitrary capabilities with no policy layer above it. The existing kernel architecture has the LSM chain as the policy layer — SELinux, AppArmor, Yama can all observe capability checks and refuse them. A `bpf_override_return` on `cap_capable` would run after those LSMs, after the decision had already been made, and invisibly override it. There is no audit record (the LSM would not have seen the override) and no hook for other subsystems to notice. The override would be a side channel around the entire LSM architecture.
-
-The argument extends to every security-decision function. `avc_has_perm` (SELinux's AVC check), `apparmor_capable` (AppArmor's capable hook), `tomoyo_capable` (TOMOYO's), `security_inode_permission`, `security_file_permission`, `security_task_kill` — none of them are in `ALLOW_ERROR_INJECTION`, for the same reason. The LSM chain is the supported policy layer; BPF override on a decision function would be an unsupported policy bypass.
-
-The alternative the maintainers point to is BPF LSM. `CONFIG_BPF_LSM=y` lets a BPF program register as an LSM and participate in the policy chain. The program attaches to a specific LSM hook via `SEC("lsm/...")` and returns either `0` (allow) or a negative errno (deny). It runs after the statically-compiled LSMs (Capability, SELinux, etc.) and its verdict is combined with theirs in the standard all-must-grant way.
-
-Critically, `SEC("lsm/...")` cannot be used to override a deny to an allow. The BPF LSM program sees the in-flight decision and can return a deny (making the check fail where it would have succeeded), but it cannot return a grant where another LSM would have denied. The all-must-grant combination is strict. This is deliberate: BPF LSM is an additional policy layer, not a bypass.
-
-There is a second BPF LSM attach mode, `fmod_ret`, which can modify the return value of an LSM hook. It is restricted to a narrow set of hooks and is itself not allowed to grant a decision where a static LSM denied. The maintainers' position is consistent: the LSM chain is a one-way policy gate; BPF is a participant in the gate, not a bypass around it.
-
-This is why the `bpf_override_return` path against `cap_capable` is designed to silently fail rather than to explicitly reject. The verifier accepts the program because the helper invocation itself is well-typed. The runtime dispatch silently discards the override because `cap_capable` is not on the allowlist. The silence is the design: a program can attempt the override without provoking an error message, and a legitimate observability tool that uses `bpf_override_return` on an allowlisted target nearby is unaffected.
-
-## Trying to override anyway — what actually happens
-
-The POC attempts the override anyway, because the attempt itself is informative.
-
-```c
-SEC("kretprobe/cap_capable")
-int BPF_KRETPROBE(kr_cap, int ret)
-{
-    unsigned long id = bpf_get_current_pid_tgid();
-    unsigned int tgid = id >> 32;
+    unsigned int tgid = bpf_get_current_pid_tgid() >> 32;
     unsigned int *hit = bpf_map_lookup_elem(&target_tgids, &tgid);
-
-    if (hit && ret != 0) {
-        // This compiles, loads, and attaches. It also silently no-ops.
-        bpf_override_return(ctx, 0);
-    }
-    return 0;
+    unsigned int zero = 0;
+    return (hit || bpf_map_lookup_elem(&target_tgids, &zero)) ? 1 : 0;
 }
 ```
 
-The verifier accepts this program. `bpftool prog show` lists it. `/sys/kernel/debug/kprobes/list` shows the kretprobe attached at `cap_capable+0`. The ringbuf receives events marked `flipped=1` for every denial that matched a target TGID. And the target process still gets `-EPERM` from its `capset` call.
+Two lookups against the same hash map. The first is keyed on the current TGID; the second is keyed on `0`, which the loader uses as the wildcard sentinel. If either hits, the current process is a target. The map is populated from userspace via `bpf_map__update_elem` (see the walkthrough of the loader below). A process whose TGID is not in the map, and for which the wildcard key is not set, returns the kernel's original verdict untouched — the BPF program is effectively a pass-through for everyone except the targets.
 
-To confirm this is not a harness bug, I ran the test both ways. First with the override line present: 47 denials flagged as "would flip," 47 subsequent `capset` calls still denied. Then with the override line replaced by `bpf_override_return(ctx, 0)` attached to `do_unlinkat` (which *is* in the error-injection allowlist): the subsequent `unlinkat` call returned success, and the target file was preserved on disk (the override made the kernel skip the actual unlink). The comparison isolates the failure mode to the allowlist check, not to the helper call.
-
-The runtime dispatch that produces the silent no-op is in the kprobe return-path. The kretprobe fires, the BPF program runs, `bpf_override_return` stores the override value in the per-kprobe state, and then the kprobe return-path checks whether the kprobe has the `KPROBE_FLAG_FTRACE` attribute *and* the target function is in the error-injection list. If both conditions hold, the override value replaces the return register; otherwise the override is discarded. `cap_capable` fails the second condition.
-
-The verifier's role in this is partial. `check_attach_btf_id` (or its equivalent region in `kernel/bpf/verifier.c`) validates that the program's attach target is compatible with the program type. It does *not* validate that the attach target is in the error-injection list; that check is at runtime. The verifier could, in principle, reject the program at load time if it saw a `bpf_override_return` helper call targeting a function outside the allowlist, but the verifier does not have the target function's identity at helper-call time in a way that makes this check tractable. The check lives at attach time and at runtime.
-
-A hardened kernel could close even the silent-failure path by rejecting the helper at load time when the target is not allowlisted. No distribution I checked has done this. The silent-failure behavior is probably a compatibility choice: programs that use `bpf_override_return` against a function that was in the allowlist on the build kernel but not on the deploy kernel would break noisily if the check moved to load time. The silence preserves forward compatibility at the cost of defender legibility.
-
-The trace-level evidence of the silent no-op is subtle. `bpftool prog profile id <n>` gives per-program invocation counts and cycles. Running this against the kretprobe with the override line and comparing to the same program without the override shows that both versions have identical invocation counts and nearly-identical cycle counts (the helper call adds a few cycles but does not change any observable state). The override is as close to a true no-op as a helper invocation can be.
-
-The kernel tracepoint for failed overrides, if one existed, would be useful here. It does not exist. A patch adding such a tracepoint has been discussed on the kernel list but not merged. The argument against is that the existing silence is intentional; the argument for is that defenders want to know when a program attempts an override against a non-allowlisted target. The tradeoff has not produced a change in the code.
-
-Until and unless that changes, the only way to detect an attempted override in the current kernel is to read the BPF program's bytecode. `bpftool prog dump xlated id <n>` produces a disassembly; `bpftool prog dump jited id <n>` produces the JIT output. Scanning the xlated output for `call bpf_override_return#145` (helper ID 145 on 6.12) finds every program that uses the helper. Cross-referencing with the attach target tells the defender whether the attempt would succeed.
-
-## Observation as its own primitive
-
-Even without the override, the kprobe stream is valuable. Every capability check in the system, with per-syscall granularity, with the full argument set, streamable to a userspace consumer. That is not a small thing.
-
-The concrete use cases:
-
-**Compliance monitoring.** A compliance framework that requires auditing of privileged operations can consume the ringbuf and record every `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, `CAP_SYS_PTRACE` check. The resulting audit trail is richer than what `auditd` provides because it includes denied checks — the ones where the process attempted a privileged operation and was refused. `auditd` typically records only syscall outcomes; the kprobe records the decision point.
-
-**Anomaly detection.** The steady-state pattern of capability checks on a given service is stable. A Postgres server's `cap_capable` stream is dominated by a few specific bits being checked at startup and a minimal set during steady state. A sudden appearance of unusual capabilities being checked is a signal. The primitive is cheap enough (microseconds of overhead per check) that running it continuously on every production host is feasible.
-
-**Container introspection.** Inside a container, the kprobe sees capability checks across the containment boundary — checks made by the container's process plus checks the kernel makes on that process's behalf. A container monitoring tool can use the stream to build a per-container capability profile and flag containers that request capabilities beyond their declared grant. This is particularly valuable in multi-tenant clusters.
-
-**Debugging least-privilege grants.** An application trying to run under the narrowest possible capability set can iterate: attach the probe, exercise the application, observe which capabilities are actually checked, grant exactly those. The stream gives you an exact lower bound on the capability set the application needs. This is a positive use of the primitive — the same sensor that an attacker uses for surveillance is a developer's least-privilege debugging aid.
-
-**Detecting setuid abuse.** A process that is running with `CAP_SYS_ADMIN` because of a setuid binary (SETUID_DUMPABLE) shows a specific signature: capability checks at the top of a fresh exec, followed by work that uses the granted capabilities. A defender who sees a non-setuid process that nonetheless produces this signature is looking at either a legitimate process with ambient capabilities or a suspicious privilege escalation.
-
-**Per-container capability budgeting.** In a Kubernetes cluster, each pod has a declared capability set in its securityContext. The kprobe stream can be partitioned by the kernel-side pid-namespace ID and correlated with the container's namespace to produce per-container capability usage. A pod that declares `CAP_NET_ADMIN` but never actually uses it is a candidate for capability reduction; a pod that declares a narrow set but is observed requesting capabilities outside that set is either misconfigured or running unexpected code.
-
-This is the feed Chapter 3 (audit exfil) consumes. The same ringbuf shape, streaming the same data, is the input to a covert-channel exfiltration primitive. The primitive's use depends on the consumer; the sensor itself is neutral. Chapter 16 (seccomp sidechannel) uses a related primitive: observing which syscalls pass seccomp's filter lets a profile be built without needing to reverse seccomp's ruleset directly.
-
-An attacker-oriented use case deserves mention because it is the dual of the debugging use case. A `cap_capable` stream from a running observability agent gives the attacker a map of the host's privileged-operation topology: which processes request which capabilities, at what rate, with what arguments. This is reconnaissance data that is hard to get by other means. A process like `systemd-logind` has a characteristic capability-check fingerprint; a Kubernetes kubelet has another. The fingerprints are distinctive enough that an attacker with a few minutes of capture can infer the host's major resident services without touching any traditional enumeration API.
-
-The defense against the attacker use case is the same as the defense against the sensor itself: detect the kprobe attachment. If the defender sees a kprobe on `cap_capable` that is not part of their known observability stack, the sensor is an attacker's reconnaissance tool regardless of what it is being used for. The detection does not depend on the consumer's intent.
-
-## LSM BPF as the supported path
-
-If what you want is actual enforcement rather than observation, `CONFIG_BPF_LSM=y` is the supported path. On a kernel where the config is enabled, a BPF program can register as an LSM and return a verdict on each hook invocation.
+The uid-0 guard lives just inside the hook:
 
 ```c
-SEC("lsm/file_permission")
-int BPF_PROG(lsm_file_permission, struct file *file, int mask)
-{
-    // return 0 to allow, or a negative errno to deny
-    if (is_sensitive(file))
-        return -EACCES;
-    return 0;
+unsigned long long uid_gid = bpf_get_current_uid_gid();
+unsigned int uid = uid_gid & 0xffffffff;
+if (uid == 0)
+    return ret;
+```
+
+Flipping a root-side `-EACCES` is almost always a bad idea. Root's denials on `inode_permission` tend to come from LSMs that have a specific reason — SELinux saying "this type cannot open that type," AppArmor enforcing a profile, the capability module refusing an operation the task lacks a capability for. Overriding those breaks system services in ways that are loud, confusing, and not what the PoC is trying to demonstrate. The demo targets an unprivileged user (`t01lsm` in the trigger), so the guard is a safety rail, not a correctness constraint. Drop it and the program flips root denials too; I would not recommend it.
+
+The flip itself:
+
+```c
+int flipped = 0;
+int new_ret = ret;
+if (ret != 0) {
+    new_ret = 0;  // flip denial to allow
+    flipped = 1;
 }
 ```
 
-This works. The program attaches via the `BPF_LSM_MAC` program type, the verifier validates it, and the LSM chain includes it in the decision. The program's verdict is combined with the statically-compiled LSMs in the usual all-must-grant way.
+Three lines. `ret` is the verdict the kernel handed us; if it is non-zero the access was going to be denied; we set `new_ret` to `0`. The `flipped` flag is local state used only to decide whether to emit a ringbuf event — `inode_permission` fires thousands of times per second on a busy system, and emitting on every call fills a 256 KB ringbuf in milliseconds. The PoC only emits on actual flips, which turns the trace from noise into evidence.
 
-The sleepable vs non-sleepable distinction matters here. Non-sleepable LSM programs (`SEC("lsm/...")`) run in atomic context and cannot call helpers that may sleep. Sleepable LSM programs (`SEC("lsm.s/...")`) can call `bpf_d_path`, `bpf_copy_from_user`, and other helpers that may block. But only specific hooks are sleepable — the hook has to be defined in a context where sleeping is safe.
+At the bottom of the function:
 
-My first attempt at an LSM hook for this chapter used `SEC("lsm.s/file_permission")`. The attach failed with `not sleepable`. I read the kernel's `CONFIG_BPF_LSM` table of hook sleepability and confirmed that `file_permission` runs in a context that cannot block. Dropping the `.s` to get `SEC("lsm/file_permission")` let the program attach.
-
-The pattern generalizes:
-
-- **Use `SEC("lsm/hookname")`** for hooks where you only need to inspect pointer arguments and return a verdict. No `bpf_d_path`, no `bpf_copy_from_user`.
-- **Use `SEC("lsm.s/hookname")`** for hooks where you need to dereference user-space pointers, resolve paths, or do other work that may sleep. Only works for hooks the kernel has declared sleepable.
-
-A mismatch produces a specific error. If you use `.s` on a non-sleepable hook, attach returns `-EINVAL` with the kernel log saying the hook is not sleepable. If you use a helper like `bpf_d_path` in a non-sleepable context, the verifier rejects the program at load time with a helper-context mismatch.
-
-The LSM BPF path is the supported one, and it is also the one that defenders can trivially detect. `bpftool prog show --type lsm` lists every LSM BPF program. The attach is logged by `auditd` if the distribution's audit rules cover `AUDIT_BPF_PROG_LOAD`. There is no covert LSM BPF attachment; the subsystem is explicit by design.
-
-This is in contrast to kprobe-based observation, which is harder to distinguish from legitimate observability tooling. An LSM BPF program is an enforcement point; a kprobe is a measurement point. A defender can reasonably be strict about LSM BPF programs (allowlist the specific ones their security team has audited) without affecting their observability stack.
-
-One more LSM BPF note. The hooks a BPF program can attach to are defined in `include/linux/lsm_hook_defs.h`. The list is long — roughly 272 hooks on 6.12 — but the BPF-accessible subset is bounded by the BTF resolution step. A hook that is compiled in but whose BTF does not resolve (because of a configuration mismatch between the kernel and the BPF program's built BTF) will fail attach with `ENOENT`. This is a common failure mode for BPF LSM programs distributed as a single binary across multiple kernel versions; the usual fix is CO-RE with explicit BTF field relocations.
-
-The sleepable hook set, as of 6.12, includes `file_open`, `bprm_check_security`, `inode_getattr`, and a handful of others. The non-sleepable set is much larger. A program that wants to use `bpf_d_path` to resolve a file path is restricted to the sleepable hooks; a program that only needs pointer equality checks can use either. For `cap_capable`'s LSM analog (`capable`), the hook is non-sleepable on 6.12.
-
-## Other decision points
-
-Same pattern applies to the LSM hook surface. `security_file_permission`, `security_bprm_check`, `security_inode_getattr` — all of them are kprobe-attachable and give you a view into the decision the kernel is about to make. On a kernel with `CONFIG_BPF_LSM=y` you can additionally attach sleepable or non-sleepable LSM programs via `SEC("lsm/...")`, which gives you a supported override path.
-
-Seccomp is a different story. Seccomp runs before the syscall dispatch reaches most BPF attach points, so a kprobe on `__x64_sys_openat` sees the call only if seccomp has already allowed it. You cannot use kprobes to bypass seccomp. You can use them to watch what gets through.
-
-## Detection signatures
-
-Anything an auditor runs will find this. The primitive is entirely legible to a defender who knows what to look for. This section walks through the specific invocations and their expected output, so that a defender can build detection rules directly from the text.
-
-The first detection layer is `bpftool`. Running `bpftool prog show` lists every loaded BPF program with its type, attach target, and load time:
-
-```bash
-# bpftool prog show
-52: kprobe  name kp_cap  tag 1a2b3c4d5e6f7890  gpl
-    loaded_at 2025-01-31T14:22:08+0000  uid 0
-    xlated 248B  jited 320B  memlock 4096B  map_ids 14,15,16
-    btf_id 42
-53: kprobe  name kr_cap  tag 2b3c4d5e6f789012  gpl
-    loaded_at 2025-01-31T14:22:08+0000  uid 0
-    xlated 312B  jited 400B  memlock 4096B  map_ids 14,15,16
+```c
+return new_ret;
 ```
 
-The attach target is not in `prog show` output directly. To see it:
+That is the fmod_ret replacement. Control returns from the BPF trampoline back into the kernel's LSM machinery with `new_ret` as the verdict. `do_inode_permission` sees a `0`, `vfs_read` proceeds into the actual filesystem read path, and the bytes come back to the caller. No illusion, no forged payload, no userspace fiction: the kernel does the read.
 
-```bash
-# bpftool perf show
-pid 1234  fd 7: prog_id 52  kprobe  func cap_capable  offset 0
-pid 1234  fd 8: prog_id 53  kretprobe  func cap_capable  offset 0
+The event emit path is there for observability — it reads the dentry via a couple of `BPF_CORE_READ` hops to recover the filename, stashes it in a 32-byte buffer, and submits the ringbuf record. The fields are `pid`, `tgid`, `comm`, `hook` (hardcoded to `1` because this program only has one hook), `orig_ret`, `flipped`, `mask` (the `MAY_READ` / `MAY_WRITE` bitmask from the hook's second argument), and `fname`. That is what the loader prints on stdout when it sees a flip.
+
+## The loader and the target-tgid arming
+
+The userspace loader is in `ch01-mirror-controls-lsm.c`, about 114 lines. The argument parsing is the interesting part:
+
+```c
+while ((c = getopt(argc, argv, "t:ah")) != -1) {
+    switch (c) {
+    case 't':
+        if (ntargets < 1024) targets[ntargets++] = atoi(optarg);
+        break;
+    case 'a': wildcard = 1; break;
+    default: usage(argv[0]); return c == 'h' ? 0 : 2;
+    }
+}
 ```
 
-The `kretprobe func cap_capable` line is the defender's smoking gun. A legitimate observability tool attaching to `cap_capable` is a valid signature; the defender's job is to know whether their observability tool does this.
+Two modes. `-t <tgid>` adds a specific TGID to the target list and can be repeated up to 1024 times. `-a` turns on wildcard mode, which in this PoC means "flip denials for every non-root caller." After the LSM-active check, after `open_and_load`, the loader arms the map:
 
-The second detection layer is `/sys/kernel/debug/kprobes/list`:
-
-```bash
-# cat /sys/kernel/debug/kprobes/list
-ffffffff812a0b40  k  cap_capable+0x0    [FTRACE]
-ffffffff812a0b40  r  cap_capable+0x0
+```c
+if (wildcard) {
+    unsigned int z = 0, one = 1;
+    bpf_map__update_elem(s->maps.target_tgids, &z, sizeof(z), &one, sizeof(one), BPF_ANY);
+    fprintf(stderr, "[ch01-lsm] mode=wildcard\n");
+}
+for (int i = 0; i < ntargets; i++) {
+    unsigned int t = targets[i], one = 1;
+    bpf_map__update_elem(s->maps.target_tgids, &t, sizeof(t), &one, sizeof(one), BPF_ANY);
+}
 ```
 
-Two lines, one for the kprobe (`k`) and one for the kretprobe (`r`). Both at offset 0 of `cap_capable`. The `[FTRACE]` annotation indicates the kprobe is using the ftrace infrastructure rather than a software breakpoint; this is the common case for modern kernels.
+Wildcard mode writes the sentinel entry at key `0` — which is the key `is_target()` checks when the per-TGID lookup misses. Targeted mode writes each TGID as its own key with a nominal value of `1`. The value is not read; the presence of the entry is the signal. The arming happens *before* `ch01_mirror_controls_lsm_bpf__attach(s)` so that by the time the program is wired to the hook, the filter map already has its contents. Attach-then-arm would leave a race window where the hook fires but the filter has not been populated yet.
 
-The third detection layer is `auditd`. With the default audit ruleset, BPF program load events are not captured. Adding the rule explicitly:
+The attach call itself is where the kernel version and LSM-config requirements land:
 
-```bash
-# auditctl -a always,exit -F arch=b64 -S bpf -k bpf_syscall
+```c
+int err = ch01_mirror_controls_lsm_bpf__attach(s);
+if (err) {
+    fprintf(stderr, "[ch01-lsm] CH01_SKIP reason=\"attach: %s\"\n", strerror(-err));
+    ch01_mirror_controls_lsm_bpf__destroy(s);
+    return 1;
+}
 ```
 
-produces events like:
+If the kernel does not support fmod_ret on `inode_permission`, or if `CAP_SYS_ADMIN` is not held, or if BPF LSM is off in a way the earlier `/sys/kernel/security/lsm` check did not catch, this is where the PoC gives up. The error from libbpf surfaces the errno; the loader emits a `CH01_SKIP` line and returns. Again, no pretending: if the attach does not take, the chapter does not run.
 
-```
-type=SYSCALL msg=audit(1706709728.445:1234): arch=c00000b7 syscall=280
-  success=yes exit=7 a0=5 a1=7ffe... a2=90 items=0 ppid=1200 pid=1234
-  auid=1000 uid=0 gid=0 comm="loader" exe="/tmp/ch01-loader"
-  key="bpf_syscall"
-```
+Everything after attach is plumbing: install a SIGINT/SIGTERM handler, create a ring buffer consumer with `ring_buffer__new` on the `events` map fd, and poll it in a loop with a 200 ms timeout until signaled. Each event that comes back with `flipped != 0` is printed as a `FLIP` line and the `flips` counter is incremented. When the loop ends, the final `[ch01-lsm] flips=%llu` count is written to stderr.
 
-`syscall=280` is `bpf(2)` on aarch64. The `a0` field contains the `bpf_cmd` — `5` is `BPF_PROG_LOAD`. A defender with this rule in place sees every program load with the calling process's `comm`, `exe`, `pid`, and `auid`. This is the single most useful rule for BPF-based detection.
+The trigger script demonstrates the effect in the simplest possible way. It creates an unprivileged user `t01lsm`, runs `su t01lsm -c 'cat /etc/shadow 2>&1 | head -1; echo ret=$?'` as a baseline (expect `Permission denied` and a non-zero return), starts the loader with `-a` in the background, waits a second, and runs the same `cat` again. On a BPF-LSM-enabled kernel, the second read succeeds. The loader's stdout log shows one or more `[ch01-lsm] FLIP pid=... file=shadow mask=4 orig=-13` lines. `orig=-13` is `-EACCES`; `mask=4` is `MAY_READ`.
 
-The fourth detection layer is process ancestry. The `bpf(BPF_PROG_LOAD)` call must come from somewhere. `execve` history via `auditd`, or a BPF-based execve tracer, gives the defender the process that loaded the program. A legitimate observability DaemonSet loads programs from a known binary path; an anomalous loader from `/tmp/`, `/dev/shm/`, or `/home/` is a signal.
+## Why this is not an illusion
 
-The fifth detection layer is baseline-diff. The steady-state set of loaded BPF programs on a production host changes slowly. A tool that snapshots `bpftool prog show --json-pretty` hourly and diffs against the previous snapshot catches new programs minutes after they load:
+The distinction between this PoC and the kprobe variant (sidebar below) is worth being precise about. When the fmod_ret hook returns `0`, the kernel's LSM dispatcher treats the hook chain as having verdicted "allow." `do_inode_permission` passes through normally. `vfs_read` continues into the real file_operations `->read_iter`, which for an ext4 inode traverses real page cache and real on-disk blocks. The bytes that the `read(2)` syscall returns to the caller are the actual bytes of `/etc/shadow` as they exist in the filesystem at that moment. Not a template, not a synthetic payload, not a modified version intercepted in userspace.
 
-```bash
-# Capture baseline
-bpftool prog show --json > /var/lib/bpf-baseline/$(date +%Y%m%d-%H).json
+The caller's subsequent code then runs against that real state. If `cat` pipes the contents into `head -1`, `head` sees the real first line. If the program is `getpwnam` parsing the file, it gets real entries. If the process writes the bytes into a pipe or a socket, what comes out the other end is what was on disk. There is no post-processing layer inside the kernel that would re-redact or rewrite the data — the hook said "allow," and the read path ran as if the original DAC check had never failed.
 
-# Diff
-diff <(jq -S . /var/lib/bpf-baseline/20250131-14.json) \
-     <(jq -S . /var/lib/bpf-baseline/20250131-15.json)
-```
+That is what makes this a real override. The kprobe-plus-signal variant cannot say this, as the sidebar explains. The override changes kernel state (the return value of a security hook); everything downstream flows from that changed state through the normal code paths.
 
-Any new program with `"type": "kprobe"` and `"attach_name": "cap_capable"` in the diff is this chapter's signature. The same diff catches Chapter 2, Chapter 3, Chapter 8, and any other chapter that attaches to a specific kernel function.
+## The kprobe-plus-signal variant that does not mutate
 
-The visible artifacts, summarized:
+The first PoC I wrote for this chapter is still in the tree under `ch01-mirror-controls/` (without the `-lsm` suffix). It is a kprobe on `cap_capable` paired with a kretprobe, which is a classic pattern for observing capability decisions, plus a pivot: on denials matching a target TGID the kretprobe calls `bpf_send_signal(SIGUSR1)` to deliver a signal to the caller. I kept it in the repo because the process of building it taught me most of what I know about why capability override does not work from a kprobe. What it does not do is grant the capability. It is not the primary for this chapter anymore.
 
-- `bpftool prog list` output (program type `kprobe`, attach name `cap_capable`).
-- `bpftool perf show` output (the `kretprobe func cap_capable` line).
-- `/sys/kernel/debug/kprobes/list` entries for `cap_capable+0x0`.
-- `/sys/fs/bpf/` pins if the loader pins the program.
-- `AUDIT_BPF_PROG_LOAD` in `auditd` with the `bpf_syscall` key if the rule is set.
-- The process that called `bpf(BPF_PROG_LOAD)` in `execve` history.
-- Baseline-diff of `bpftool prog show` output.
+The original plan was to override the return of `cap_capable` itself using `bpf_override_return(ctx, 0)` in the kretprobe. The program compiles. The verifier accepts it. `bpftool prog show` lists it. `/sys/kernel/debug/kprobes/list` shows the kretprobe attached at `cap_capable+0x0`. The target process runs, `capset` fails with `EPERM`, the ringbuf records `flipped=1` for every denial that matched — and the syscall still returns `EPERM`. The override is a silent no-op.
 
-None of that is hidden by this chapter. Hiding load events is a later problem and lives in its own chapter. The techniques that hide programs from `bpftool` require either a BPF-based rootkit that intercepts `BPF_OBJ_GET_INFO_BY_FD` or a kernel-level modification outside the BPF subsystem; both are out of scope here.
+The mechanism is the `ALLOW_ERROR_INJECTION` allowlist. `bpf_override_return` only takes effect when the target function is annotated `ALLOW_ERROR_INJECTION(fn, ERRNO)` in kernel source. The set of annotated functions is deliberately small and excludes every security-decision function in the tree: `cap_capable`, `security_capable`, `avc_has_perm`, `apparmor_capable`, `security_inode_permission`, and so on. The maintainers' reasoning, when this comes up on the list, is consistent: a BPF override on a decision function is a policy bypass around the LSM architecture, and the LSM architecture is the supported policy layer. BPF LSM is the answer; `bpf_override_return` on `cap_capable` is not.
 
-A defender's operational takeaway: if you do not already have the `auditctl` rule for `syscall=bpf` in your ruleset, add it. If you do not have a baseline-diff job running against `bpftool prog show`, add one. Both are cheap and both catch this chapter and most of the rest.
+The runtime check is in the kprobe dispatch path: `bpf_override_return` stores the desired return value in per-kprobe state, and then the kprobe return path checks whether the target function is on the error-injection list before substituting the register. `cap_capable` fails that check and the stored override is discarded with no error, no tracepoint, no dmesg line. The silence is intentional — a program built against a kernel where the function was allowlisted should not fail loudly on a kernel where it is not — but it is also the exact failure mode that makes the technique useless for attack.
+
+Confronted with that, I pivoted to `bpf_send_signal(SIGUSR1)` as the "real effect" instead of an override. The signal does get delivered. The loader's ringbuf records `signal=1` on the events where `bpf_send_signal` returned zero. The target process receives the signal and its signal handler (or the default action) runs. That is a real, observable side effect that originates from kernel-side BPF and lands on a specific userspace process.
+
+But a signal is not a capability grant. The `capset` that triggered the denial still fails with `EPERM`. The subsequent code path in the caller — the one that was guarded by the capability check — does not run. If the original intent was to let an unprivileged process do something privileged, `bpf_send_signal` does not get it there. It demonstrates that a BPF program on a non-allowlisted decision function can still have a side effect; it does not demonstrate capability override. Calling it "mirror controls" in the chapter's sense — a primitive that flips the kernel's verdict — was a stretch, and the LSM PoC is what justifies the chapter title honestly.
+
+If you want to reproduce the negative result yourself, the code is in `ch01-mirror-controls/ch01-mirror-controls.bpf.c`. The loader and trigger there run the same BEFORE/AFTER structure as the LSM PoC but with a `signals=N` count instead of `flips=N`, and the target's privileged operation continues to fail after the signal arrives. It is a fine observation primitive and a fine way to annoy a process. It is not an override.
+
+## Detection
+
+The LSM PoC is entirely legible to a defender who knows what to look for. The attach is declared; the subsystem is explicit by design; there is no covert BPF-LSM attachment.
+
+- `bpftool prog show --type lsm` lists every LSM BPF program. The chapter's program appears as type `lsm` with attach target `inode_permission`.
+- `cat /sys/kernel/debug/tracing/enabled_functions` may show the BPF trampoline at `security_inode_permission`.
+- `auditd` with `-a always,exit -F arch=b64 -S bpf -k bpf_syscall` captures the `BPF_PROG_LOAD` call and the loader's `comm`, `exe`, `pid`, and `auid`.
+- A sudden absence of `-EACCES` denials for a specific process — in `auditd`'s `AVC` records or in application-level error logs — is a behavioral tell, because this program removes the denials rather than masking them.
+- Baseline-diff of `bpftool prog show --json` catches the new program within one diff interval.
+
+Any defender who is already watching BPF program loads — which, if they care about BPF at all, they are — will see this one. The primitive is not stealthy. It is powerful because it is supported, not because it is hidden. Stealth is a later chapter's problem.
 
 ## Harness run and markers
 
-The harness runs the chapter's trigger and writes two artifacts. The first is the BEFORE/AFTER output on stdout:
+The trigger script's output on a BPF-LSM-enabled host looks roughly like this:
 
 ```
-[ch01] BEFORE: target_tgid=4422 capset(CAP_SYS_ADMIN) -> EPERM
-[ch01] CH01_WEAPON_PROVEN flips=12
-=== CH01_WEAPON_PROVEN flips=3 signals=3 ===
+=== baseline (no BPF) ===
+cat: /etc/shadow: Permission denied
+ret=1
+=== starting LSM loader (--all) ===
+=== with BPF LSM fmod_ret override: read should succeed ===
+root:!:19000:0:99999:7:::
+ret=0
+=== loader log ===
+[ch01-lsm] BPF LSM is active — proceeding
+[ch01-lsm] active — file_permission denials will be flipped
+[ch01-lsm] FLIP	pid=4422	comm=cat	file=shadow	mask=4	orig=-13
+[ch01-lsm] flips=1
 ```
 
-The `flips=3 signals=3` marker — emitted verbatim by `trigger.sh` inside `=== … ===` delimiters — is the count of denials the BPF program observed for the target tgid *and* the count of `SIGUSR1`s the kretprobe successfully delivered back into the caller via `bpf_send_signal`. The override attempt is silently no-opped (`cap_capable` is not on the error-injection allowlist on linuxkit 6.12), so the deny still lands at the API boundary. The active effect is the signal: the caller receives `SIGUSR1` on every denied operation.
+The load-bearing lines are the two `cat /etc/shadow` attempts. The first returns `ret=1` and the "Permission denied" message the kernel's DAC check produced. The second returns `ret=0` and the actual first line of `/etc/shadow`. Between the two, the only thing that changed is that the BPF LSM program is now attached with wildcard targeting. The loader's `FLIP` line records the event that corresponds to the successful read: `mask=4` is `MAY_READ`, `orig=-13` is `-EACCES`, `file=shadow` is the dentry name the program recovered via `BPF_CORE_READ`.
 
-The second artifact is the live ringbuf trace the loader streams to stdout:
+On a host where BPF LSM is not active, the trigger emits its skip line and exits:
 
 ```
-[ch01] tag=FLIP	pid=4422	comm=test01	cap=21	orig=-1	signal=1
-[ch01] tag=FLIP	pid=4422	comm=test01	cap=21	orig=-1	signal=1
+=== CH01_SKIP reason="BPF LSM not active in /sys/kernel/security/lsm" ===
 ```
 
-Each record is a single `cap_capable` invocation for the target TGID. `cap=21` is `CAP_SYS_ADMIN`. `orig=-1` is `-EPERM`. `signal=1` means `bpf_send_signal(SIGUSR1)` returned 0 for this event — the signal actually reached the caller. The handler is a plain `printf` producing tab-separated text; there is no JSONL writer and no `results/` directory — the harness's single `/tmp/proof-result.json` is the only persistent artifact.
+That is the honest outcome on linuxkit, on a default Debian VM, and on any other host where the kernel was not built with `CONFIG_BPF_LSM=y` and booted with `bpf` in the LSM list.
 
-A reader reproducing the chapter should expect these exact field shapes; the exact numeric counts will vary with the test workload but the structure is fixed.
+## Running the harness yourself
 
-## Related primitives and where they go
+For readers who want to reproduce the chapter's output on a host that supports BPF LSM:
 
-The observation channel built here feeds several later chapters directly.
+```bash
+cd dBPF-pocs
+# from a Fedora 38+ host, or a VM booted with lsm=...,bpf
+cd pocs/ch01-mirror-controls-lsm
+make
+sudo ./build/ch01-mirror-controls-lsm -a &     # wildcard, background
+sudo bash trigger.sh
+```
 
-Chapter 3 (audit exfil) uses the same kprobe/kretprobe pattern against a wider set of decision functions — `security_file_open`, `security_socket_connect`, `security_ptrace_access_check` — and streams the combined output over a covert channel. The plumbing is the same; the consumer is different.
-
-Chapter 8 (cred inspection) goes one layer deeper. Instead of just reading the `cap` argument, it dereferences the `cred` pointer to get the caller's full capability set, UID, GID, and namespace hierarchy. The verifier accepts this because `const struct cred *` is BTF-known and `bpf_probe_read_kernel` is a valid dereference path. The result is a much richer per-check record.
-
-Chapter 16 (seccomp sidechannel) uses a related pattern against seccomp's filter decision. Instead of attaching to a decision function, it attaches to the syscall entry and correlates with the seccomp audit record. The consumer can reconstruct which syscalls the process attempted and which seccomp allowed. This is the inverse of the capability-check feed: where this chapter sees capability requests, Chapter 16 sees syscall requests.
-
-Chapter 2 (the first actual override) uses the same verifier path but against a function that *is* in the error-injection allowlist. The contrast with this chapter is deliberate: Chapter 1 shows the pattern that does not work; Chapter 2 shows the pattern that does. Reading them in order makes the allowlist's significance concrete.
-
-## Variations that did not make it into the POC
-
-Three variations I tried and discarded are worth noting, so a reader does not repeat the work.
-
-**Attaching to `security_capable` instead of `cap_capable`.** The higher-level dispatcher would, in theory, give the same coverage with fewer probes. In practice, `security_capable` is short and heavily inlined; the compiler elides it in some configs, and the kprobe attach point disappears. On 6.12 linuxkit, the function is present in `/proc/kallsyms` but the kprobe attach fails silently for a subset of call paths because the call site bypasses the symbol. `cap_capable` is more reliable because it is less inlined.
-
-**Using fentry instead of kprobe.** `SEC("fentry/cap_capable")` is a newer attach mechanism that avoids the kprobe software-breakpoint path. It should, in principle, be faster. On 6.12 the attach works and the program runs, but `bpf_override_return` is not available from fentry program contexts — the helper is specific to kprobes. For an observation-only build, fentry is a fine substitute; for this chapter's "try to override, observe the silent no-op" narrative, the kprobe path is required.
-
-**Using a per-CPU array instead of a hash map for `in_flight`.** Per-CPU arrays avoid the concurrency question entirely because each CPU sees only its own entry. For `cap_capable` specifically, this does not work: a thread may migrate between CPUs between the kprobe and the kretprobe (the scheduler can preempt inside the function), and the return side would look up a different CPU's entry. The hash map keyed on `pid_tgid` is the shape that survives migration.
-
-Each of these variations is covered in more detail in a later chapter. Chapter 2 is the fentry example; Chapter 8 is the per-CPU array example; the `security_capable` vs `cap_capable` tradeoff shows up again in Chapter 13's LSM walk.
-
-## What this chapter actually gives you
-
-A reliable observation channel on capability decisions, with the pair-probe plumbing worked out. Override is available in theory and mostly unavailable in practice. Treat the code as a telemetry primitive; upgrade it to enforcement only on kernels where you have checked `ALLOW_ERROR_INJECTION` for the target and `CONFIG_BPF_KPROBE_OVERRIDE` in the running config.
-
-The broader lesson is about the shape of BPF's safety model. The verifier accepts a program that "tries to override" a decision function because the verifier is checking memory safety, not policy. The runtime silently discards the override because the allowlist is where policy lives. Both checks are load-bearing; neither is sufficient alone. A hardened kernel that moved the allowlist check into the verifier would close the failure mode at load time, at the cost of binary compatibility with programs built against different kernel configs. Distributions have not made that choice. The silent-failure behavior is the current equilibrium.
-
-For a defender, the equilibrium is acceptable because every program load is legible. For an attacker, the equilibrium means that any override against a decision function is a dead end. The primitive that remains — the observation channel — is still useful, but it is a telemetry primitive, not an enforcement bypass. Chapter 2 is where the enforcement bypass actually works.
-
-## Appendix: a complete walk of the verifier's refusal paths
-
-Because this chapter's title suggests "mirror controls" and the narrative pivots on what the verifier will and will not accept, it is worth cataloging the specific verifier refusals I hit while writing the POC. Each refusal is a small piece of the verifier's shape; together they sketch the boundary.
-
-**Refusal 1: `SEC("lsm.s/capable")`.** The kernel's hook sleepability table has `capable` marked non-sleepable. Attempting to attach a sleepable LSM program fails with `libbpf: prog 'lsm_capable': failed to attach: -EINVAL` and a kernel log line noting the hook is not sleepable. Fix: remove the `.s`.
-
-**Refusal 2: `bpf_override_return` from fentry.** The helper is restricted to kprobe program contexts. A fentry program that uses it fails verification with `unknown func bpf_override_return#145`. The helper ID is valid globally; the verifier's helper-context check rejects the invocation because fentry is not a permitted caller. Fix: switch to kprobe/kretprobe for any code path that needs override.
-
-**Refusal 3: Direct dereference of `cred->cap_effective`.** The verifier knows `cred` is a `const struct cred *` and knows `cap_effective` is a `kernel_cap_t`. Direct dereference (`cred->cap_effective.cap[0]`) without `bpf_probe_read_kernel` is rejected because the pointer is typed `PTR_TO_BTF_ID` and the verifier requires explicit probe reads for BTF-pointer dereferences in pre-5.15 kernels. On 6.12, direct dereference works for many BTF pointers thanks to the trusted-pointer work, but the verifier still enforces a stricter rule for cross-structure traversal. Fix: use the `BPF_CORE_READ` macro, which does the right thing across kernel versions.
-
-**Refusal 4: Unbounded map iteration.** An early version of the code tried to iterate the `target_tgids` map to find whether the current TGID was a target. The verifier rejected the loop because `bpf_for_each_map_elem` was not yet available, and the alternative (a fixed-size `#pragma unroll`) would have required a compile-time upper bound on the map size. Fix: hash-map lookup with `bpf_map_lookup_elem`, which is O(1) and requires no iteration.
-
-**Refusal 5: Use of helper `bpf_get_current_task` without BTF.** The helper returns a `struct task_struct *`, which is a BTF-known pointer. If the BPF program's object was built against BTF that did not include `task_struct`, the return type is `void *` and subsequent dereferences fail verification. Fix: generate the program's BTF with the kernel's `vmlinux.h` and compile with `-g`.
-
-Each refusal is specific enough that fixing one does not close the others. The verifier's boundary is not a single rule; it is a collection of rules, each narrowly scoped. A program that satisfies all of them is accepted. This chapter's program satisfies all of them and is accepted. The acceptance does not imply the program is useful; it implies only that it is memory-safe and terminating. The allowlist check is a separate question, resolved at runtime, and the answer for `cap_capable` is: attempt the override, observe the silent no-op, treat the program as telemetry.
-
-## Appendix: running the harness yourself
-
-For readers who want to reproduce the chapter's output:
+Or, under the harness:
 
 ```bash
 cd dBPF-pocs
 docker compose up -d
 docker exec -it dbpf-harness bash
-# inside the container:
-cd /work/pocs/ch01-mirror-controls
+cd /work/pocs/ch01-mirror-controls-lsm
 make
 ./trigger.sh
 ```
 
-The trigger runs the loader, attaches the probes, creates an unprivileged `test01` user, then spawns a Python child as `test01` that tries three operations the capability deny short-circuits: opening `/etc/shadow`, binding TCP port 80, and calling `os.nice(-5)`. The loader observes each deny, delivers `SIGUSR1` back into the child, and emits the `tag=FLIP` line and `CH01_WEAPON_PROVEN flips=N signals=N` marker. The whole run takes about three seconds. There is no JSONL results file — the loader's stdout is the trace.
+The container will most likely print the `CH01_SKIP` line because Docker Desktop's linuxkit VM does not ship `CONFIG_BPF_LSM=y`. To see the override in action, the harness has to run on a kernel that does. The PoC does not pretend otherwise.
 
-Variations to try:
-- Change the target capability from `CAP_SYS_ADMIN` to `CAP_NET_ADMIN` in `trigger.sh` and observe the different cap index (12 instead of 21) in the ringbuf output.
-- Comment out the `bpf_override_return` call in the BPF program, rebuild, and rerun; confirm the `flipped` field is always 0 in the output.
-- Replace `kprobe/cap_capable` with `kprobe/do_unlinkat` in the BPF program, rebuild, and observe that the override-attempt succeeds (subsequent `unlinkat` calls return 0 despite the file being present).
+Variations worth trying on a supported host:
 
-Each variation reproduces a specific claim made earlier in the chapter. Running them in sequence builds the mental model the chapter is trying to convey faster than reading does.
+- Replace `-a` with `-t <tgid>` in the loader invocation and observe that only the specified tgid's reads get flipped. Any other unprivileged process hitting `-EACCES` sees the original deny.
+- Change the target from `/etc/shadow` to another root-only file (`/root/.bashrc`, `/etc/sudoers`) and confirm the flip covers any VFS read, not just a specific path.
+- Add a write attempt (`su t01lsm -c 'echo x > /etc/shadow'`) and observe that `mask=2` (`MAY_WRITE`) flips are also produced — `inode_permission` is the hook for both directions.
+- Comment out the uid-0 guard, rebuild, and watch the system misbehave in creative ways as root-side denials get overridden. I do not recommend running this for more than a few seconds.
 
-## Appendix: cross-architecture notes
+## What this chapter gives you
 
-The POC is built for aarch64. The BPF bytecode itself is architecture-neutral; the JIT translates it to aarch64 at load time. The parts that are architecture-specific are the `PT_REGS_PARM*` macros used to extract kprobe arguments.
+A supported, first-class override primitive for VFS access checks. The BPF LSM fmod_ret path is the answer the kernel maintainers point to whenever someone asks "can I override `cap_capable`?" This chapter is the worked example of taking them at their word: attach to a real LSM hook, return the verdict you want, watch the kernel act on it. The preconditions are real and the PoC is explicit about them — if BPF LSM is not in the LSM list, the chapter skips.
 
-On aarch64, the first four arguments to a function land in `x0` through `x3`, and `PT_REGS_PARM1_CORE(ctx)` through `PT_REGS_PARM4_CORE(ctx)` expand to the corresponding register reads. `cap_capable` takes four arguments, so all four macros are exercised in the POC.
-
-On x86_64, the first six arguments land in `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9` in that order. `PT_REGS_PARM1_CORE(ctx)` through `PT_REGS_PARM4_CORE(ctx)` expand to the corresponding registers. The fourth argument, the `opts` bitmask, is in `rcx` on x86_64 — a register that is not a SysV-ABI "callee-saved" register, and one that is sometimes clobbered by code that appears before the kprobe fires. In practice the value is stable at function entry, and the kprobe sees the correct value.
-
-Porting the POC to x86_64 requires no code change. The `BPF_KPROBE` macro in `bpf_tracing.h` handles the architecture-specific register unpacking; the programmer writes the BPF function as if it took C arguments, and the macro produces the right register reads for the target architecture. A libbpf-based build on x86_64 produces a working loader without further modification.
-
-The harness runs on aarch64 because Docker Desktop on Apple Silicon is the author's development platform. An x86_64 CI build of the same POC is part of the repository's regression test suite and validates that the technique works identically on x86_64. The book's text uses aarch64 conventions because they are what the author was looking at while writing.
-
-## Appendix: the ringbuf consumer shape
-
-The userspace consumer is about 120 lines of C. The core loop:
-
-```c
-static int handle_event(void *ctx, void *data, size_t data_sz) {
-    const struct evt *e = data;
-    fprintf(stdout,
-        "{\"ts\":%ld.%06ld,\"tgid\":%u,\"pid\":%u,\"comm\":\"%.*s\","
-        "\"cap\":%d,\"orig_ret\":%d,\"flipped\":%d}\n",
-        ts.tv_sec, ts.tv_usec, e->tgid, e->pid, 16, e->comm,
-        e->cap, e->orig_ret, e->flipped);
-    return 0;
-}
-
-int main(void) {
-    struct ch01_bpf *skel = ch01_bpf__open_and_load();
-    ch01_bpf__attach(skel);
-    struct ring_buffer *rb = ring_buffer__new(
-        bpf_map__fd(skel->maps.events), handle_event, NULL, NULL);
-    while (!exiting)
-        ring_buffer__poll(rb, 100 /* ms */);
-    ring_buffer__free(rb);
-    ch01_bpf__destroy(skel);
-    return 0;
-}
-```
-
-The consumer is a tight loop around `ring_buffer__poll`. Each poll processes up to the full ringbuf contents and returns. The 100-millisecond timeout bounds latency; a hotter workload can use a 1ms timeout or a blocking variant.
-
-The JSONL output format is chosen because it is trivially parseable by downstream tools. `jq` can filter it; `grep` can match specific fields; a Python consumer can `json.loads` each line. A binary protocol would be faster on the producer side but harder for ad-hoc analysis. The POC prioritizes legibility for a book reader over performance for a production deployment.
-
-A production consumer would typically add: an output rotation mechanism, a structured schema with field ordering stable across versions, backpressure handling for the case where the consumer cannot keep up with the ringbuf rate, and integration with a time-series store or log aggregator. None of these are in the POC because none of them are load-bearing for the book's claims.
-
-## Appendix: measured overhead
-
-A final note on what this costs at runtime. The kprobe/kretprobe pair on `cap_capable` adds approximately 800 nanoseconds per invocation on the linuxkit 6.12 test VM, measured as the difference between `perf stat -e cycles` on a workload with the probe loaded and without. The JIT-compiled BPF program itself runs in roughly 150 cycles; the rest is the kprobe fire-path overhead (software breakpoint, context save, helper dispatch, context restore).
-
-On a `capset`-heavy workload, the 800ns per check becomes measurable. A test harness that invokes `capset` in a tight loop observes a 3-5 percent slowdown with the probe loaded. A real workload that calls `capset` incidentally — most services call it at startup and then rarely — observes no measurable slowdown. The probe is cheap enough to run continuously on a production host without budget concerns.
-
-The ringbuf cost is separate. Each ringbuf reservation, write, and submit is roughly 50 cycles on the producer side. The consumer's `ring_buffer__poll` loop does a small amount of work per event (the JSON formatting in the POC is the dominant cost). For 10,000 events per second, the total CPU cost is under 0.1 percent of a single core. The subsystem is designed to be cheap; the primitive inherits that cheapness.
-
-This is the last thing worth saying before moving to Chapter 2. The telemetry primitive built here has essentially zero operational cost, which is why it is the starting point for so many downstream techniques. A sensor that can run continuously, at low overhead, on a production host, producing a full trace of capability decisions, is a foundational capability. What the consumer does with the trace is the next question; this chapter stops at the sensor.
+The broader lesson, and the one the sidebar exists to reinforce: decision functions in the kernel are not overridable from a kprobe. `bpf_override_return` is for error injection, not policy bypass, and the allowlist is where that distinction is enforced. If you want to change a security decision, you attach as an LSM. If you attach as a kprobe, the best you can do is observe — or, as the kprobe variant demonstrates, pivot to a side effect like `bpf_send_signal` that does not actually change the decision. Chapter 2 moves to a function that *is* on the error-injection allowlist, where the kprobe override path does work, and the contrast with this chapter's sidebar is the point.
