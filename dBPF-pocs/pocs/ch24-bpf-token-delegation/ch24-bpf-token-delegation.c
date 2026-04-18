@@ -564,20 +564,27 @@ static int open_perf_tracepoint(uint64_t tp_id)
  * placeholder resolves to the same runtime map_fd. */
 static int patch_map_fds(struct bpf_insn *insns, size_t cnt, int map_fd)
 {
+    /* Explicit stride loop: single-slot insns advance by 1, LD_IMM64
+     * (opcode 0x18) advances by 2 regardless of whether it was a map-fd
+     * placeholder. This was previously written as a for-loop with an
+     * extra `i++` at the body bottom + `continue` above it; correct but
+     * invited misreads. */
     int patched = 0;
-    for (size_t i = 0; i + 1 < cnt; i++) {
+    size_t i = 0;
+    while (i + 1 < cnt) {
         struct bpf_insn *ins = &insns[i];
-        /* LD_IMM64 opcode = 0x18, occupies two 8-byte slots. */
-        if (ins->code != (BPF_LD | BPF_DW | BPF_IMM)) continue;
-
-        if (ins->src_reg == BPF_PSEUDO_MAP_FD ||
-            ins->src_reg == BPF_PSEUDO_MAP_IDX) {
-            ins->src_reg = BPF_PSEUDO_MAP_FD;
-            ins->imm     = map_fd;
-            insns[i + 1].imm = 0; /* high half: fd fits in 32 bits */
-            patched++;
+        if (ins->code == (BPF_LD | BPF_DW | BPF_IMM)) {
+            if (ins->src_reg == BPF_PSEUDO_MAP_FD ||
+                ins->src_reg == BPF_PSEUDO_MAP_IDX) {
+                ins->src_reg = BPF_PSEUDO_MAP_FD;
+                ins->imm     = map_fd;
+                insns[i + 1].imm = 0; /* high half: fd fits in 32 bits */
+                patched++;
+            }
+            i += 2;
+        } else {
+            i += 1;
         }
-        i++; /* skip the paired second slot */
     }
     return patched;
 }

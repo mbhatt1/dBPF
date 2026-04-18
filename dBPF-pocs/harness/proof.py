@@ -415,8 +415,23 @@ def check_hooks(state: RunState):
 
 
 def spawn(cmd: list[str], **kw) -> subprocess.Popen:
+    # start_new_session=True puts the child into its own process group so that
+    # cleanup can kill grandchildren (e.g., trigger.sh → loader) atomically.
+    kw.setdefault("start_new_session", True)
     return subprocess.Popen(cmd, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, **kw)
+
+
+def _terminate_group(proc: subprocess.Popen, sig: int) -> None:
+    """Signal the whole process group. Falls back to the single process if
+    start_new_session wasn't honored (older kernels, edge cases)."""
+    try:
+        os.killpg(os.getpgid(proc.pid), sig)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.send_signal(sig)
+        except (ProcessLookupError, OSError):
+            pass
 
 
 def dut_python_child() -> tuple[subprocess.Popen, int, str]:
@@ -454,6 +469,7 @@ sys.stderr.write("child_done\\n")
     p = subprocess.Popen(
         ["su", "dut01", "-s", "/bin/bash", "-c", "exec python3 -u -c " + shlex.quote(script)],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        start_new_session=True,
     )
     # Read pid line from stderr with a real timeout via select.
     import select
@@ -474,6 +490,19 @@ sys.stderr.write("child_done\\n")
             break
     if pid is None:
         pid = p.pid
+    # Drain stderr in the background so the 64 KB pipe buffer can never fill
+    # and deadlock the child on write. We ignore the contents — the pid was
+    # already harvested above.
+    def _drain_stderr(f):
+        try:
+            for _ in iter(f.readline, b""):
+                pass
+        except (OSError, ValueError):
+            pass
+        finally:
+            try: f.close()
+            except Exception: pass
+    threading.Thread(target=_drain_stderr, args=(p.stderr,), daemon=True).start()
     return p, pid, fifo
 
 
@@ -520,9 +549,19 @@ def run_poc(state: RunState, refresh):
     refresh()
     d = POCS_DIR / p.dir
     if p.pre_cmd:
-        r = subprocess.run(p.pre_cmd, capture_output=True, text=True, cwd=d)
-        for ln in (r.stdout + r.stderr).splitlines():
-            state.log.append(f"pre | {ln}")
+        try:
+            r = subprocess.run(p.pre_cmd, capture_output=True, text=True, cwd=d,
+                               timeout=30)
+            for ln in (r.stdout + r.stderr).splitlines():
+                state.log.append(f"pre | {ln}")
+        except subprocess.TimeoutExpired as e:
+            state.log.append(f"pre | TIMEOUT after 30s: {' '.join(p.pre_cmd)}")
+            if e.stdout:
+                for ln in e.stdout.decode(errors="replace").splitlines():
+                    state.log.append(f"pre | {ln}")
+            if e.stderr:
+                for ln in e.stderr.decode(errors="replace").splitlines():
+                    state.log.append(f"pre | {ln}")
     loader = d / "build" / p.dir
 
     loader_proc = None
@@ -575,19 +614,29 @@ def run_poc(state: RunState, refresh):
             time.sleep(0.25)
 
     finally:
-        # Graceful shutdown: SIGINT, wait, then SIGKILL + reap.
+        # Graceful shutdown: SIGINT to the whole process group so that a
+        # trigger-runs-loader trigger's grandchildren (the actual loader bash
+        # spawned) are signaled, not just the bash wrapper. Then escalate to
+        # SIGKILL on the group. Always reap with a bounded wait to prevent
+        # zombies across 23 POCs when a child is wedged in D-state.
         for x in (loader_proc, trig_proc):
             if x and x.poll() is None:
-                x.send_signal(signal.SIGINT)
+                _terminate_group(x, signal.SIGINT)
                 try:
                     x.wait(timeout=3)
                 except subprocess.TimeoutExpired:
-                    x.kill()
-                    x.wait()  # reap to avoid zombie
+                    _terminate_group(x, signal.SIGKILL)
+                    try:
+                        x.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        state.log.append(f"[harness] WARN: {x.pid} unreapable after SIGKILL")
         if dut_proc:
             if dut_proc.poll() is None:
-                dut_proc.kill()
-            dut_proc.wait()  # reap to avoid zombie
+                _terminate_group(dut_proc, signal.SIGKILL)
+            try:
+                dut_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                state.log.append(f"[harness] WARN: dut {dut_proc.pid} unreapable")
         if dut_fifo:
             release_dut(dut_fifo)
         # Wait for Streamer threads to finish draining pipe data so
@@ -596,7 +645,10 @@ def run_poc(state: RunState, refresh):
             st.join(timeout=2)
 
     # honest SKIP: trigger emitted "=== CHxx_SKIP reason=... ==="
-    skip_re = re.compile(r"CH\d+[A-Z_]*_SKIP\s+reason=(.*?)(?:===|$)")
+    # Greedy capture up to the trailing "===" closer or end-of-line; the
+    # non-greedy version previously captured empty strings whenever the line
+    # happened not to carry the closer on the same line.
+    skip_re = re.compile(r"CH\d+[A-Z_]*_SKIP\s+reason=(.+?)(?:\s*===\s*$|\s*$)")
     for ln in state.log:
         m = skip_re.search(ln)
         if m:
@@ -604,12 +656,24 @@ def run_poc(state: RunState, refresh):
             state.verdict = "skip: " + m.group(1).strip().strip('"')[:80]
             return
 
-    # verdict — stricter bar: EFFECT_DEMONSTRATED requires proof_marker hit.
+    # verdict — stricter bar: EFFECT_DEMONSTRATED requires proof_marker hit
+    # AND a clean loader exit. A loader that crashes immediately after printing
+    # its proof marker is not a demonstration; it's a race condition.
     if state.proof_hits > 0:
         # special case: CH0X_PROVEN with flips=0 is really a honest no-effect
         if re.search(r"CH\d+[A-Z_]*_PROVEN.*flips=0\b", state.proof_line or ""):
             state.status = "skip"
             state.verdict = "skip: proof marker printed but flips=0 (no natural denials to flip)"
+            return
+        crashed = False
+        if loader_proc is not None:
+            rc = loader_proc.returncode
+            if rc is not None and rc not in (0, -signal.SIGINT, -signal.SIGTERM, -signal.SIGKILL):
+                crashed = True
+        if crashed:
+            state.status = "observed"
+            state.verdict = (f"proof marker printed but loader exited rc={loader_proc.returncode} "
+                             f"— downgraded (see log): {state.proof_line or ''}")
             return
         state.status = "effect_demonstrated"
         state.verdict = (state.proof_line
@@ -628,6 +692,63 @@ def run_poc(state: RunState, refresh):
     else:
         state.status = "fail"
         state.verdict = "hooks attached but 0 events and no proof (see log)"
+
+
+def _emit_results(states, interrupted: bool = False) -> None:
+    """Emit final summary table and /tmp/proof-result.json atomically.
+    Called both on clean completion and from the Ctrl-C / fatal path so partial
+    results survive an interrupt."""
+    console.print()
+    out = Table(title="final verdicts" + (" (INTERRUPTED)" if interrupted else ""))
+    out.add_column("ID")
+    out.add_column("Cat", justify="center")
+    out.add_column("Status")
+    out.add_column("Events", justify="right")
+    out.add_column("Verdict", overflow="fold")
+    for p in POCS:
+        s = states[p.cid]
+        cat_label, cat_color = CATEGORY_LABEL.get(p.category, ("????", "white"))
+        out.add_row(p.cid,
+                    Text(cat_label, style=cat_color),
+                    Text(status_label(s.status), style=STATUS_COLOR.get(s.status, "")),
+                    str(s.events), s.verdict)
+    console.print(out)
+
+    js = {p.cid: {
+        "status": states[p.cid].status,
+        "category": p.category,
+        "events": states[p.cid].events,
+        "flipped": states[p.cid].flipped,
+        "proof_hits": states[p.cid].proof_hits,
+        "proof_line": states[p.cid].proof_line,
+        "verdict": states[p.cid].verdict,
+        "present_hooks": states[p.cid].present_hooks,
+        "missing_hooks": states[p.cid].missing_hooks,
+    } for p in POCS}
+    if interrupted:
+        js["__interrupted__"] = True
+
+    counts: dict[str, int] = {}
+    categories: dict[str, int] = {}
+    for p in POCS:
+        counts[states[p.cid].status] = counts.get(states[p.cid].status, 0) + 1
+        categories[p.category] = categories.get(p.category, 0) + 1
+    console.print(f"[bold]counts:[/bold] {counts}  [bold]categories:[/bold] {categories}")
+
+    # Atomic write: tmpfile + os.replace to avoid leaving a partial JSON file
+    # if the harness is SIGKILLed mid-write (OOM / Ctrl-C escalation).
+    final = pathlib.Path("/tmp/proof-result.json")
+    tmp = final.with_suffix(".json.tmp")
+    try:
+        with tmp.open("w") as f:
+            json.dump(js, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, final)
+    except OSError as e:
+        console.print(f"[yellow]could not persist {final}: {e}[/yellow]")
+    else:
+        console.print(f"[dim]machine-readable: {final}[/dim]")
 
 
 def main():
@@ -654,56 +775,25 @@ def main():
         console.print("[red]BTF missing at /sys/kernel/btf/vmlinux[/red]")
         sys.exit(2)
 
-    with Live(layout, refresh_per_second=8, console=console, screen=False) as live:
-        refresh()
-        for poc in POCS:
-            current_ref["cid"] = poc.cid
-            run_poc(states[poc.cid], lambda: (refresh(), live.refresh()))
+    interrupted = False
+    try:
+        with Live(layout, refresh_per_second=8, console=console, screen=False) as live:
             refresh()
-        current_ref["cid"] = None
-        refresh()
+            for poc in POCS:
+                current_ref["cid"] = poc.cid
+                run_poc(states[poc.cid], lambda: (refresh(), live.refresh()))
+                refresh()
+            current_ref["cid"] = None
+            refresh()
+    except KeyboardInterrupt:
+        interrupted = True
+        console.print("[yellow]interrupted — emitting partial results[/yellow]")
 
-    # post-run summary (plain, not in live)
-    console.print()
-    out = Table(title="final verdicts")
-    out.add_column("ID")
-    out.add_column("Cat", justify="center")
-    out.add_column("Status")
-    out.add_column("Events", justify="right")
-    out.add_column("Verdict", overflow="fold")
-    for p in POCS:
-        s = states[p.cid]
-        cat_label, cat_color = CATEGORY_LABEL.get(p.category, ("????", "white"))
-        out.add_row(p.cid,
-                    Text(cat_label, style=cat_color),
-                    Text(status_label(s.status), style=STATUS_COLOR.get(s.status, "")),
-                    str(s.events), s.verdict)
-    console.print(out)
+    _emit_results(states, interrupted=interrupted)
 
-    # machine-readable
-    js = {p.cid: {
-        "status": states[p.cid].status,
-        "category": p.category,
-        "events": states[p.cid].events,
-        "flipped": states[p.cid].flipped,
-        "proof_hits": states[p.cid].proof_hits,
-        "proof_line": states[p.cid].proof_line,
-        "verdict": states[p.cid].verdict,
-        "present_hooks": states[p.cid].present_hooks,
-        "missing_hooks": states[p.cid].missing_hooks,
-    } for p in POCS}
-
-    # summary counts
-    counts: dict[str, int] = {}
-    categories: dict[str, int] = {}
-    for p in POCS:
-        counts[states[p.cid].status] = counts.get(states[p.cid].status, 0) + 1
-        categories[p.category] = categories.get(p.category, 0) + 1
-    console.print(f"[bold]counts:[/bold] {counts}  [bold]categories:[/bold] {categories}")
-    pathlib.Path("/tmp/proof-result.json").write_text(json.dumps(js, indent=2))
-    console.print("[dim]machine-readable: /tmp/proof-result.json[/dim]")
-
-    # exit non-zero if any POC marked fail
+    # exit non-zero if any POC marked fail, or on interrupt
+    if interrupted:
+        sys.exit(130)
     if any(states[p.cid].status == "fail" for p in POCS):
         sys.exit(1)
 

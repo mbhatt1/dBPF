@@ -62,10 +62,17 @@ static __always_inline void capture(struct task_struct *t, int src)
     struct pid *pp = BPF_CORE_READ(t, thread_pid);
     unsigned int level = BPF_CORE_READ(pp, level);
     e->ns_level = level;
-    // read numbers[level] — the innermost (namespace-local) pid
+    // read numbers[level] — the innermost (namespace-local) pid.
+    // CLAMP: level is read from (potentially racy) kernel memory and is
+    // used directly as an offset for bpf_probe_read_kernel. A garbage
+    // value would point the read at arbitrary kernel memory. The kernel
+    // caps pid namespace nesting at 32 (MAX_PID_NS_LEVEL / ucount tree);
+    // clamp to that bound before computing the offset.
     struct upid u = {};
-    bpf_probe_read_kernel(&u, sizeof(u),
-        (void *)&pp->numbers[0] + level * sizeof(struct upid));
+    if (level < 32) {
+        bpf_probe_read_kernel(&u, sizeof(u),
+            (void *)&pp->numbers[0] + level * sizeof(struct upid));
+    }
     e->ns_pid = u.nr;
 
     struct pid_namespace *pns = BPF_CORE_READ(t, nsproxy, pid_ns_for_children);

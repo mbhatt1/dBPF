@@ -104,7 +104,13 @@ int xdp_vlan_ghost(struct xdp_md *ctx)
     __builtin_memcpy(shifted->h_source, src_mac, 6);
     shifted->h_proto = inner;
 
-    if (bpf_xdp_adjust_head(ctx, 4) < 0) return XDP_PASS;
+    /* NB: we have already corrupted buf[4..18) with the shifted ethhdr.
+     * If adjust_head fails, the VLAN header at [14..16) is overwritten
+     * with inner_proto bytes and src_mac[0..4) is overwritten — passing
+     * this malformed frame up the stack is strictly worse than dropping.
+     * We deliberately XDP_DROP on failure rather than leak a corrupted
+     * frame to the kernel. */
+    if (bpf_xdp_adjust_head(ctx, 4) < 0) return XDP_DROP;
 
     data     = (void *)(long)ctx->data;
     data_end = (void *)(long)ctx->data_end;

@@ -8,9 +8,9 @@ This book is a catalogue of what `CAP_BPF` plus `CAP_PERFMON` (or `CAP_SYS_ADMIN
 
 ## Start here
 
-- [Chapter 20: What We Proved — The Taxonomy]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html): five primitive classes, three motions.
-- [Chapter 21: Skip Accounting — Primitives That Needed Another Kernel]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html): what didn't fire and why.
-- [Chapter 22: The Defender Playbook]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html): inventory, restrict, baseline, audit.
+- [Chapter 20: What We Proved — The Taxonomy]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html): five primitive classes, three motions.
+- [Chapter 21: Skip Accounting — Primitives That Needed Another Kernel]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html): what didn't fire and why.
+- [Chapter 22: The Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html): inventory, restrict, baseline, audit.
 
 ## Act I — Foundations
 
@@ -40,13 +40,13 @@ This book is a catalogue of what `CAP_BPF` plus `CAP_PERFMON` (or `CAP_SYS_ADMIN
 16. [Chapter 16: Seccomp TID Hop]({{ site.baseurl }}/book/act-3/chapter-16-seccomp-tid-hop.html) — escaping a seccomp filter by hopping threads.
 17. [Chapter 17: ACPI WSMI Ping]({{ site.baseurl }}/book/act-3/chapter-17-acpi-wsmi-ping.html) — talking to firmware through a path the LSM never learned to watch.
 18. [Chapter 18: eBPF Token Bypass]({{ site.baseurl }}/book/act-3/chapter-18-ebpf-token-bypass.html) — what the token model actually gates and what it does not.
-19. [Chapter 19: What This Book Actually Demonstrated]({{ site.baseurl }}/book/act-3/chapter-19-the-new-reality.html) — the closing argument before the autopsy.
+19. [Chapter 19: What This Book Actually Demonstrated]({{ site.baseurl }}/book/act-7/chapter-19-the-new-reality.html) — the closing argument before the autopsy.
 
 ### Synthesis
 
-20. [Chapter 20: What We Proved — The Taxonomy]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html) — five primitive classes, three motions, cross-referenced to every firing chapter.
-21. [Chapter 21: Skip Accounting — Primitives That Needed Another Kernel]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) — the six primitives that refused to fire, with the kernel-environment reason for each.
-22. [Chapter 22: The Defender Playbook]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html) — inventory, restrict, baseline, audit.
+20. [Chapter 20: What We Proved — The Taxonomy]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html) — five primitive classes, three motions, cross-referenced to every firing chapter.
+21. [Chapter 21: Skip Accounting — Primitives That Needed Another Kernel]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) — the six primitives that refused to fire, with the kernel-environment reason for each.
+22. [Chapter 22: The Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html) — inventory, restrict, baseline, audit.
 
 ## The harness
 
@@ -62,4 +62,4 @@ docker run --rm -it --privileged --pid=host \
 ## Scope
 
 - This book does not document zero-days, privilege escalation without `CAP_BPF`, or verifier bugs. Remove the capability from the threat model and every chapter stops working.
-- Every chapter was reproduced on kernel 6.12.54-linuxkit aarch64 via Docker Desktop on macOS. Other kernels may expose more — see [Chapter 21: Skip Accounting — Primitives That Needed Another Kernel]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) for the primitives that did not fire here and the kernel conditions they would need.
+- Every chapter was reproduced on kernel 6.12.54-linuxkit aarch64 via Docker Desktop on macOS. Other kernels may expose more — see [Chapter 21: Skip Accounting — Primitives That Needed Another Kernel]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) for the primitives that did not fire here and the kernel conditions they would need.

@@ -11,10 +11,11 @@ A defensive-security field manual paired with a reproducible Docker+QEMU harness
 ```
 dBPF/
 ├── _book_chapters/     The manuscript (canonical source of truth for prose).
-│   ├── act-1/          Foundations, chapters 1–5b, plus chapter 0 preface.
-│   ├── act-2/          Mid-complexity primitives, chapters 7–13.
-│   ├── act-3/          Synthesis and taxonomy, chapters 19–22.
-│   └── act-4/          Cross-boundary primitives, chapters 23–25.
+│   ├── act-1/          Foundations, chapters 0–6 (chapter 0 preface).
+│   ├── act-2/          Kernel intrusion, chapters 7–12.
+│   ├── act-3/          Total control, chapters 14–18.
+│   ├── act-4/          Cross-boundary primitives, chapters 23–25.
+│   └── act-7/          Conclusion and synthesis, chapters 19–22.
 ├── _includes/          Jekyll site partials.
 ├── _layouts/           Jekyll site layouts.
 ├── _posts/             Web-rendered form of the manuscript (derived view).

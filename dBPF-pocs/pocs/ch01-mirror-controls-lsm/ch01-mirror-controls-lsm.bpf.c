@@ -62,9 +62,13 @@ int BPF_PROG(lsm_inode_permission, struct inode *inode, int mask, int ret)
     if (uid == 0)
         return ret;
 
+    // Only flip access-control denials (-EACCES, -EPERM). Other LSMs
+    // earlier in the chain can return -EROFS, -ENAMETOOLONG, -EIO,
+    // -ESTALE, etc. — flipping those to 0 hides legitimate errors
+    // unrelated to the attacker's goal and breaks filesystem semantics.
     int flipped = 0;
     int new_ret = ret;
-    if (ret != 0) {
+    if (ret == -13 /* -EACCES */ || ret == -1 /* -EPERM */) {
         new_ret = 0;  // flip denial to allow
         flipped = 1;
     }
