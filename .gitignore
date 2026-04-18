@@ -1,16 +1,55 @@
-# Jekyll build output and caches
+# --- Jekyll build output and caches ---
 _site/
-.sass-cache
-.jekyll-cache
+.sass-cache/
+.jekyll-cache/
 .jekyll-metadata
+Gemfile.lock
 
-# Bundler (local config + vendored gems)
+# --- Bundler ---
 .bundle/
 vendor/
 
-# Companion POCs repo (kept on-disk for local reference, not part of this site)
-dBPF-pocs/
+# --- BPF / C build artifacts ---
+build/
+pocs/*/build/
+dBPF-pocs/pocs/*/build/
+dBPF-pocs/shared/*/build/
+*.o
+*.bpf.o
+*.skel.h
+vmlinux.h
+*.a
+*.d
 
-# OS / editor cruft
+# --- QEMU images / UEFI vars / cloud-init artifacts ---
+*.qcow2
+*.img
+*.raw
+*.fd
+dBPF-pocs/qemu/cidata.iso
+dBPF-pocs/qemu/boot.log
+
+# --- harness / runner ephemera ---
+dBPF-pocs/act4-result.log
+dBPF-pocs/results/
+/tmp/proof-result.json
+
+# --- POC runtime logs ---
+dBPF-pocs/logs/
+*.log
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+
+# --- OS / editor cruft ---
 .DS_Store
 *.bak
+*.swp
+*~
+.idea/
+.vscode/
+
+# --- Claude Code session state ---
+.claude/

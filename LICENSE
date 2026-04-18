@@ -1,0 +1,73 @@
+dBPF — Licensing
+================
+
+This repository contains two categories of work under different licenses.
+
+1. **Code** — all files under `dBPF-pocs/` (BPF programs, userspace loaders,
+   shared Makefiles, harness scripts, trigger scripts) are licensed under
+   the **GNU General Public License version 2 (GPL-2.0-only)**. Every BPF
+   program declares `SEC("license") = "GPL"` because the kernel refuses to
+   load BPF programs that call GPL-only helpers under any other license;
+   the userspace loaders and harness are licensed under the same terms to
+   keep the licensing model uniform across the PoC tree.
+
+   SPDX-License-Identifier: GPL-2.0-only
+
+2. **Prose** — all Markdown files under `_book_chapters/`, the top-level
+   `README.md`, `CONTRIBUTING.md`, and `CHANGELOG.md` are licensed under
+   the **Creative Commons Attribution 4.0 International License
+   (CC-BY-4.0)**.
+
+   SPDX-License-Identifier: CC-BY-4.0
+
+The GPL-2.0-only and CC-BY-4.0 license texts follow.
+
+
+================================================================================
+                    GNU GENERAL PUBLIC LICENSE
+                       Version 2, June 1991
+
+ Copyright (C) 1989, 1991 Free Software Foundation, Inc.
+ 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+The full text of the GNU General Public License, version 2, is available at
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt and is incorporated
+into this LICENSE file by reference. Users downloading this repository
+should refer to that canonical text for the authoritative license terms.
+
+Summary of key terms:
+
+- You may copy, modify, and redistribute the covered code.
+- Redistributions must preserve the copyright notice, this license, and
+  the absence of warranty.
+- Derivative works (covered modifications) must also be licensed under
+  GPL-2.0-only when distributed.
+- No warranty is provided; the code is distributed "as is."
+
+================================================================================
+                    Creative Commons Attribution 4.0 International
+
+ Copyright (c) dBPF contributors.
+ Licensed under CC-BY-4.0.
+
+The full text of the Creative Commons Attribution 4.0 International Public
+License is available at https://creativecommons.org/licenses/by/4.0/legalcode
+and is incorporated into this LICENSE file by reference.
+
+Summary of key terms:
+
+- You are free to share and adapt the prose for any purpose, including
+  commercial use.
+- You must give appropriate credit, provide a link to the license, and
+  indicate if changes were made.
+- No warranty is provided.
+
+================================================================================
+                    Contributions
+
+By submitting a patch, pull request, or other contribution to this repository,
+you agree that your contribution is licensed under the terms above (GPL-2.0-only
+for code under `dBPF-pocs/`, CC-BY-4.0 for prose elsewhere), and you certify
+the Developer Certificate of Origin (DCO) version 1.1 (see CONTRIBUTING.md).

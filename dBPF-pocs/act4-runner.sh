@@ -40,12 +40,18 @@ make 2>&1 | tail -3
 echo "--- userns state before ch24 ---"
 echo "runner self: $(readlink /proc/self/ns/user 2>/dev/null)"
 echo "pid 1:       $(readlink /proc/1/ns/user 2>/dev/null)"
-if nsenter --user=/proc/1/ns/user --mount=/proc/1/ns/mnt -- /bin/true 2>/dev/null; then
-    timeout 40 nsenter --user=/proc/1/ns/user --mount=/proc/1/ns/mnt -- \
+# cloud-init's runcmd executes inside a systemd service context that
+# puts us in a child user namespace (PrivateUsers or equivalent), so
+# BPF_TOKEN_CREATE returns EOPNOTSUPP even when /proc/self/ns/user
+# reports init_user_ns. Detach via systemd-run --scope which creates
+# a new scope unit inheriting from systemd itself (PID 1), bypassing
+# cloud-init's per-service namespace restrictions.
+if command -v systemd-run >/dev/null 2>&1; then
+    timeout 40 systemd-run --scope --quiet --unit=ch24-$$ -- \
         bash /mnt/pocs/ch24-bpf-token-delegation/trigger.sh 2>&1 \
         | grep -E 'CH24_PROVEN|CH24_SKIP|attached|uid_events|capeff|token_delegated|reason=|userns' | head -20
 else
-    echo "nsenter into pid1 userns failed — running direct (may trip EOPNOTSUPP)"
+    echo "systemd-run unavailable — running direct (may trip EOPNOTSUPP under cloud-init)"
     timeout 40 bash trigger.sh 2>&1 | grep -E 'CH24_PROVEN|CH24_SKIP|attached|uid_events|capeff|token_delegated|reason=|userns' | head -20
 fi
 echo "=== CH24_DONE ==="
