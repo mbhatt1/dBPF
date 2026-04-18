@@ -4,9 +4,10 @@ chpasswd:
   expire: false
 ssh_pwauth: true
 disable_root: false
+
 runcmd:
-  - grubby --update-kernel=ALL --args="lsm=lockdown,capability,yama,selinux,bpf enforcing=0 selinux=1"
-  - touch /.autorelabel
-  - dnf install -y --setopt=install_weak_deps=False clang llvm lld make gcc libbpf-devel elfutils-libelf-devel bpftool iproute keyutils keyutils-libs-devel libcap-ng-utils kmod procps-ng audit python3 sudo selinux-policy-targeted policycoreutils
-  - touch /tmp/setup_done
-  - reboot
+  - [ sh, -c, "setenforce 0 2>/dev/null || true" ]
+  - [ sh, -c, "dnf install -y --setopt=install_weak_deps=False clang llvm lld make gcc libbpf-devel elfutils-libelf-devel bpftool iproute keyutils keyutils-libs-devel libcap-ng-utils kmod procps-ng audit python3 sudo selinux-policy-targeted policycoreutils swtpm swtpm-tools > /tmp/dnf.log 2>&1" ]
+  - [ sh, -c, "mkdir -p /mnt && for i in 1 2 3 4 5 6 7 8; do mount -t 9p -o trans=virtio,version=9p2000.L pocs /mnt && break; sleep 1; done" ]
+  - [ sh, -c, "bash /mnt/act4-runner.sh > /mnt/act4-result.log 2>&1" ]
+  - [ sh, -c, "sync; sleep 2; poweroff" ]

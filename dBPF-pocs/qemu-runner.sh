@@ -180,6 +180,55 @@ make 2>&1 | tail -2
 timeout 30 bash trigger.sh 2>&1 | tail -10
 echo "=== CH12LSM_DONE ==="
 
+########################################################################
+# Act 4: ch23 TPM Unseal Heist
+########################################################################
+echo ""
+echo "################################################################"
+echo "# ch23-tpm-unseal-heist"
+echo "################################################################"
+cd /mnt/pocs/ch23-tpm-unseal-heist
+command -v keyctl >/dev/null 2>&1 || \
+    (dnf install -y keyutils >/dev/null 2>&1 || apt-get install -y keyutils >/dev/null 2>&1)
+if ! [ -e /dev/tpm0 ] && ! [ -e /dev/tpmrm0 ]; then
+    if command -v swtpm >/dev/null 2>&1; then
+        mkdir -p /tmp/ch23-swtpm
+        swtpm socket --tpm2 --tpmstate dir=/tmp/ch23-swtpm \
+            --ctrl type=unixio,path=/tmp/ch23-swtpm/ctrl \
+            --flags not-need-init --daemon 2>/dev/null
+        modprobe tpm_vtpm_proxy 2>/dev/null
+    fi
+fi
+make 2>&1 | tail -2
+timeout 30 bash trigger.sh 2>&1 | tail -12
+echo "=== CH23_DONE ==="
+
+########################################################################
+# Act 4: ch24 Token Hand-off (bpf_token delegation, kernel 6.9+)
+########################################################################
+echo ""
+echo "################################################################"
+echo "# ch24-bpf-token-delegation"
+echo "################################################################"
+cd /mnt/pocs/ch24-bpf-token-delegation
+make 2>&1 | tail -2
+timeout 35 bash trigger.sh 2>&1 | grep -E 'CH24_PROVEN|CH24_SKIP|attached|uid_events|capeff|token_delegated|reason=' | tail -15
+echo "=== CH24_DONE ==="
+
+########################################################################
+# Act 4: ch25 Metadata Faucet (IMDS XDP capture, mock mode)
+########################################################################
+echo ""
+echo "################################################################"
+echo "# ch25-imds-harvest"
+echo "################################################################"
+cd /mnt/pocs/ch25-imds-harvest
+command -v python3 >/dev/null 2>&1 || \
+    (dnf install -y python3 >/dev/null 2>&1 || apt-get install -y python3 >/dev/null 2>&1)
+make 2>&1 | tail -2
+CH25_MOCK_IMDS=1 timeout 30 bash trigger.sh 2>&1 | tail -12
+echo "=== CH25_DONE ==="
+
 echo ""
 echo "################################################################"
 echo "# ALL DONE"

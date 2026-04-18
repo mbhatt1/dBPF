@@ -159,6 +159,25 @@ POCS: list[Poc] = [
         prefix="[ch12s]", mode="trigger-runs-loader", timeout=25,
         proof_marker=r"CH12_CONCEPT_PROVEN|CH12_PROVEN|FORGE\s+pid=|_PROVEN",
         category="illusion"),
+    # --- act 4 --------------------------------------------------------
+    # Three primitives added in act 4: persistent theft against hardware-
+    # rooted keys (ch23), threat-model subversion via delegated capability
+    # (ch24), and cross-boundary cloud identity capture (ch25).
+    Poc("ch23", "TPM Unseal Heist (trusted-key plaintext capture)",
+        "ch23-tpm-unseal-heist",
+        hooks=["tpm2_unseal_trusted"], prefix="[ch23]",
+        mode="trigger-runs-loader", timeout=25,
+        proof_marker=r"CH23_PROVEN\s+key_bytes_captured=\d+|CH23_SKIP"),
+    Poc("ch24", "Token Hand-off (bpf_token delegation)",
+        "ch24-bpf-token-delegation",
+        hooks=["tp:syscalls/sys_enter_getuid"], prefix="[ch24]",
+        mode="trigger-runs-loader", timeout=40,
+        proof_marker=r"CH24_PROVEN\s+uid_events=\d+\s+token_delegated=yes|CH24_SKIP\s+reason="),
+    Poc("ch25", "Metadata Faucet (IMDS credential capture via XDP)",
+        "ch25-imds-harvest",
+        hooks=["veth"], prefix="[ch25]",
+        mode="trigger-runs-loader", timeout=25,
+        proof_marker=r"CH25_PROVEN\s+access_key_captured=yes|CH25_SKIP"),
 ]
 
 
