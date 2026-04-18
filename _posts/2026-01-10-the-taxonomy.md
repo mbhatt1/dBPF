@@ -6,7 +6,7 @@ date: 2026-01-10
 
 # The Taxonomy
 
-> **See also**: [Full chapter with investigation notes]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html)
+> **See also**: [Full chapter with investigation notes]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
 
 Every primitive in this book reduces to one of three motions: change the API return, rewrite the userspace buffer, copy the decision out of band. That is the result after nineteen POCs and thirteen clean `PROVEN` markers on linuxkit 6.12 aarch64. XDP looks different at first, but it is a specialization of the first motion — the API is the netdev rx path and the return is `XDP_DROP` or `XDP_TX`. Ringbuf-as-trigger looks different too, but it is a specialization of the third — the decision copied out of band is a kernel event, and a userspace racer converts that event into action. Once you see the three motions, the five classes fall out cleanly.
 
@@ -37,6 +37,6 @@ Detection patterns are cleaner when built against the class, not the chapter. A 
 ---
 
 **Related material**
-- Full chapter: [Chapter 20 — What We Proved: The Taxonomy]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html)
-- Companion chapters: [Ch 20]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html), [Ch 21]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html), [Ch 22]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html)
+- Full chapter: [Chapter 20 — What We Proved: The Taxonomy]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html)
+- Companion chapters: [Ch 20]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html), [Ch 21]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html), [Ch 22]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
 - Harness: `dBPF-pocs/harness/proof.py`

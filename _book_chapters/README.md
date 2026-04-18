@@ -1,8 +1,9 @@
 # book_chapters/
 
 Canonical manuscript source for **The Diabolical eBPF Field Manual**, organized as a
-four-act book. This tree is the source of truth for the prose; the Jekyll site and
-companion code are derived views.
+five-act book (Acts I–IV of primitives plus a closing Act VII — Conclusion holding
+the synthesis chapters). This tree is the source of truth for the prose; the Jekyll
+site and companion code are derived views.
 
 ## Layout
 
@@ -13,16 +14,17 @@ companion code are derived views.
 - **`../dBPF-pocs/`** — working companion code: runnable eBPF proof-of-concept programs,
   loaders, triggers, and the Python/Docker harness that verifies every claim.
 
-## Four-act arc
+## Act arc
 
-- **Act 1 — Foundational misuse.** Early primitives: mirroring, overlay/FUSE tricks,
-  syscall shims, cgroup/NIC slips, silencing LSM telemetry.
-- **Act 2 — Privilege & namespace escalation.** Device cgroups, keyrings, PID/inode
-  cloaking, IRQ chaos, signed-driver swaps.
-- **Act 3 — System-level subversion + synthesis.** Scheduler impersonation, netns/VLAN
-  ghosts, seccomp TID hops, token bypass, and the three closing synthesis chapters
-  (what was demonstrated, what refused to die, the defender playbook).
-- **Act 4 — Cross-boundary primitives.** TPM unseal, bpf_token delegation, IMDS harvest.
+- **Act I — Foundations.** Early primitives: mirroring, overlay/FUSE tricks, syscall
+  shims, cgroup/NIC slips, silencing LSM telemetry.
+- **Act II — Kernel Intrusion.** Device cgroups, keyrings, PID/inode cloaking, IRQ
+  chaos, signed-driver swaps.
+- **Act III — Total Control.** Scheduler impersonation, netns/VLAN ghosts, seccomp
+  TID hops, token bypass.
+- **Act IV — Cross-Boundary.** TPM unseal, bpf_token delegation, IMDS harvest.
+- **Act VII — Conclusion.** The four synthesis chapters: what was demonstrated,
+  the autopsy/taxonomy, skip accounting, and the defender playbook.
 
 ## Table of Contents
 
@@ -50,7 +52,7 @@ companion code are derived views.
 | 11 | [chapter-11-irq-affinity-chaos.md](act-2/chapter-11-irq-affinity-chaos.md) — weaponizing IRQ affinity | [ch11-irq-chaos](../dBPF-pocs/pocs/ch11-irq-chaos) |
 | 12 | [chapter-12-ebpf-signed-driver-swap.md](act-2/chapter-12-ebpf-signed-driver-swap.md) — swapping signed drivers | [ch12-signed-driver-swap](../dBPF-pocs/pocs/ch12-signed-driver-swap) · [lsm](../dBPF-pocs/pocs/ch12-signed-driver-swap-lsm) · [syscall](../dBPF-pocs/pocs/ch12-signed-driver-swap-syscall) |
 
-### Act 3 — System-level subversion + synthesis
+### Act III — Total Control
 
 | # | Chapter | POC |
 |---|---------|-----|
@@ -58,18 +60,23 @@ companion code are derived views.
 | 15 | [chapter-15-netns-vlan-ghost.md](act-3/chapter-15-netns-vlan-ghost.md) — VLAN ghost across network namespaces | [ch15-netns-vlan-ghost](../dBPF-pocs/pocs/ch15-netns-vlan-ghost) |
 | 16 | [chapter-16-seccomp-tid-hop.md](act-3/chapter-16-seccomp-tid-hop.md) — hopping TIDs around seccomp filters | [ch16-seccomp-tid-hop](../dBPF-pocs/pocs/ch16-seccomp-tid-hop) |
 | 18 | [chapter-18-ebpf-token-bypass.md](act-3/chapter-18-ebpf-token-bypass.md) — bypassing the eBPF token model | [ch18-token-bypass](../dBPF-pocs/pocs/ch18-token-bypass) |
-| 19 | [chapter-19-the-new-reality.md](act-3/chapter-19-the-new-reality.md) — synthesis: what was demonstrated | — |
-| 20 | [chapter-20-the-autopsy-what-we-proved.md](act-3/chapter-20-the-autopsy-what-we-proved.md) — autopsy: the taxonomy | — |
-| 21 | [chapter-21-the-autopsy-what-refused-to-die.md](act-3/chapter-21-the-autopsy-what-refused-to-die.md) — skip accounting | — |
-| 22 | [chapter-22-the-defender-playbook.md](act-3/chapter-22-the-defender-playbook.md) — defender playbook | — |
 
-### Act 4 — Cross-boundary primitives
+### Act IV — Cross-Boundary
 
 | # | Chapter | POC |
 |---|---------|-----|
 | 23 | [chapter-23-tpm-unseal-heist.md](act-4/chapter-23-tpm-unseal-heist.md) — reading plaintext at the post-unseal window | [ch23-tpm-unseal-heist](../dBPF-pocs/pocs/ch23-tpm-unseal-heist) |
 | 24 | [chapter-24-the-token-hand-off.md](act-4/chapter-24-the-token-hand-off.md) — bpf_token delegation via SCM_RIGHTS | [ch24-bpf-token-delegation](../dBPF-pocs/pocs/ch24-bpf-token-delegation) |
 | 25 | [chapter-25-the-metadata-faucet.md](act-4/chapter-25-the-metadata-faucet.md) — XDP IMDS credential capture | [ch25-imds-harvest](../dBPF-pocs/pocs/ch25-imds-harvest) |
+
+### Act VII — Conclusion
+
+| # | Chapter | POC |
+|---|---------|-----|
+| 19 | [chapter-19-the-new-reality.md](act-7/chapter-19-the-new-reality.md) — synthesis: what was demonstrated | — |
+| 20 | [chapter-20-the-autopsy-what-we-proved.md](act-7/chapter-20-the-autopsy-what-we-proved.md) — autopsy: the taxonomy | — |
+| 21 | [chapter-21-the-autopsy-what-refused-to-die.md](act-7/chapter-21-the-autopsy-what-refused-to-die.md) — skip accounting | — |
+| 22 | [chapter-22-the-defender-playbook.md](act-7/chapter-22-the-defender-playbook.md) — defender playbook | — |
 
 Chapters 13 and 17 were retired in the synthetic/analog cleanup — their real
 primitives require x86 (RAPL) or ACPI hardware that the aarch64 test matrix does

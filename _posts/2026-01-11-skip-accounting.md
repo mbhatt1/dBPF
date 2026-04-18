@@ -6,7 +6,7 @@ date: 2026-01-11
 
 # Skip Accounting
 
-> **See also**: [Full chapter with investigation notes]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 20 — The Taxonomy]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html)
+> **See also**: [Full chapter with investigation notes]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 20 — The Taxonomy]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
 
 Six chapters didn't fire on the test kernel. Not because the BPF was wrong — each one loaded, each one verified, most attached cleanly. They didn't fire because the kernel environment didn't host the surface the primitive gripped. linuxkit 6.12 aarch64 is a specific shape: Docker Desktop's VM with a minimal config, no ACPI, no powercap, no module signature enforcement, no SELinux in enforcing mode, and BTF that resolves most but not all symbols. On that shape, six primitives sat idle. On a RHEL host with `setenforce 1`, a different six would be idle and these six would fire. The skip list sorts into three shapes, and each shape is a lesson about where primitives gain or lose traction.
 
@@ -33,6 +33,6 @@ For the red team, environmental pre-flight is not optional. Before claiming a pr
 ---
 
 **Related material**
-- Full chapter: [Chapter 21 — Skip Accounting: Primitives That Needed Another Kernel]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html)
-- Companion chapters: [Ch 20]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html), [Ch 21]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html), [Ch 22]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html)
+- Full chapter: [Chapter 21 — Skip Accounting: Primitives That Needed Another Kernel]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html)
+- Companion chapters: [Ch 20]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html), [Ch 21]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html), [Ch 22]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
 - Harness: `dBPF-pocs/harness/proof.py`

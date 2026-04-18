@@ -8,7 +8,7 @@ date: 2026-01-12
 
 > **See also**: [Blog post]({{ site.baseurl }}/the-defender-playbook.html) · [Harness](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
-> **Navigation**: [Chapter 20 — Taxonomy]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html)
+> **Navigation**: [Chapter 20 — Taxonomy]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
 
 The preceding twenty-one chapters establish what `CAP_BPF` permits. This chapter is the operational response. Seven steps, ordered from highest leverage to lowest. Four verbs carry the work: **inventory**, **restrict**, **baseline**, **audit**. A mapping table at the end ties each step to the five primitive classes from chapter 20, and three case studies describe real-world misconfigurations that produced ambient `CAP_BPF` exposure across a fleet.
 

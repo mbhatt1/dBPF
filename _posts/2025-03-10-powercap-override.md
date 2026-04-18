@@ -7,7 +7,7 @@ poc_dir: dBPF-pocs/pocs/ch13-powercap-override-analog
 
 # Powercap Override: An x86-Only Primitive, Tested on a Synthetic Sensor
 
-> **See also**: [Book chapter]({{ site.baseurl }}/book/act-2/chapter-13-powercap-override.html) · [Skip accounting (Ch 21)]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) · [Analog POC](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch13-powercap-override-analog)
+> **See also**: [Book chapter]({{ site.baseurl }}/book/act-2/chapter-13-powercap-override.html) · [Skip accounting (Ch 21)]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Analog POC](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch13-powercap-override-analog)
 
 `grep powercap /proc/kallsyms` returned nothing. RAPL is an x86 subsystem; aarch64 linuxkit doesn't have it. The primitive I wanted — a kretprobe on `powercap_get_max_power_uw` returning a fixed low value so defender processes would read a flat energy counter while the real hardware silently cooked — had no landing site. The same was true for `powercap_register_control_type`, `powercap_set_max_power_uw`, and `thermal_zone_device_update`. Four hooks, four ABSENTs in the loader's preflight. This POC could not fire on this kernel.
 

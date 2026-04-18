@@ -6,7 +6,7 @@ date: 2025-12-31
 
 # Epilogue: What This Book Actually Demonstrated
 
-> **See also**: [Chapter 19 — What This Book Actually Demonstrated]({{ site.baseurl }}/book/act-3/chapter-19-the-new-reality.html) · [Chapter 22 — The Defender Playbook]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html)
+> **See also**: [Chapter 19 — What This Book Actually Demonstrated]({{ site.baseurl }}/book/act-7/chapter-19-the-new-reality.html) · [Chapter 22 — The Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
 
 Eighteen chapters, one kernel (6.12.54-linuxkit aarch64), one reproducible harness. This epilogue draws a line under what was actually shown and what was not.
 
@@ -61,7 +61,7 @@ Most primitives here have prior art in rootkit POCs, conference talks, and exist
 
 ---
 **Related material**
-- [Chapter 19 — What This Book Actually Demonstrated]({{ site.baseurl }}/book/act-3/chapter-19-the-new-reality.html)
-- [Chapter 20 — The Autopsy: What We Proved]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html)
-- [Chapter 21 — The Autopsy: What Refused to Die]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html)
-- [Chapter 22 — The Defender Playbook]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html)
+- [Chapter 19 — What This Book Actually Demonstrated]({{ site.baseurl }}/book/act-7/chapter-19-the-new-reality.html)
+- [Chapter 20 — The Autopsy: What We Proved]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html)
+- [Chapter 21 — The Autopsy: What Refused to Die]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html)
+- [Chapter 22 — The Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)

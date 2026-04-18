@@ -7,7 +7,7 @@ poc_dir: dBPF-pocs/pocs/ch08-keyring-heist-kprobe
 
 # Keyring Heist
 
-> **See also**: [Book chapter]({{ site.baseurl }}/book/act-2/chapter-8-keyring-heist.html) · [Skip accounting (Ch 21)]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) · [Workaround POC](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch08-keyring-heist-kprobe)
+> **See also**: [Book chapter]({{ site.baseurl }}/book/act-2/chapter-8-keyring-heist.html) · [Skip accounting (Ch 21)]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Workaround POC](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch08-keyring-heist-kprobe)
 
 libbpf rejected the LSM fmod_ret load with `arg0 type FWD is not a struct`. The kernel's BTF forward-declares `struct key` for the LSM hook. Kprobe on `key_task_permission` with opaque `PT_REGS_PARM1` and `BPF_CORE_READ` against the full struct in `vmlinux.h` loaded clean — same data, different verifier posture.
 

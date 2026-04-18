@@ -4,7 +4,7 @@ title: "The Defender Playbook"
 date: 2026-01-12
 ---
 
-> **See also**: [Full chapter]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html) · [Chapter 20 — Taxonomy]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html)
+> **See also**: [Full chapter]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html) · [Chapter 20 — Taxonomy]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html)
 
 Every primitive in this book required `CAP_BPF`, and most additionally required `CAP_PERFMON` or `CAP_SYS_ADMIN`. That single observation collapses the defender's problem into four verbs: inventory, restrict, baseline, audit. The whole chapter is those verbs expanded; the whole book is the justification for doing any of it.
 
@@ -75,6 +75,6 @@ None of this is novel. Inventory the capability holders, restrict who can load p
 
 ---
 **Related material**
-- Full chapter: [Chapter 22 — The Defender Playbook]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html)
-- Companion: [Ch 20 Taxonomy]({{ site.baseurl }}/book/act-3/chapter-20-the-autopsy-what-we-proved.html), [Ch 21 Skips]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html)
+- Full chapter: [Chapter 22 — The Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
+- Companion: [Ch 20 Taxonomy]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html), [Ch 21 Skips]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html)
 - Harness: `dBPF-pocs/harness/proof.py`

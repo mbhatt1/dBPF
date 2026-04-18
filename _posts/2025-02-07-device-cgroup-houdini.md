@@ -7,7 +7,7 @@ poc_dir: dBPF-pocs/pocs/ch07-devcgroup-houdini-lsm
 
 # Device-cgroup Houdini
 
-> **See also**: [Book chapter]({{ site.baseurl }}/book/act-2/chapter-7-device-cgroup-houdini.html) · [Skip accounting (Ch 21)]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) · [Workaround variant](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch07-devcgroup-houdini-lsm)
+> **See also**: [Book chapter]({{ site.baseurl }}/book/act-2/chapter-7-device-cgroup-houdini.html) · [Skip accounting (Ch 21)]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Workaround variant](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch07-devcgroup-houdini-lsm)
 
 The idea was straightforward: attach an LSM fmod_ret program to `security_inode_mknod` and return `0` whenever the device-cgroup controller would have denied. On linuxkit that doesn't land, for a specific and interesting reason.
 

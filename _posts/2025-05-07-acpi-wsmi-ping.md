@@ -7,7 +7,7 @@ poc_dir: dBPF-pocs/pocs/ch17-acpi-wsmi-analog
 
 # ACPI WSMI Ping: Where the Interpreter Isn't, and the Firmware Loader Isn't Either
 
-> **See also**: [Book chapter]({{ site.baseurl }}/book/act-3/chapter-17-acpi-wsmi-ping.html) · [Skip accounting (Ch 21)]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) · [Analog POC](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch17-acpi-wsmi-analog)
+> **See also**: [Book chapter]({{ site.baseurl }}/book/act-3/chapter-17-acpi-wsmi-ping.html) · [Skip accounting (Ch 21)]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Analog POC](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch17-acpi-wsmi-analog)
 
 `acpi_evaluate_object` doesn't exist on aarch64 either. That was the first thing I checked, and `grep` on `/proc/kallsyms` came back empty for the whole ACPI interpreter surface: `acpi_evaluate_object`, `acpi_ns_evaluate`, `acpi_ex_execute_method` — nothing. Docker Desktop's linuxkit kernel (6.12 aarch64) ships without the ACPI interpreter. The chapter's primary scenario — hook `acpi_evaluate_object`, watch for the pathname `\_SB._WS0.Ping`, swap AML parameters — cannot fire on this host.
 

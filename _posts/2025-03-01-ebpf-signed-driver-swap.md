@@ -7,7 +7,7 @@ poc_dir: dBPF-pocs/pocs/ch12-signed-driver-swap-syscall
 
 # eBPF Signed-Driver Swap
 
-> **See also**: [Book chapter]({{ site.baseurl }}/book/act-2/chapter-12-ebpf-signed-driver-swap.html) · [Skip accounting (Ch 21)]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) · [Workaround POC](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch12-signed-driver-swap-syscall)
+> **See also**: [Book chapter]({{ site.baseurl }}/book/act-2/chapter-12-ebpf-signed-driver-swap.html) · [Skip accounting (Ch 21)]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Workaround POC](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch12-signed-driver-swap-syscall)
 
 `/sys/kernel/debug/error_injection/list` didn't have `mod_verify_sig` or `kernel_read_file`, so the LSM fmod_ret approach was dead. It did have `__arm64_sys_finit_module` and `__arm64_sys_init_module` — syscall entry points are exactly what the error-injection allowlist is for.
 

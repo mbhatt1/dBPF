@@ -8,7 +8,7 @@ date: 2026-04-17
 
 > **See also**: [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch23-tpm-unseal-heist) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
-> **Navigation**: [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-3/chapter-22-the-defender-playbook.html) · [Chapter 23 — TPM Unseal Heist]({{ site.baseurl }}/book/act-4/chapter-23-tpm-unseal-heist.html) · [Chapter 24 — The Token Hand-off]({{ site.baseurl }}/book/act-4/chapter-24-the-token-hand-off.html)
+> **Navigation**: [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html) · [Chapter 23 — TPM Unseal Heist]({{ site.baseurl }}/book/act-4/chapter-23-tpm-unseal-heist.html) · [Chapter 24 — The Token Hand-off]({{ site.baseurl }}/book/act-4/chapter-24-the-token-hand-off.html)
 
 I thought the book was done. The twenty-two chapters cover the primitives `CAP_BPF` gives you against in-kernel state, and the closing act lays out a defender playbook that is about grant hygiene rather than patching, because nothing in the book is a patchable bug. That is still true. What this chapter adds is not a new bug; it is a new *target*. Chapter 8 reads keys out of the kernel keyring during a permission check. This chapter reads keys out of a `struct trusted_key_payload` during the kernel's own consumption of a TPM-unsealed secret. Same primitive class, different surface — and the surface matters because it is the surface most operators believe is the strong one.
 

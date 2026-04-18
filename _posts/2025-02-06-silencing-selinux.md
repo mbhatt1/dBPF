@@ -7,7 +7,7 @@ poc_dir: dBPF-pocs/pocs/ch06-silence-selinux-lsm-synthetic
 
 # Silencing SELinux
 
-> **See also**: [Book chapter]({{ site.baseurl }}/book/act-1/chapter-6-silencing-selinux.html) · [Skip accounting (Ch 21)]({{ site.baseurl }}/book/act-3/chapter-21-the-autopsy-what-refused-to-die.html) · [Synthetic LSM variant](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch06-silence-selinux-lsm-synthetic)
+> **See also**: [Book chapter]({{ site.baseurl }}/book/act-1/chapter-6-silencing-selinux.html) · [Skip accounting (Ch 21)]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Synthetic LSM variant](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch06-silence-selinux-lsm-synthetic)
 
 The honest finding first: on linuxkit 6.12 aarch64 there is no SELinux policy loaded. `cat /sys/kernel/security/lsm` lists `capability,bpf` and nothing else. The LSM hooks `security_file_permission` and `security_inode_permission` are called, but the `capability` and `bpf` LSMs don't produce natural denials at those sites, so a fmod_ret program that would flip a denial has nothing to flip. The program loads, attaches, and watches silence.
 
