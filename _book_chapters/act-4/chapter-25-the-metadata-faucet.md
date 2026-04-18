@@ -1,7 +1,7 @@
 ---
 layout: book
 title: "Chapter 25: The Metadata Faucet"
-date: 2026-05-03
+date: 2026-04-17
 ---
 
 # Chapter 25: The Metadata Faucet

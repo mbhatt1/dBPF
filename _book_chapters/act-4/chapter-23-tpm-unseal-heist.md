@@ -1,7 +1,7 @@
 ---
 layout: book
 title: "Chapter 23: The TPM Unseal Heist"
-date: 2026-05-01
+date: 2026-04-17
 ---
 
 # Chapter 23: The TPM Unseal Heist
