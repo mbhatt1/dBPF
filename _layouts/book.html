@@ -24,8 +24,8 @@
                 {% if site.book_chapters and site.book_chapters.size > 0 %}
                 <h3>Book</h3>
                 {% assign sorted_chapters = site.book_chapters | sort: 'path' %}
-                {% assign acts = "act-1,act-2,act-3" | split: "," %}
-                {% assign act_names = "Act I — Foundations,Act II — Kernel Intrusion,Act III — Total Control" | split: "," %}
+                {% assign acts = "act-1,act-2,act-3,act-4" | split: "," %}
+                {% assign act_names = "Act I — Foundations,Act II — Kernel Intrusion,Act III — Total Control,Act IV — Cross-Boundary" | split: "," %}
                 {% for act in acts %}
                   {% assign act_idx = forloop.index0 %}
                   <details open class="sb-group">
