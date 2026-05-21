@@ -31,7 +31,7 @@ Two out of three fire on this kernel. CO-RE walks pull the IRQ number out of `ir
 Three independent blockers, any one of which kills the approach:
 
 1. Neither `handle_irq_event` nor `__handle_irq_event_percpu` appears in `/sys/kernel/debug/error_injection/list` on this kernel, so `bpf_override_return()` is refused at verifier load. No allowlist entry, no injection.
-2. These paths run with local IRQs disabled on the target CPU — atomic context. Calling `irq_set_affinity()` from a kprobe in that context would be a sleep-in-atomic bug even if the verifier let it through.
+2. These paths run with local IRQs disabled on the target CPU ; atomic context. Calling `irq_set_affinity()` from a kprobe in that context would be a sleep-in-atomic bug even if the verifier let it through.
 3. On aarch64 the routing decision is done by the GIC distributor, not by a Linux function. Re-pointing an IRQ at a different CPU means writing `GICD_ITARGETSR`/`GICD_IROUTER`, and those MMIO registers live behind the device-cgroup wall that ch07 spent a chapter not quite breaking.
 
 The realistic userspace attack the observer actually catches is narrower and more boring: a process with `CAP_SYS_NICE`/`CAP_NET_ADMIN` writes a narrow mask into `/proc/irq/<n>/smp_affinity`, pinning every high-rate IRQ onto CPU0. Other cores starve; a victim pinned to CPU0 sees latency explode. The per-CPU counters make the asymmetry obvious in the exit summary, and a defender diffing the per-CPU column over time can spot a stuck mask.
@@ -65,7 +65,7 @@ int BPF_KPROBE(kp_hiep2, struct irq_desc *desc)  // fallback; may be absent
 
 ## Verification
 
-`trigger.sh` runs a BEFORE/AFTER against a `ping -c 20 127.0.0.1` plus `dd if=/dev/urandom of=/dev/null bs=1M count=20` workload. `/proc/interrupts` provides the BEFORE baseline — coarse counters, no per-event timing. The BPF observer provides the AFTER delta.
+`trigger.sh` runs a BEFORE/AFTER against a `ping -c 20 127.0.0.1` plus `dd if=/dev/urandom of=/dev/null bs=1M count=20` workload. `/proc/interrupts` provides the BEFORE baseline ; coarse counters, no per-event timing. The BPF observer provides the AFTER delta.
 
 ```
 [ch11] === symbol availability ===
@@ -74,7 +74,7 @@ int BPF_KPROBE(kp_hiep2, struct irq_desc *desc)  // fallback; may be absent
   handle_irq_event_percpu        : ABSENT
 [ch11] attached handle_irq_event
 [ch11] attached __handle_irq_event_percpu
-[ch11] attached 2 program(s) — IRQ observer active
+[ch11] attached 2 program(s) ; IRQ observer active
 
 ==== IRQ dispatch summary ====
 total ringbuf events seen: 1843
@@ -102,4 +102,4 @@ The data `/proc/interrupts` can't give you and the observer can: per-event wall-
 
 Factual note: the original chapter draft claimed hooks on `irq_dispatch()` with inline affinity-mask rewrites. That wasn't the POC's behaviour and, per the three blockers above, isn't achievable on this kernel from BPF. The observer is honest; the override was wishful thinking.
 
-> **See also**: [POC source — ch11-irq-chaos](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch11-irq-chaos) · Harness entry: `Poc("ch11", ...)` in `dBPF-pocs/harness/proof.py`
+> **See also**: [POC source ; ch11-irq-chaos](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch11-irq-chaos) · Harness entry: `Poc("ch11", ...)` in `dBPF-pocs/harness/proof.py`

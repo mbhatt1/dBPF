@@ -10,7 +10,7 @@ date: 2025-01-31
 
 > **Proof status**: Both `ch01-mirror-controls` (kprobe+kretprobe) and `ch01-mirror-controls-lsm` (BPF LSM fmod_ret) have been proved on Ubuntu 6.17.0 aarch64 (Lima VM, kernel 6.17.0-29-generic). The kprobe variant was updated to deliver `bpf_send_signal(SIGUSR1)` to the target process on every capability denial; the ringbuf event records this in the `signal_sent` field under tag `FLIP`. The `-a` wildcard flag was added to the userspace loader to arm wildcard targeting. The LSM variant required no changes.
 
-I started this chapter wanting to override a capability check from BPF. I spent a week figuring out why that does not work on a stock kernel. I ended up writing two POCs. The second one — a BPF LSM program that returns `0` from `lsm/inode_permission` where the kernel would have returned `-EACCES` — is the one that actually grants access. That is the primary for this chapter. The first one, the kprobe on `cap_capable` with `bpf_send_signal`, is a cautionary tale documented in a sidebar below.
+I started this chapter wanting to override a capability check from BPF. I spent a week figuring out why that does not work on a stock kernel. I ended up writing two POCs. The second one ; a BPF LSM program that returns `0` from `lsm/inode_permission` where the kernel would have returned `-EACCES` ; is the one that actually grants access. That is the primary for this chapter. The first one, the kprobe on `cap_capable` with `bpf_send_signal`, is a cautionary tale documented in a sidebar below.
 
 The primitive, stated plainly: on a kernel with `CONFIG_BPF_LSM=y` and `bpf` in `/sys/kernel/security/lsm`, a BPF program can attach as an fmod_ret hook on `security_inode_permission`, and its return value replaces the kernel's. If the kernel was going to deny a VFS access with `-EACCES`, the BPF program returns `0` and the read or write proceeds. There is no error-injection allowlist to clear, no silent no-op. The kernel actually permits the access. That is what I could not do with a kprobe.
 
@@ -20,7 +20,7 @@ The LSM fmod_ret path only exists on kernels built and booted to accept it. Thre
 
 1. **`CONFIG_BPF_LSM=y`** at kernel build time. Without this, the loader fails at `BPF_PROG_LOAD` with `-EINVAL`. Fedora 38+ ships it on by default; Docker Desktop's linuxkit VM does not.
 2. **`bpf` in `/sys/kernel/security/lsm`**. The BPF LSM has to be in the active LSM set or fmod_ret programs have no chain to attach into. The loader reads `/sys/kernel/security/lsm`, looks for the substring `bpf`, and exits with `CH01_SKIP reason="BPF LSM not active"` if it is absent.
-3. **Kernel 6.14+ for `lsm/inode_permission` specifically.** I tried `lsm/capable` first. On kernels where `security_capable` short-circuits around the LSM chain for non-root processes — which is the common case from about 6.12 onward — the program never fires on the calls that matter. `inode_permission` fires reliably on every `vfs_read` / `vfs_write`. On 6.14+ the fmod_ret machinery around it is stable.
+3. **Kernel 6.14+ for `lsm/inode_permission` specifically.** I tried `lsm/capable` first. On kernels where `security_capable` short-circuits around the LSM chain for non-root processes ; which is the common case from about 6.12 onward ; the program never fires on the calls that matter. `inode_permission` fires reliably on every `vfs_read` / `vfs_write`. On 6.14+ the fmod_ret machinery around it is stable.
 
 If any of the three is missing, the loader emits a skip line and exits. There is no fallback to the kprobe variant inside this POC. A reader on linuxkit will see the skip and move on.
 
@@ -60,12 +60,12 @@ return new_ret;
 
 Control returns from the BPF trampoline back into the kernel's LSM machinery with `new_ret` as the verdict. `do_inode_permission` sees a `0`, `vfs_read` proceeds into the actual filesystem read path, and the bytes come back to the caller. No illusion, no forged payload: the kernel does the read.
 
-The event emit path reads the dentry via `BPF_CORE_READ` to recover the filename. It emits only on flips — `inode_permission` fires thousands of times per second on a busy system, and emitting on every call fills the ringbuf in milliseconds.
+The event emit path reads the dentry via `BPF_CORE_READ` to recover the filename. It emits only on flips ; `inode_permission` fires thousands of times per second on a busy system, and emitting on every call fills the ringbuf in milliseconds.
 
 ## Hook points
 
-- `lsm/inode_permission` — fmod_ret on the inode access check. Fires on every `vfs_read`, `vfs_write`, and file open that exercises DAC. The program's return value replaces the chain's verdict.
-- `lsm/capable` — the first attempt. Short-circuits on 6.12+ for non-root callers in the common case. Abandoned.
+- `lsm/inode_permission` ; fmod_ret on the inode access check. Fires on every `vfs_read`, `vfs_write`, and file open that exercises DAC. The program's return value replaces the chain's verdict.
+- `lsm/capable` ; the first attempt. Short-circuits on 6.12+ for non-root callers in the common case. Abandoned.
 
 ## The kprobe-plus-signal variant that does not mutate
 
@@ -100,7 +100,7 @@ The LSM POC is entirely legible to a defender watching BPF loads.
 
 - `bpftool prog show --type lsm` lists every LSM BPF program. The chapter's program appears as type `lsm` with attach target `inode_permission`.
 - `auditd` with `-a always,exit -F arch=b64 -S bpf -k bpf_syscall` captures the `BPF_PROG_LOAD` call.
-- A sudden absence of `-EACCES` denials for a specific process is a behavioral tell — this program removes the denials rather than masking them.
+- A sudden absence of `-EACCES` denials for a specific process is a behavioral tell ; this program removes the denials rather than masking them.
 - Baseline-diff of `bpftool prog show --json` catches the new program within one diff interval.
 
 For the kprobe variant:
@@ -113,7 +113,7 @@ None of these are hidden by this chapter. Hiding load events is a separate primi
 
 ## Scope
 
-The LSM variant is a first-class override primitive for VFS access checks, not gated by the error-injection allowlist. It is the answer the kernel maintainers point to when someone asks "can I override a security decision from BPF?" The preconditions are real — if BPF LSM is not in the LSM list, the chapter skips honestly.
+The LSM variant is a first-class override primitive for VFS access checks, not gated by the error-injection allowlist. It is the answer the kernel maintainers point to when someone asks "can I override a security decision from BPF?" The preconditions are real ; if BPF LSM is not in the LSM list, the chapter skips honestly.
 
 The kprobe variant is a Class III primitive (out-of-band observation) plus a Class V side-effect (`bpf_send_signal`). It confirms the BPF program can act at the exact moment a security decision is made. It does not change the decision. The LSM variant is what makes the chapter title accurate: that is the primitive that actually controls the mirror.
 

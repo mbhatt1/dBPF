@@ -10,7 +10,7 @@ date: 2025-02-09
 
 > **Proof status**: Proved on Ubuntu 6.17.0-29-generic aarch64 (Lima VM). **Runtime note**: `trigger.sh` must be run directly in the Lima/host VM shell, not inside Docker with `--pid=host`. The `--pid=host` flag causes "unable to start container process: can't get final child's PID from pipe: EOF" when the trigger spawns `unshare --pid`. Run the trigger directly in the VM.
 
-This one is almost embarrassingly straightforward once you know where to look. The primitive — recovering the host-visible PID of a task together with its namespace-local PID — has been shipping in bpftrace examples for years. Academic work on PID-namespace side channels via `sched_process_fork` goes back to at least 2020. The POC's contribution is narrow: package the observation as a CO-RE BPF program, confirm the mapping end-to-end by terminating a container process from the host using only the PID recovered from a BPF map, and document the hook choice.
+This one is almost embarrassingly straightforward once you know where to look. The primitive ; recovering the host-visible PID of a task together with its namespace-local PID ; has been shipping in bpftrace examples for years. Academic work on PID-namespace side channels via `sched_process_fork` goes back to at least 2020. The POC's contribution is narrow: package the observation as a CO-RE BPF program, confirm the mapping end-to-end by terminating a container process from the host using only the PID recovered from a BPF map, and document the hook choice.
 
 ## Mechanism
 
@@ -22,8 +22,8 @@ The `numbers[]` indexing is subtle. `struct pid` has a `numbers[1]` flexible arr
 
 The POC attaches two programs and picks the one that fires:
 
-- **`raw_tp/sched_process_fork`** — primary hook. Fires on every task creation, including the common `unshare --pid` / `clone(CLONE_NEWPID)` path. The raw tracepoint gives access to both parent and child `task_struct *` as typed args. I compare their `pid_ns_for_children->ns.inum` and only emit when the child entered a fresh namespace.
-- **`kprobe/copy_namespaces`** — secondary hook, preflighted against `/proc/kallsyms` at load time. `copy_namespaces` can be inlined on some kernels. The loader disables autoload for this program when the symbol is absent, so the load stays clean.
+- **`raw_tp/sched_process_fork`** ; primary hook. Fires on every task creation, including the common `unshare --pid` / `clone(CLONE_NEWPID)` path. The raw tracepoint gives access to both parent and child `task_struct *` as typed args. I compare their `pid_ns_for_children->ns.inum` and only emit when the child entered a fresh namespace.
+- **`kprobe/copy_namespaces`** ; secondary hook, preflighted against `/proc/kallsyms` at load time. `copy_namespaces` can be inlined on some kernels. The loader disables autoload for this program when the symbol is absent, so the load stays clean.
 
 A factual correction from the earlier draft: `switch_task_namespaces` fires only on the `setns()` path, which misses the common fork-into-new-ns case. `sched_process_fork` is the right hook for general coverage.
 
@@ -72,8 +72,8 @@ The bundled `trigger.sh` drives a BEFORE/AFTER:
 1. Spawn a victim inside a fresh user+pid namespace: `unshare -Upf --mount-proc bash -c 'echo "ns_side_pid=$$"; sleep 15'`. The victim reports its own ns-side PID (typically 1), but no unprivileged userspace API tells an outside observer which host PID backs that ns_pid.
 2. Start the BPF loader and wait for `status=ready`.
 3. Fire a second `unshare -Upf` so the tracepoint observes it post-attach.
-4. Parse the loader's stdout for an event whose `host_pid != ns_pid` — that line is the mapping.
-5. Confirm with `/proc/<host_pid>/status` — the `NSpid:` line shows both numbers and matches what BPF reported.
+4. Parse the loader's stdout for an event whose `host_pid != ns_pid` ; that line is the mapping.
+5. Confirm with `/proc/<host_pid>/status` ; the `NSpid:` line shows both numbers and matches what BPF reported.
 6. `kill -TERM <host_pid>` from the host. The victim dies; the container sees its own PID receive SIGTERM.
 
 A representative exit summary from a run:
@@ -87,14 +87,14 @@ A representative exit summary from a run:
 === CH09_PROVEN host_pid=481203 mapped=yes kill_from_outside=ok ===
 ```
 
-This is not novel — `ps -ef` on the host already shows the same thing, as does `/proc/<pid>/status`. The useful property is that the BPF map lookup is O(1) and requires no `/proc` walking, which matters at scale or inside another BPF program.
+This is not novel ; `ps -ef` on the host already shows the same thing, as does `/proc/<pid>/status`. The useful property is that the BPF map lookup is O(1) and requires no `/proc` walking, which matters at scale or inside another BPF program.
 
 ## Detection
 
-The attach is visible. `bpftool prog show` lists the raw tracepoint and kprobe programs. The map dump (`bpftool map dump name mapping`) reveals both host and ns PIDs of every observed namespace entry in cleartext — the loudest tell, because the attacker has to keep the map populated for the primitive to be useful. The `cfg` array is also worth checking: `cfg[0] == 1` means the program is armed to deliver SIGUSR1 on every matching fork, not just observe.
+The attach is visible. `bpftool prog show` lists the raw tracepoint and kprobe programs. The map dump (`bpftool map dump name mapping`) reveals both host and ns PIDs of every observed namespace entry in cleartext ; the loudest tell, because the attacker has to keep the map populated for the primitive to be useful. The `cfg` array is also worth checking: `cfg[0] == 1` means the program is armed to deliver SIGUSR1 on every matching fork, not just observe.
 
 The read itself produces no syscall-level signal. If you want to catch a host process using BPF-derived namespace PIDs to send cross-namespace signals, the right place is the `kill` audit trail.
 
 Prior art worth citing: bpftrace ships `pidnss.bt` and similar scripts that do essentially this lookup, and Cilium/Tetragon uses the same pattern for PID tracking in its observation code.
 
-> **See also**: [POC source — ch09-pid-doppel](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch09-pid-doppel) · Harness entry: `Poc("ch09", ...)` in `dBPF-pocs/harness/proof.py`
+> **See also**: [POC source ; ch09-pid-doppel](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch09-pid-doppel) · Harness entry: `Poc("ch09", ...)` in `dBPF-pocs/harness/proof.py`

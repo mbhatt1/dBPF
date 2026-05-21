@@ -8,7 +8,7 @@ date: 2026-01-12
 
 > **See also**: [Blog post]({{ site.baseurl }}/the-defender-playbook.html) · [Harness](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
-> **Navigation**: [Chapter 20 — Taxonomy]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
+> **Navigation**: [Chapter 20 ; Taxonomy]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21 ; Skip Accounting]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 22 ; Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
 
 Every primitive in this book required `CAP_BPF`, and most additionally required `CAP_PERFMON` or `CAP_SYS_ADMIN`. That single observation collapses the defender's problem into four verbs: **inventory**, **restrict**, **baseline**, **audit**. The whole chapter is those verbs expanded; the whole book is the justification for doing any of it.
 
@@ -41,9 +41,9 @@ BPF LSM is the single highest-leverage control, because it sits on the entry poi
 cat /sys/kernel/security/lsm   # expect: ...,bpf,...
 ```
 
-Then write a `SEC("lsm/bpf_prog_load")` program that gates `BPF_PROG_LOAD` by attach type, source path, and caller credential. A minimal policy refuses attach types that should never appear on the host — `BPF_XDP` where no workload is supposed to run XDP, `fmod_ret` where nothing legitimate hooks error-injection-annotated functions.
+Then write a `SEC("lsm/bpf_prog_load")` program that gates `BPF_PROG_LOAD` by attach type, source path, and caller credential. A minimal policy refuses attach types that should never appear on the host ; `BPF_XDP` where no workload is supposed to run XDP, `fmod_ret` where nothing legitimate hooks error-injection-annotated functions.
 
-The Cilium "enforce signed programs only" pattern is the reference implementation: permit only programs whose instruction-hash (`tag`) is in a list signed by a known key, refuse everything else. This catches an entire category of threats — a privileged process that the vendor trusts gets subverted and tries to load a program the vendor never shipped. The signed-tag check fails; the program never enters the kernel's program table.
+The Cilium "enforce signed programs only" pattern is the reference implementation: permit only programs whose instruction-hash (`tag`) is in a list signed by a known key, refuse everything else. This catches an entire category of threats ; a privileged process that the vendor trusts gets subverted and tries to load a program the vendor never shipped. The signed-tag check fails; the program never enters the kernel's program table.
 
 A per-attach-type gate is simpler and still highly effective:
 
@@ -61,7 +61,7 @@ int BPF_PROG(gate_by_type, struct bpf_prog *prog, union bpf_attr *attr,
 }
 ```
 
-Non-root workloads may load tracepoint programs only; everything else (kprobe, kretprobe, LSM, XDP) is denied. This eliminates Class I and Class II for every non-root workload. Deploy in shadow mode first — log denials but return 0 — for 48 hours to enumerate every caller the gate would have denied; add each legitimate caller to the allowlist; then flip to enforce.
+Non-root workloads may load tracepoint programs only; everything else (kprobe, kretprobe, LSM, XDP) is denied. This eliminates Class I and Class II for every non-root workload. Deploy in shadow mode first ; log denials but return 0 ; for 48 hours to enumerate every caller the gate would have denied; add each legitimate caller to the allowlist; then flip to enforce.
 
 ## Pin and baseline
 
@@ -75,7 +75,7 @@ bpftool prog show -j \
 
 A systemd timer runs every minute, repeats the capture, and diffs against the baseline. New attachments produce an alert shipped to a sink that does not itself hold `CAP_BPF`. Include `tag` (SHA of the program instructions), `name`, and `load_time` so you can correlate the alert back to the process that issued `BPF_PROG_LOAD`.
 
-This is what catches late-loaded persistence — the program that wasn't on the host at boot and is on the host now. It also catches Class IV: a new XDP attachment on an interface that previously had none is the signature of chapters 5b, 15, and 25.
+This is what catches late-loaded persistence ; the program that wasn't on the host at boot and is on the host now. It also catches Class IV: a new XDP attachment on an interface that previously had none is the signature of chapters 5b, 15, and 25.
 
 Also enumerate attach points separately:
 
@@ -110,7 +110,7 @@ type=SYSCALL ... syscall=280 success=yes exit=4 a0=5 ...
 
 `a0=5` is `BPF_PROG_LOAD`. `euid=0` with `uid=1000` is the credential tell: a non-root user is calling `bpf(2)` with effective-root privileges. On a workload that does not legitimately need it, that is a finding.
 
-Ship the records to a tamper-evident sink — remote syslog, a write-only append log, a SIEM — that does **not** run with `CAP_BPF`. The point is that a Class III exfil primitive running on the monitored host cannot rewrite the records after the fact. If your audit pipeline runs on the same host as the attacker's ringbuf reader, your audit pipeline is part of the attack surface.
+Ship the records to a tamper-evident sink ; remote syslog, a write-only append log, a SIEM ; that does **not** run with `CAP_BPF`. The point is that a Class III exfil primitive running on the monitored host cannot rewrite the records after the fact. If your audit pipeline runs on the same host as the attacker's ringbuf reader, your audit pipeline is part of the attack surface.
 
 Filter in the pipeline to keep `a0` values `{0, 5, 6, 8, 28}` (MAP_CREATE, PROG_LOAD, OBJ_PIN, PROG_ATTACH, LINK_CREATE) and drop MAP_UPDATE_ELEM/MAP_LOOKUP_ELEM, which are thousands-per-second on active agents. That reduces volume by 99%+ while preserving the security-relevant events.
 
@@ -120,25 +120,25 @@ Each class from Chapter 20 has a primary control and a set of audit fallbacks.
 
 | Class | Representative chapters | Key mitigation |
 |-------|-------------------------|----------------|
-| I — return override | ch01, ch14, ch18 | Restrict `ALLOW_ERROR_INJECTION` list; audit `bpf(2)`; do not trust userspace syscall returns for security decisions |
-| II — userspace buffer rewrite | ch05, ch10 | BPF LSM deny on `bpf_probe_write_user`; audit attach events; `journalctl -k | grep bpf_probe_write_user` |
-| III — ringbuf exfil | ch03, ch04, ch08, ch09, ch11, ch16, ch23 | Cannot prevent post-load; minimize the `CAP_BPF` footprint; off-box audit sink; for ch23, treat any `CAP_BPF` holder on a host with TPM-backed trusted keys as having seen those keys in plaintext |
-| IV — XDP packet path | ch05b, ch15, ch25 | Inventory XDP attachments; cgroup and net policies; BPF LSM gate on `BPF_XDP` attach; for ch25, pair with IAM-policy scope-down on the instance role |
-| V — copy-up racer | ch02 | Rootless containers; non-overlayfs storage; ringbuf-attach monitoring on the observer half |
+| I ; return override | ch01, ch14, ch18 | Restrict `ALLOW_ERROR_INJECTION` list; audit `bpf(2)`; do not trust userspace syscall returns for security decisions |
+| II ; userspace buffer rewrite | ch05, ch10 | BPF LSM deny on `bpf_probe_write_user`; audit attach events; `journalctl -k | grep bpf_probe_write_user` |
+| III ; ringbuf exfil | ch03, ch04, ch08, ch09, ch11, ch16, ch23 | Cannot prevent post-load; minimize the `CAP_BPF` footprint; off-box audit sink; for ch23, treat any `CAP_BPF` holder on a host with TPM-backed trusted keys as having seen those keys in plaintext |
+| IV ; XDP packet path | ch05b, ch15, ch25 | Inventory XDP attachments; cgroup and net policies; BPF LSM gate on `BPF_XDP` attach; for ch25, pair with IAM-policy scope-down on the instance role |
+| V ; copy-up racer | ch02 | Rootless containers; non-overlayfs storage; ringbuf-attach monitoring on the observer half |
 
 Two observations about this table.
 
 First, Class III and Class V share a mitigation posture: once the program is loaded, the data is gone; your only real lever is how many places on the fleet can call `BPF_PROG_LOAD` in the first place.
 
-Second, Class I is the one where the orchestrator itself has to change. No amount of in-kernel auditing helps if the userspace caller still believes the forged syscall return. Consult `current->cred` at the enforcement point, or post-check ground truth — `/proc/self/status` after a credential change, `/proc/modules` after a module load, `/proc/<pid>/sched` after a policy change. Cheap compared to acting on a forged answer.
+Second, Class I is the one where the orchestrator itself has to change. No amount of in-kernel auditing helps if the userspace caller still believes the forged syscall return. Consult `current->cred` at the enforcement point, or post-check ground truth ; `/proc/self/status` after a credential change, `/proc/modules` after a module load, `/proc/<pid>/sched` after a policy change. Cheap compared to acting on a forged answer.
 
 ## Do not trust userspace syscall returns for security decisions
 
 Every Class I primitive in this book forges a syscall-layer answer. The defense is at the orchestrator layer: do not base security decisions on what `syscall(...)` returned.
 
-- **`getuid()` / `geteuid()` return** — ch18 can forge both. Read `/proc/self/status` and parse `Uid:` instead. The ch18 primitive leaves `gid=1001` intact — any consistency checker that reads both uid and gid and expects them to cohere catches the half-hooked forge immediately.
-- **`sched_setscheduler()` return** — ch14 forges it to 0. The task's actual policy is readable via `/proc/<pid>/sched` and is unchanged.
-- **`insmod` / `finit_module` return** — ch12s forges it. Verify via `/proc/modules` and `/sys/module/<name>/`. A forged syscall return does not populate either.
+- **`getuid()` / `geteuid()` return** ; ch18 can forge both. Read `/proc/self/status` and parse `Uid:` instead. The ch18 primitive leaves `gid=1001` intact ; any consistency checker that reads both uid and gid and expects them to cohere catches the half-hooked forge immediately.
+- **`sched_setscheduler()` return** ; ch14 forges it to 0. The task's actual policy is readable via `/proc/<pid>/sched` and is unchanged.
+- **`insmod` / `finit_module` return** ; ch12s forges it. Verify via `/proc/modules` and `/sys/module/<name>/`. A forged syscall return does not populate either.
 
 The consistency-checker pattern:
 
@@ -151,11 +151,11 @@ if (claim != truth_real) {
 }
 ```
 
-The ch18 primitive cannot simultaneously forge `getuid()` and the `/proc/self/status` text — doing so would require a second BPF program, visible as a new entry in the baseline diff.
+The ch18 primitive cannot simultaneously forge `getuid()` and the `/proc/self/status` text ; doing so would require a second BPF program, visible as a new entry in the baseline diff.
 
 ## Accept what you cannot stop
 
-Class III primitives — ringbuf exfiltration of kernel-internal state — cannot be prevented once a peer holds `CAP_BPF`. Chapter 16 states this plainly for seccomp: the primitive sits in the documented gap in seccomp's threat model. The same is true for chapters 3, 4, 8, 9, 11, and 16.
+Class III primitives ; ringbuf exfiltration of kernel-internal state ; cannot be prevented once a peer holds `CAP_BPF`. Chapter 16 states this plainly for seccomp: the primitive sits in the documented gap in seccomp's threat model. The same is true for chapters 3, 4, 8, 9, 11, and 16.
 
 Accept does not mean ignore. It means:
 
@@ -163,7 +163,7 @@ Accept does not mean ignore. It means:
 
 **Ship critical records off-host synchronously.** The audit sink is the template. If a Class III primitive reads a credential, and the legitimate consumer of that credential has already written it to an off-host sink, the exfil is a duplicate of a record the defender already has.
 
-**Use short-lived credentials as a compensating control.** Class III exfiltration is structurally unstoppable once the program loads. Making the exfil unprofitable — TTL of 30 seconds on database credentials, per-workload IRSA rather than instance roles — is the best available control. Credentials that cannot be short-TTLed belong in an enclave or on a host that does not host peer `CAP_BPF` workloads.
+**Use short-lived credentials as a compensating control.** Class III exfiltration is structurally unstoppable once the program loads. Making the exfil unprofitable ; TTL of 30 seconds on database credentials, per-workload IRSA rather than instance roles ; is the best available control. Credentials that cannot be short-TTLed belong in an enclave or on a host that does not host peer `CAP_BPF` workloads.
 
 ## Closing
 

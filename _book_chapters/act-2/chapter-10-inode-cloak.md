@@ -10,22 +10,22 @@ date: 2025-02-10
 
 > **Proof status**: Proved on Ubuntu 6.17.0-29-generic aarch64 (Lima VM). **Source fix**: The BPF map was originally named `active`, which collided with the kernel enum value `active = 6` in `vmlinux.h` on this kernel, causing a compile error. The map has been renamed to `active_calls` in `ch10-inode-cloak.bpf.c`. This fix is in the source; `make` succeeds cleanly after the rename.
 
-This one isn't new. The `d_reclen`-swallow trick for hiding dirents inside the `getdents64` return buffer has been in rootkit proof-of-concepts for years — Jiska Classen's work, the kovid/reveng'd crowd, and various LKM rootkits have used variants of it since at least 2016. What the POC adds is narrow: a modern CO-RE reproduction on 6.12 aarch64 using two syscall tracepoints, with ringbuf evidence and honest testing against `ls`, `find`, and `stat`.
+This one isn't new. The `d_reclen`-swallow trick for hiding dirents inside the `getdents64` return buffer has been in rootkit proof-of-concepts for years ; Jiska Classen's work, the kovid/reveng'd crowd, and various LKM rootkits have used variants of it since at least 2016. What the POC adds is narrow: a modern CO-RE reproduction on 6.12 aarch64 using two syscall tracepoints, with ringbuf evidence and honest testing against `ls`, `find`, and `stat`.
 
 ## Mechanism
 
-When `getdents64` returns, each entry in the user buffer carries its own `d_reclen` telling userspace how many bytes to skip to reach the next record. If I extend the preceding entry's `d_reclen` so it covers the one I want to hide, every userspace reader — libc, Python, Go — strides right over the hidden name without ever seeing it. No file is deleted. No inode is touched on disk. `open("/tmp/cloak/.backdoor")` still works because name resolution goes through a different path entirely.
+When `getdents64` returns, each entry in the user buffer carries its own `d_reclen` telling userspace how many bytes to skip to reach the next record. If I extend the preceding entry's `d_reclen` so it covers the one I want to hide, every userspace reader ; libc, Python, Go ; strides right over the hidden name without ever seeing it. No file is deleted. No inode is touched on disk. `open("/tmp/cloak/.backdoor")` still works because name resolution goes through a different path entirely.
 
-A factual correction from the earlier draft: the hooks are not at `iterate_dir` or `vfs_stat`. `iterate_dir` runs inside the kernel, before entries are copied to userspace, and kprobing it to filter would require mutating the in-kernel `dir_context` — a much harder problem that this POC doesn't attempt. The tracepoint-plus-`bpf_probe_write_user` path is the one that actually works.
+A factual correction from the earlier draft: the hooks are not at `iterate_dir` or `vfs_stat`. `iterate_dir` runs inside the kernel, before entries are copied to userspace, and kprobing it to filter would require mutating the in-kernel `dir_context` ; a much harder problem that this POC doesn't attempt. The tracepoint-plus-`bpf_probe_write_user` path is the one that actually works.
 
 ## Hook points
 
 Two syscall tracepoints plus a HASH map of filenames to hide:
 
-- **`tp/syscalls/sys_enter_getdents64`** — stash the userspace `dirp` pointer in a per-`pid_tgid` hash map (`active_calls`).
-- **`tp/syscalls/sys_exit_getdents64`** — walk the returned stream, match each `d_name` against the `hidden` map, and on a hit rewrite the predecessor's `d_reclen` to swallow the matched entry.
+- **`tp/syscalls/sys_enter_getdents64`** ; stash the userspace `dirp` pointer in a per-`pid_tgid` hash map (`active_calls`).
+- **`tp/syscalls/sys_exit_getdents64`** ; walk the returned stream, match each `d_name` against the `hidden` map, and on a hit rewrite the predecessor's `d_reclen` to swallow the matched entry.
 
-What `bpf_probe_write_user` can and can't do here is worth being explicit about. It can write to the current task's userspace pages because on syscall exit the buffer is still resident and owned by the caller. It can't re-scan indefinitely because the verifier caps loops — the POC bounds the dirent walk to 64 entries per call, which is the ceiling I could convince the verifier to accept with the linear probe pattern. Directories with more than 64 entries per `getdents64` return can leak names past the bound.
+What `bpf_probe_write_user` can and can't do here is worth being explicit about. It can write to the current task's userspace pages because on syscall exit the buffer is still resident and owned by the caller. It can't re-scan indefinitely because the verifier caps loops ; the POC bounds the dirent walk to 64 entries per call, which is the ceiling I could convince the verifier to accept with the linear probe pattern. Directories with more than 64 entries per `getdents64` return can leak names past the bound.
 
 Edge case: if the hit is the first entry in the buffer, there is no predecessor to extend. The POC falls back to zeroing `d_ino` so naive readers that treat `ino=0` as "skip" drop it on the floor. That's strictly weaker than the swallow trick. Both paths emit a ringbuf event so the two cases are distinguishable in evidence.
 
@@ -90,7 +90,7 @@ notes.txt
 visible
 files_seen=4
 
-=== AFTER (loader running — cloaking .backdoor and evil.so) ===
+=== AFTER (loader running ; cloaking .backdoor and evil.so) ===
 /tmp/cloak contents via ls -A:
 notes.txt
 visible
@@ -117,8 +117,8 @@ The honest limits of the cloak:
 
 ## Detection
 
-`bpftool prog show` lists both tracepoint programs. The loudest tell is `bpftool map dump name hidden`, which prints the cloaked filename set in cleartext — the attacker has to keep the map populated for the cloak to fire. Cross-referencing `ls` output with `find -inum` exposes the discrepancy immediately. Every FIM tool I tested is blind to this cloak because every FIM tool trusts `readdir`.
+`bpftool prog show` lists both tracepoint programs. The loudest tell is `bpftool map dump name hidden`, which prints the cloaked filename set in cleartext ; the attacker has to keep the map populated for the cloak to fire. Cross-referencing `ls` output with `find -inum` exposes the discrepancy immediately. Every FIM tool I tested is blind to this cloak because every FIM tool trusts `readdir`.
 
-`bpf_probe_write_user` emits a rate-limited dmesg warning on use: `BPF: <program_name> is writing to user space memory.` Note that on 6.12 the helper does not set the `TAINT_USER` kernel taint bit — the detection signal is purely in dmesg.
+`bpf_probe_write_user` emits a rate-limited dmesg warning on use: `BPF: <program_name> is writing to user space memory.` Note that on 6.12 the helper does not set the `TAINT_USER` kernel taint bit ; the detection signal is purely in dmesg.
 
-> **See also**: [POC source — ch10-inode-cloak](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch10-inode-cloak) · Harness entry: `Poc("ch10", ...)` in `dBPF-pocs/harness/proof.py`
+> **See also**: [POC source ; ch10-inode-cloak](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch10-inode-cloak) · Harness entry: `Poc("ch10", ...)` in `dBPF-pocs/harness/proof.py`

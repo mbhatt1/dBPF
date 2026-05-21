@@ -12,13 +12,13 @@ date: 2025-02-03
 
 I was trying to see how far a tail-called BPF program could walk `task_struct` from a tracepoint on `sys_enter_write` before the verifier got unhappy. The idea was simple: a regular `write()` syscall carrying a magic prefix fires the tracepoint, which tail-calls a second stage that reads kernel-internal credential fields and exfils them via ringbuf. One syscall, three kernel-private values out.
 
-What surprised me was how little the verifier pushed back. Reading `task->cred->uid`, `task->cred->euid`, `task->real_parent->comm` through `BPF_CORE_READ` — all accepted. What it rejected: writes to `task_struct` (e.g., attempting to swap `cred` pointers). So the pattern is exfil, not privilege escalation. That matches how BPF was designed: observation of kernel state is permitted; mutation of core task state is not.
+What surprised me was how little the verifier pushed back. Reading `task->cred->uid`, `task->cred->euid`, `task->real_parent->comm` through `BPF_CORE_READ` ; all accepted. What it rejected: writes to `task_struct` (e.g., attempting to swap `cred` pointers). So the pattern is exfil, not privilege escalation. That matches how BPF was designed: observation of kernel state is permitted; mutation of core task state is not.
 
-The threat model target is the mundane end of the syscall allowlist. `write()` is in every seccomp profile. A filter that blocks `write()` breaks the process. A monitor that alerts on `write()` drowns in noise. A seccomp filter also cannot inspect the buffer contents — `seccomp_data` does not carry the user buffer pointer's dereferenced bytes. So a `write()` with a magic prefix in the buffer is an allowed syscall whose payload the filter never sees.
+The threat model target is the mundane end of the syscall allowlist. `write()` is in every seccomp profile. A filter that blocks `write()` breaks the process. A monitor that alerts on `write()` drowns in noise. A seccomp filter also cannot inspect the buffer contents ; `seccomp_data` does not carry the user buffer pointer's dereferenced bytes. So a `write()` with a magic prefix in the buffer is an allowed syscall whose payload the filter never sees.
 
 ## Mechanism
 
-### Stage 1 — syscall tracepoint detects magic prefix
+### Stage 1 ; syscall tracepoint detects magic prefix
 
 ```c
 SEC("tracepoint/syscalls/sys_enter_write")
@@ -37,7 +37,7 @@ int tp_write(struct trace_event_raw_sys_enter *ctx) {
 }
 ```
 
-### Stage 2 — read kernel cred + parent comm, emit ringbuf
+### Stage 2 ; read kernel cred + parent comm, emit ringbuf
 
 ```c
 SEC("tracepoint/syscalls/sys_enter_write")
@@ -64,14 +64,14 @@ int tp_write_stage2(struct trace_event_raw_sys_enter *ctx) {
 }
 ```
 
-The loader registers stage 2 in a `BPF_MAP_TYPE_PROG_ARRAY` at slot 0 before attaching stage 1. Without the explicit `bpf_program__set_autoattach(stage2, false)` call, libbpf would attach stage 2 directly to the same tracepoint — every `write()` would emit an event. The autoattach disable is load-bearing.
+The loader registers stage 2 in a `BPF_MAP_TYPE_PROG_ARRAY` at slot 0 before attaching stage 1. Without the explicit `bpf_program__set_autoattach(stage2, false)` call, libbpf would attach stage 2 directly to the same tracepoint ; every `write()` would emit an event. The autoattach disable is load-bearing.
 
 Stage 1 and stage 2 must have the same section type. My first attempt declared stage 2 as `SEC("raw_tp/sys_enter_write")`. The prog array update failed with `tail_call: program type mismatch`. `SEC("tp/...")` programs are `BPF_PROG_TYPE_TRACEPOINT`; `SEC("raw_tp/...")` programs are `BPF_PROG_TYPE_RAW_TRACEPOINT`. A PROG_ARRAY can only hold programs of the same type as the caller.
 
 ## Hook points
 
-- `tracepoint/syscalls/sys_enter_write` (stage 1) — magic prefix detection + tail-call.
-- `tracepoint/syscalls/sys_enter_write` (stage 2, manual-attach) — cred/parent reads + ringbuf emit.
+- `tracepoint/syscalls/sys_enter_write` (stage 1) ; magic prefix detection + tail-call.
+- `tracepoint/syscalls/sys_enter_write` (stage 2, manual-attach) ; cred/parent reads + ringbuf emit.
 
 ## Verifier friction during development
 
@@ -101,13 +101,13 @@ The unprivileged process issues exactly one `write()`. From its own userspace pe
 ## Detection
 
 - `bpftool prog list` shows both stages and the PROG_ARRAY.
-- `bpftool link list | grep tracepoint` shows two links on `syscalls/sys_enter_write` — the signature of the staged design.
+- `bpftool link list | grep tracepoint` shows two links on `syscalls/sys_enter_write` ; the signature of the staged design.
 - `/sys/kernel/debug/tracing/events/syscalls/sys_enter_write/enable` will be set.
 - Any seccomp filter that audits `bpf(2)` syscalls will see stage 2 being loaded.
-- Behavioral: the stage-1 gate runs on every `write()` on the host. At 120 ns/invocation on a busy host issuing 1M writes/sec, the overhead is 120 ms/sec on the relevant core — measurable with `perf stat -e bpf_trace_enter`.
+- Behavioral: the stage-1 gate runs on every `write()` on the host. At 120 ns/invocation on a busy host issuing 1M writes/sec, the overhead is 120 ms/sec on the relevant core ; measurable with `perf stat -e bpf_trace_enter`.
 
 ## Scope
 
-Class III primitive from chapter 20 (ringbuf exfil). Nothing in the kernel changes; three kernel-private fields are copied out. Seccomp that allows `write()` sees one syscall; that was the threat model of seccomp, and it still holds exactly as designed — this primitive just sits in the explicit gap.
+Class III primitive from chapter 20 (ringbuf exfil). Nothing in the kernel changes; three kernel-private fields are copied out. Seccomp that allows `write()` sees one syscall; that was the threat model of seccomp, and it still holds exactly as designed ; this primitive just sits in the explicit gap.
 
 The cooperative-attacker note: the triggering process must know the magic prefix. This is not a passive exfiltration from an uncooperating process. It is a covert channel between two processes that agreed on the protocol. The `write()` syscall itself completes normally; the tracepoint side-effect is invisible to the caller.

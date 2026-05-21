@@ -8,9 +8,9 @@ date: 2025-03-15
 
 > **See also**: [Blog post]({{ site.baseurl }}/sched-fifo-impersonator.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch14-sched-fifo) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
-This is a userspace-illusion bypass. The kernel's scheduler state is not touched. What changes is the value libc gets back from the syscall — any caller that gates behaviour on "did `sched_setscheduler` return 0" is fooled; anything that reaches back into the kernel to verify sees the real, unchanged policy.
+This is a userspace-illusion bypass. The kernel's scheduler state is not touched. What changes is the value libc gets back from the syscall ; any caller that gates behaviour on "did `sched_setscheduler` return 0" is fooled; anything that reaches back into the kernel to verify sees the real, unchanged policy.
 
-The target is `__arm64_sys_sched_setscheduler`. It sits in `/sys/kernel/debug/error_injection/list` on the linuxkit 6.12 aarch64 kernel I was testing against, which is the precondition for `bpf_override_return` to actually land — the helper silently no-ops against functions that are not on that list. Most syscall entrypoints are on the list; most internal kernel functions are not, which is why the hook is on the syscall boundary and not on `__sched_setscheduler` deeper in.
+The target is `__arm64_sys_sched_setscheduler`. It sits in `/sys/kernel/debug/error_injection/list` on the linuxkit 6.12 aarch64 kernel I was testing against, which is the precondition for `bpf_override_return` to actually land ; the helper silently no-ops against functions that are not on that list. Most syscall entrypoints are on the list; most internal kernel functions are not, which is why the hook is on the syscall boundary and not on `__sched_setscheduler` deeper in.
 
 The same pattern appears in chapter 18 against `__arm64_sys_getuid` and `__arm64_sys_geteuid`. Two chapters, same primitive, different targets. The only interesting per-chapter content is which symbol is on the error-injection list this week.
 
@@ -37,18 +37,18 @@ override_ret=0
 
 `task_struct->policy` is unchanged. Runqueue placement is unchanged. The task is still on whatever policy it was on before the call. Any of the following will show the real policy:
 
-- `sched_getscheduler(pid)` — consults `task_struct->policy` directly.
-- `/proc/[pid]/sched` — same source.
-- `/proc/[pid]/stat` field 41 — same source.
+- `sched_getscheduler(pid)` ; consults `task_struct->policy` directly.
+- `/proc/[pid]/sched` ; same source.
+- `/proc/[pid]/stat` field 41 ; same source.
 
 The illusion is exactly one syscall wide. `chrt`, `systemd`, and libraries that gate on "setscheduler returned 0" will proceed as though SCHED_FIFO was granted and will not re-verify. Anything that looks again sees reality.
 
-The honest framing: not "you get SCHED_FIFO" but "anything that trusts the setscheduler return is fooled." That class is — for reasons I did not fully expect before I went looking — large. JIT runtimes, realtime audio servers, systemd `CPUSchedulingPolicy=` startup paths. All trust the return. None cross-check via `sched_getscheduler`.
+The honest framing: not "you get SCHED_FIFO" but "anything that trusts the setscheduler return is fooled." That class is ; for reasons I did not fully expect before I went looking ; large. JIT runtimes, realtime audio servers, systemd `CPUSchedulingPolicy=` startup paths. All trust the return. None cross-check via `sched_getscheduler`.
 
 ## Hook points
 
-- `kprobe/__arm64_sys_sched_setscheduler` — record caller into the inflight map.
-- `kretprobe/__arm64_sys_sched_setscheduler` — `bpf_override_return(ctx, 0)` when the target matches. Always emits a ringbuf event recording the original return and whether it was flipped.
+- `kprobe/__arm64_sys_sched_setscheduler` ; record caller into the inflight map.
+- `kretprobe/__arm64_sys_sched_setscheduler` ; `bpf_override_return(ctx, 0)` when the target matches. Always emits a ringbuf event recording the original return and whether it was flipped.
 
 The loader greps `/proc/kallsyms` at startup and refuses to run if the target symbol is missing (wrong arch or a non-kprobe-eligible kernel).
 
@@ -104,14 +104,14 @@ docker run --rm -v "$PWD":/work -w /work dbpf-base \
 
 - `bpftool prog show type kprobe` lists `kp_sched` / `kr_sched` attached to `__arm64_sys_sched_setscheduler`. Tracing tools and observability agents do not normally hook that symbol; a probe on it from a non-security process is anomalous.
 - `/sys/kernel/tracing/kprobe_events` shows the dynamic entries.
-- Hosts running `kernel.unprivileged_bpf_disabled=1` plus a strict LSM/lockdown profile cannot load `bpf_override_return`-using programs at all — `CAP_SYS_ADMIN` and `CONFIG_BPF_KPROBE_OVERRIDE` are both required.
+- Hosts running `kernel.unprivileged_bpf_disabled=1` plus a strict LSM/lockdown profile cannot load `bpf_override_return`-using programs at all ; `CAP_SYS_ADMIN` and `CONFIG_BPF_KPROBE_OVERRIDE` are both required.
 - A detector that cross-checks the reported policy against `task_struct->policy` via `/proc/[pid]/sched` catches the divergence immediately. I did not find anything in the wild doing this by default.
 
 ## Limitations
 
 - Arch-specific. `__arm64_sys_*` on aarch64, `__x64_sys_*` on x86_64. The BPF object as shipped is aarch64 only.
-- `bpf_override_return` requires `CONFIG_BPF_KPROBE_OVERRIDE=y` AND the target symbol to be in `/sys/kernel/debug/error_injection/list`. Most internal kernel functions are not on the list — which is why we hook the syscall entrypoint rather than the deeper `__sched_setscheduler` core.
-- The override does not change actual scheduler state — only what userspace observes on that one syscall return.
+- `bpf_override_return` requires `CONFIG_BPF_KPROBE_OVERRIDE=y` AND the target symbol to be in `/sys/kernel/debug/error_injection/list`. Most internal kernel functions are not on the list ; which is why we hook the syscall entrypoint rather than the deeper `__sched_setscheduler` core.
+- The override does not change actual scheduler state ; only what userspace observes on that one syscall return.
 - On stock cloud kernels with hardened lockdown or SELinux, `bpf_override_return` may be denied even with `CAP_SYS_ADMIN`.
 
 > **Proof status**: **PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM), 2026-05-20. Proof marker: `SCHED_WEAPON_PROVEN flips=1`.

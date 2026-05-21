@@ -8,9 +8,9 @@ date: 2025-03-01
 
 > **See also**: [Blog post]({{ site.baseurl }}/ebpf-signed-driver-swap.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch12-signed-driver-swap-syscall) · [Chapter 21]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html)
 
-> **Proof status**: All three variants proved on Ubuntu 6.17.0-29-generic aarch64 (Lima VM) — `ch12-signed-driver-swap` (observer), `ch12-signed-driver-swap-lsm` (real LSM flip on enforcing kernels), and `ch12-signed-driver-swap-syscall` (syscall illusion). The chapter is explicit about which does what. The syscall illusion fires on linuxkit; the real LSM flip requires `CONFIG_MODULE_SIG_FORCE=y` and BPF LSM active in `lsm=`.
+> **Proof status**: All three variants proved on Ubuntu 6.17.0-29-generic aarch64 (Lima VM) ; `ch12-signed-driver-swap` (observer), `ch12-signed-driver-swap-lsm` (real LSM flip on enforcing kernels), and `ch12-signed-driver-swap-syscall` (syscall illusion). The chapter is explicit about which does what. The syscall illusion fires on linuxkit; the real LSM flip requires `CONFIG_MODULE_SIG_FORCE=y` and BPF LSM active in `lsm=`.
 
-`/sys/kernel/debug/error_injection/list` didn't have `mod_verify_sig` or `kernel_read_file`, so the LSM fmod_ret approach was dead on linuxkit. It did have `__arm64_sys_finit_module` and `__arm64_sys_init_module` — syscall entry points are exactly what the error-injection allowlist is for.
+`/sys/kernel/debug/error_injection/list` didn't have `mod_verify_sig` or `kernel_read_file`, so the LSM fmod_ret approach was dead on linuxkit. It did have `__arm64_sys_finit_module` and `__arm64_sys_init_module` ; syscall entry points are exactly what the error-injection allowlist is for.
 
 The working attack on linuxkit is smaller and more honest than the chapter draft I started from. I want to be explicit about what it is and isn't before going near the code.
 
@@ -22,7 +22,7 @@ Two independent failures killed this on the linuxkit kernel.
 
 First, linuxkit doesn't enforce module signatures. `CONFIG_MODULE_SIG_FORCE` is off; the signature hooks are present but advisory. Nothing ever rejects, so there's nothing to flip.
 
-Second, and more fatal: `insmod` of a non-ELF blob fails at ELF validation inside the module loader, long before any signature code runs. Even on a kernel that does fail-close on signatures, the simplest test payload — a file that isn't a valid ELF — never reaches `mod_verify_sig`. I was hooking a check the kernel wasn't performing on the code path I was triggering. Classic wrong-enforcement-point mistake.
+Second, and more fatal: `insmod` of a non-ELF blob fails at ELF validation inside the module loader, long before any signature code runs. Even on a kernel that does fail-close on signatures, the simplest test payload ; a file that isn't a valid ELF ; never reaches `mod_verify_sig`. I was hooking a check the kernel wasn't performing on the code path I was triggering. Classic wrong-enforcement-point mistake.
 
 When both of those settled in, I stopped trying to make the LSM variant work on linuxkit and went looking at the error-injection list.
 
@@ -82,4 +82,4 @@ At the BPF layer, `bpftool prog show type kprobe` lists the retprobe attachments
 
 For the real LSM variant: `bpftool prog list type lsm` shows attached fmod_ret programs on `kernel_read_file`. Legitimate observability tools do not fmod_ret on module-load hooks. An fmod_ret attach from an unexpected loader on those hooks is high-signal. `dmesg` on an enforcing kernel still records the pre-flip integrity decision regardless of whether the LSM chain was subsequently overridden.
 
-> **See also**: [POC source — ch12-signed-driver-swap-syscall](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch12-signed-driver-swap-syscall) · Harness entry: `Poc("ch12s", ...)` in `dBPF-pocs/harness/proof.py`
+> **See also**: [POC source ; ch12-signed-driver-swap-syscall](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch12-signed-driver-swap-syscall) · Harness entry: `Poc("ch12s", ...)` in `dBPF-pocs/harness/proof.py`

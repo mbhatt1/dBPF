@@ -40,15 +40,15 @@ int BPF_KPROBE(kp_end, struct audit_buffer *ab) {
 
 Records stream as `[audit] hook=audit_log_start pid=... comm=... type=1300(AUDIT_SYSCALL) ctx=1`. The trigger installs an audit rule (`auditctl -a always,exit -F arch=aarch64 -S execve`) to ensure the subsystem has something to emit, then counts records the loader captured.
 
-On the test kernel, the harness pulled 139 records in a short trigger window — every execve, every config change, whatever the kernel decided to log. None of those records would have been readable by the unprivileged test user via the regular audit netlink API (it requires `CAP_AUDIT_READ`); with `CAP_BPF`, they all come out.
+On the test kernel, the harness pulled 139 records in a short trigger window ; every execve, every config change, whatever the kernel decided to log. None of those records would have been readable by the unprivileged test user via the regular audit netlink API (it requires `CAP_AUDIT_READ`); with `CAP_BPF`, they all come out.
 
-That is a real capability escalation for a BPF-loaded sidecar. An attacker in the Tetragon-shaped sidecar position — BPF-loading, with some mount-namespace visibility, but not otherwise privileged — can reconstruct the audit stream in parallel with auditd. The reconstruction is invisible to auditd: nothing in the kernel tells the audit subsystem that a BPF program has attached to its internal functions.
+That is a real capability escalation for a BPF-loaded sidecar. An attacker in the Tetragon-shaped sidecar position ; BPF-loading, with some mount-namespace visibility, but not otherwise privileged ; can reconstruct the audit stream in parallel with auditd. The reconstruction is invisible to auditd: nothing in the kernel tells the audit subsystem that a BPF program has attached to its internal functions.
 
 ## Hook points
 
-- `kprobe/audit_log_start` — new record being constructed.
-- `kprobe/audit_log_format` — format string being appended.
-- `kprobe/audit_log_end` — record finalized.
+- `kprobe/audit_log_start` ; new record being constructed.
+- `kprobe/audit_log_format` ; format string being appended.
+- `kprobe/audit_log_end` ; record finalized.
 
 All three exist in `/proc/kallsyms` on the test kernel; all attach; none are in `ALLOW_ERROR_INJECTION`.
 
@@ -62,9 +62,9 @@ I wasted two days reproducing prior write-ups that glossed over this constraint.
 
 ### fentry/fmod_ret
 
-After the kprobe override failed, I tried `fmod_ret/audit_log_start`. The program compiles. The verifier accepts it. The attach succeeds. The program never fires. The reason is `check_attach_modify_return` in `kernel/bpf/verifier.c`: on 6.12 that function allows `fmod_ret` on exactly two classes of targets — functions in `ALLOW_ERROR_INJECTION`, and functions whose name starts with `security_`. `audit_log_start` is in neither class.
+After the kprobe override failed, I tried `fmod_ret/audit_log_start`. The program compiles. The verifier accepts it. The attach succeeds. The program never fires. The reason is `check_attach_modify_return` in `kernel/bpf/verifier.c`: on 6.12 that function allows `fmod_ret` on exactly two classes of targets ; functions in `ALLOW_ERROR_INJECTION`, and functions whose name starts with `security_`. `audit_log_start` is in neither class.
 
-On closer inspection, the verifier rejects `fmod_ret` programs for targets outside the allowed set at load time with the message `"<func>() is not modifiable"`. The POC in `ch03-fuse-blackhole-fentry` avoids triggering this by checking at runtime — via BTF introspection and a `lsm=` boot cmdline check — whether to autoload the fmod_ret program at all. On any LSM-capable kernel the loader calls `bpf_program__set_autoload(..., false)` on the fmod_ret program before `__load()` is invoked. The fmod_ret variant is skipped; the fallback runs instead.
+On closer inspection, the verifier rejects `fmod_ret` programs for targets outside the allowed set at load time with the message `"<func>() is not modifiable"`. The POC in `ch03-fuse-blackhole-fentry` avoids triggering this by checking at runtime ; via BTF introspection and a `lsm=` boot cmdline check ; whether to autoload the fmod_ret program at all. On any LSM-capable kernel the loader calls `bpf_program__set_autoload(..., false)` on the fmod_ret program before `__load()` is invoked. The fmod_ret variant is skipped; the fallback runs instead.
 
 There was a patch series in mid-2023 to add `audit_log_start` to the approved set. The audit maintainer (Paul Moore) rejected it: audit is a tamper-evident log, and letting a BPF program drop records silently breaks the tamper-evidence. As of 6.12 the override path is still not available. I agree with the decision.
 

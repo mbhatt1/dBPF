@@ -12,7 +12,7 @@ date: 2025-02-04
 
 XDP runs before the packet reaches the IP stack. That single fact is the whole primitive: an XDP program attached to a netdev sees every ingress frame before netfilter, before raw sockets, before `tcpdump`'s AF_PACKET tap, and can return `XDP_DROP` to make the packet vanish from everyone above it.
 
-My first attempt was `cls_bpf` on ingress tc. On the same interface, AF_PACKET still saw the frames — tc ingress runs after the `ptype_all` walk in `__netif_receive_skb_core`, and that is where `tcpdump`'s tap lives. Moved to XDP; the frames stopped appearing on tcpdump. This isn't a bypass of a security control; it's XDP doing exactly what the architecture documents.
+My first attempt was `cls_bpf` on ingress tc. On the same interface, AF_PACKET still saw the frames ; tc ingress runs after the `ptype_all` walk in `__netif_receive_skb_core`, and that is where `tcpdump`'s tap lives. Moved to XDP; the frames stopped appearing on tcpdump. This isn't a bypass of a security control; it's XDP doing exactly what the architecture documents.
 
 ## Mechanism
 
@@ -61,7 +61,7 @@ The `iph->ihl * 4` computation is the one that catches people. The verifier need
 
 - `SEC("xdp")` attached to a veth (drv-mode, fallback to skb-mode).
 
-The loader tries `XDP_FLAGS_DRV_MODE` first and falls back to `XDP_FLAGS_SKB_MODE`. On veth between kernel 4.19 and 5.2, native XDP on veth without the peer also attached would silently allow frames through — `XDP_DROP` returned but the frame continued. That bug was fixed in 5.2. The trigger script forces skb-mode with `-S` to stay deterministic across kernels.
+The loader tries `XDP_FLAGS_DRV_MODE` first and falls back to `XDP_FLAGS_SKB_MODE`. On veth between kernel 4.19 and 5.2, native XDP on veth without the peer also attached would silently allow frames through ; `XDP_DROP` returned but the frame continued. That bug was fixed in 5.2. The trigger script forces skb-mode with `-S` to stay deterministic across kernels.
 
 Both modes are upstream of AF_PACKET. Both produce `XDP_DROP` semantics that defeat tcpdump. The difference is performance (native avoids sk_buff allocation), not the invisibility property.
 
@@ -86,7 +86,7 @@ The trigger creates its own veth pair and network namespace. `veth_g0` lives in 
 - `ip link show <if>` shows the `xdp prog_id` field (`xdpgeneric` for skb-mode, `xdp` for drv-mode).
 - `bpftool prog show id <id> --pretty` gives the BTF and loader identity.
 - Netdev counter anomaly: `ip -s link show <if>` shows `dropped` incrementing without corresponding IP/UDP errors. An XDP-dropped packet leaves no other trace in the protocol stack.
-- An unexpected XDP attachment on a veth is the strongest signal — containers don't usually need XDP on their own interfaces unless running Cilium or similar. On a host without a CNI that uses XDP, any `bpftool net show` output with `xdp:` lines is anomalous.
+- An unexpected XDP attachment on a veth is the strongest signal ; containers don't usually need XDP on their own interfaces unless running Cilium or similar. On a host without a CNI that uses XDP, any `bpftool net show` output with `xdp:` lines is anomalous.
 
 ## Scope
 
