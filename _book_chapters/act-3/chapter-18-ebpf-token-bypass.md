@@ -15,7 +15,7 @@ Two kretprobes, two `bpf_override_return(ctx, 0)` calls:
 - `kretprobe/__arm64_sys_getuid` → 0
 - `kretprobe/__arm64_sys_geteuid` → 0
 
-Both symbols are in `/sys/kernel/debug/error_injection/list` on the linuxkit 6.12 aarch64 kernel I tested on, so the override lands. Symbols are verified via `/proc/kallsyms` at load time; missing symbols are tolerated (`bpf_program__set_autoload(prog, false)`).
+Both symbols are in `/sys/kernel/debug/error_injection/list` on Ubuntu 6.17.0-29-generic aarch64 (proven), so the override lands. Symbols are verified via `/proc/kallsyms` at load time; missing symbols are tolerated (`bpf_program__set_autoload(prog, false)`).
 
 ## Opening context
 
@@ -564,6 +564,11 @@ This matters because an attacker who wanted persistence would need to avoid the 
 
 Pinning is a separate primitive. It is also a separate detection surface: `ls /sys/fs/bpf/` on any host reveals the pinned BPF objects, which is a strong signal. Pinned programs that no living process has a reference to are particularly suspicious — they represent attack persistence without a parent process to own them.
 
+## Proof status
+
+**PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM, kernel 6.17.0-29-generic), 2026-05-20.
+Proof marker: `TOKEN_FORGE_PROVEN`.
+
 ## Hook points
 
 - `kretprobe/__arm64_sys_getuid`  → `bpf_override_return(ctx, 0)`
@@ -643,6 +648,6 @@ Send `SIGINT` (Ctrl-C) to detach cleanly.
 ## Limitations / arch notes
 
 - aarch64 only. Symbols are spelled `__arm64_sys_getuid` / `__arm64_sys_geteuid`. On x86_64 they would be `__x64_sys_getuid` / `__x64_sys_geteuid`. The loader's symbol preflight disables affected programs cleanly if absent.
-- `bpf_override_return` only succeeds on functions present in `/sys/kernel/debug/error_injection/list`. Both targets happen to be on the linuxkit 6.12 list. On a hardened kernel without these entries, the kretprobe will attach but the override silently no-ops; the loader will still emit non-`flipped` events but the userspace illusion will not occur.
+- `bpf_override_return` only succeeds on functions present in `/sys/kernel/debug/error_injection/list`. Both targets are on the Ubuntu 6.17.0-29-generic aarch64 list. On a hardened kernel without these entries, the kretprobe will attach but the override silently no-ops; the loader will still emit non-`flipped` events but the userspace illusion will not occur.
 - Userspace illusion only. No kernel access check is bypassed. This is intentional — the POC demonstrates the class of bug, which is identical in shape to the historical "trust-the-query, not-the-cred" CVEs.
 - Requires `CAP_SYS_ADMIN` (because `bpf_override_return` demands it — `CAP_BPF`+`CAP_PERFMON` is not sufficient for override). Inside Docker, run with `--privileged --pid=host`.

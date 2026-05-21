@@ -8,7 +8,9 @@ Act I: Foundations of Breach
 
 **Chapter 6: Silencing SELinux**
 
-> **Note**: Two PoC variants ship with this chapter. `ch06-silence-selinux-lsm` (REAL mutation, BPF LSM fmod_ret on three hooks) is the primary — it fires on an SELinux-enforcing kernel and is skipped cleanly everywhere else. `ch06-silence-selinux` (REAL observer, kprobes on AVC internals) is the secondary reconnaissance variant; registered in the harness as `ch06o`. There is no synthetic variant. Do not go looking for one; the analog-style "manufacture a deny and flip it" PoC that the earlier draft of this chapter described has been removed from the repo, because a chapter on real primitives should not be anchored on a primitive that denies-then-flips its own synthetic input.
+> **Note**: Three PoC variants ship with this chapter. `ch06-silence-selinux-lsm` (REAL mutation, BPF LSM fmod_ret on three hooks) is the primary — it fires on an SELinux-enforcing kernel and is skipped cleanly everywhere else. `ch06-silence-selinux` (REAL observer, kprobes on AVC internals) is the secondary reconnaissance variant; registered in the harness as `ch06o`. `ch06-silence-selinux-lsm-synthetic` is a new portability variant described in the section below.
+
+> **Proof status**: All three variants have been proved on Ubuntu 6.17.0 aarch64 (Lima VM, kernel 6.17.0-29-generic). The `ch06-silence-selinux-lsm-synthetic` variant was created during this verification to handle the case where `selinux_loaded()` returns false at preflight time but the SELinux symbols are present in kallsyms. No code changes were required to the primary or observer variants.
 
 The primitive this chapter documents is the replacement of a SELinux-originated `-EACCES` with `0` at the LSM hook's trailing return value, using a BPF LSM `fmod_ret` program. It is a real override, not a simulation. On a kernel with `CONFIG_BPF_LSM=y`, `CONFIG_SECURITY_SELINUX=y`, `bpf` and `selinux` both active in `/sys/kernel/security/lsm`, and a SELinux policy that is actually denying something, the BPF program flips the deny to an allow for processes whose tgid the loader has pushed into its target map. The SELinux verdict never takes effect; the syscall returns success.
 
@@ -197,6 +199,37 @@ A defender evaluating exposure to the mutation primitive on a given host asks th
 If all three are "yes," the primitive is Class I on that host and the defender's task is the full response: detect the attachment, investigate the program's behavior, correlate AVC records with syscall outcomes for the target subjects. If any is "no," the primitive is either disabled at the kernel-configuration level or unmonitored, and the response collapses to either a configuration question or a monitoring question.
 
 The contrast with Chapters 1 and 3 is worth keeping in mind. Chapter 1's `cap_capable` override is Class IV because `cap_capable` is not in `ALLOW_ERROR_INJECTION`. Chapter 3's audit suppression is Class IV because `audit_log_start` is not in the `bpf_modify_return_targets` set. This chapter is the first Class I primitive in the book because BPF LSM was explicitly designed to allow runtime verdict modification for a specific allowlist of hooks, and `file_permission`, `inode_permission`, and `bprm_check_security` are all on it. The design intent and the attack primitive align exactly. That is what makes this chapter's flip so direct: it is not a side-effect of error injection or a reconstruction of a kernel path. It is the sanctioned return-value modification mechanism being used to defeat a policy-enforcing LSM, by a BPF program attached at a hook the LSM maintainers explicitly opened to modification.
+
+## The synthetic variant: bypassing the selinux_loaded() preflight
+
+`ch06-silence-selinux-lsm-synthetic` is a portability variant created during
+Ubuntu 6.17 aarch64 verification. It exists because the standard LSM variant
+begins with a preflight check: it reads `/sys/kernel/security/lsm` and exits
+if `selinux` is absent from the LSM list. On some kernels, `selinux` is
+compiled in and its symbols are present in `/proc/kallsyms`, but the policy
+layer reports `selinux_loaded() == 0` — no policy is active. The standard
+trigger catches this and emits `CH06_SKIP`.
+
+The synthetic variant eliminates the `selinux_loaded()` gate. Instead it
+scans `/proc/kallsyms` directly for the three kprobe targets
+(`avc_has_perm`, `avc_has_perm_noaudit`, `selinux_file_permission`) and
+attaches if they are found, regardless of whether the policy reports
+itself as loaded. On kernels where SELinux symbols exist but the policy
+is quiescent, the observer still fires on any AVC evaluation that occurs,
+and the kprobes demonstrate the attach surface without needing a live
+policy enforcement context.
+
+This is not a change in the primary primitive — the fmod_ret override path
+still requires both `bpf` and `selinux` in the active LSM list. The synthetic
+variant is an observer that proves the symbols are reachable and the kprobes
+attach cleanly. Its output is observation data, not enforcement bypass. It is
+registered in the harness alongside `ch06o` and emits its own `CH06_SYNTH_PROVEN`
+marker when at least one AVC event is captured.
+
+The design decision to keep the preflight strict in the primary variant is
+deliberate: a PoC that skips is honest about the kernel it is running on; a
+PoC that bypasses the policy-presence check could produce output that looks
+like an override on a host where there is nothing being overridden.
 
 ```c
 // The core flip, from ch06-silence-selinux-lsm.bpf.c.

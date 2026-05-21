@@ -25,7 +25,6 @@
 
 struct evt {
     unsigned long long ts_ns;
-    unsigned long long delta_ns;
     unsigned int cpu;
     unsigned int irq;
     unsigned int pid;
@@ -34,7 +33,7 @@ struct evt {
     int hook;
 };
 
-static volatile sig_atomic_t stop;
+static volatile int stop;
 static void sig(int _sig){ (void)_sig; stop = 1; }
 
 static unsigned long long total_events;
@@ -71,10 +70,9 @@ static int handle(void *ctx, void *data, size_t sz)
     if (e->cpu < MAX_CPUS) per_cpu_events[e->cpu]++;
 
     if (total_events <= 20 || (total_events & 63) == 0) {
-        printf("[irq] cpu=%u\tirq=%-3u\tname=%-16s\tpid=%u\tcomm=%-16s\thook=%s\tdelta=%lluus\n",
+        printf("[irq] cpu=%u\tirq=%-3u\tname=%-16s\tpid=%u\tcomm=%-16s\thook=%s\n",
                e->cpu, e->irq, e->name[0] ? e->name : "(none)",
-               e->pid, e->comm, hook_str(e->hook),
-               (unsigned long long)(e->delta_ns / 1000));
+               e->pid, e->comm, hook_str(e->hook));
         fflush(stdout);
     }
     return 0;
@@ -117,43 +115,6 @@ struct prog_entry {
 GETTER(kp_hie)
 GETTER(kp_hiep)
 GETTER(kp_hiep2)
-
-static const char *bucket_label[] = {
-    "<1μs", "<10μs", "<100μs", "<1ms", "<10ms", "<100ms", "<1s", ">=1s"
-};
-
-static void timing_summary(struct ch11_irq_chaos_bpf *s)
-{
-    int ncpu = libbpf_num_possible_cpus();
-    if (ncpu <= 0) ncpu = 1;
-    if (ncpu > MAX_CPUS) ncpu = MAX_CPUS;
-
-    int fd = bpf_map__fd(s->maps.timing_hist);
-    if (fd < 0) return;
-
-    fprintf(stderr, "\n==== IRQ timing covert channel histogram ====\n");
-    fprintf(stderr, "%-10s | %s\n", "Bucket", "Count (all CPUs)");
-    fprintf(stderr, "-----------+----------\n");
-
-    unsigned long long total_timing = 0;
-    for (unsigned int b = 0; b < 8; b++) {
-        unsigned long long vals[MAX_CPUS];
-        memset(vals, 0, sizeof(vals));
-        if (bpf_map_lookup_elem(fd, &b, vals) != 0) continue;
-        unsigned long long sum = 0;
-        for (int c = 0; c < ncpu; c++)
-            sum += vals[c];
-        total_timing += sum;
-        if (sum)
-            fprintf(stderr, "%-10s | %llu\n", bucket_label[b], sum);
-    }
-    fprintf(stderr, "total timed: %llu\n", total_timing);
-
-    if (total_timing > 10) {
-        printf("[irq] IRQ_COVERT_CHANNEL_PROVEN timed_events=%llu\n", total_timing);
-        fflush(stdout);
-    }
-}
 
 static void summary(struct ch11_irq_chaos_bpf *s)
 {
@@ -244,14 +205,13 @@ int main(int argc, char **argv)
         }
     }
     if (!present_mask) {
-        fprintf(stderr, "[ch11] CH11_SKIP reason=\"no IRQ kprobe targets present "
-                        "on this kernel\"\n");
+        fprintf(stderr, "[ch11] no IRQ kprobe targets present on this kernel\n");
         ch11_irq_chaos_bpf__destroy(s);
         return 2;
     }
 
     if (ch11_irq_chaos_bpf__load(s)) {
-        fprintf(stderr, "[ch11] CH11_SKIP reason=\"load failed: %s\"\n", strerror(errno));
+        fprintf(stderr, "[ch11] load failed: %s\n", strerror(errno));
         ch11_irq_chaos_bpf__destroy(s);
         return 1;
     }
@@ -298,7 +258,6 @@ int main(int argc, char **argv)
     }
 
     summary(s);
-    timing_summary(s);
     ring_buffer__free(rb);
     ch11_irq_chaos_bpf__destroy(s);
     return 0;

@@ -14,12 +14,6 @@
 set +e
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-
-if [ ! -x "$HERE/build/ch02-overlayfs" ]; then
-    echo "=== CH02_SKIP reason=\"loader not built at $HERE/build/ch02-overlayfs\" ==="
-    exit 0
-fi
-
 D="/mnt/ovlbacking"
 MOUNTED_TMPFS=0
 MOUNTED_OVERLAY=0
@@ -87,8 +81,7 @@ done
 if ! grep -q "status=ready" /tmp/ch02.racer.err 2>/dev/null; then
     echo "loader failed to become ready; stderr:"
     cat /tmp/ch02.racer.err
-    echo "=== CH02_SKIP reason=\"loader did not become ready (overlayfs kprobe unavailable)\" ==="
-    exit 0
+    exit 2
 fi
 
 echo "=== AFTER (racer active) ==="

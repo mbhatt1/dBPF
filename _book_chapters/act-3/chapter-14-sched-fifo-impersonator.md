@@ -508,6 +508,11 @@ The "empty cell" I care most about, and have not been able to fill, is (internal
 
 That is the honest engineering takeaway for this chapter. The primitive is real, the target class is broad, the defense story depends on `bpftool prog list`, and the ceiling on the primitive's reach is the curated error-injection list. Everything else is details of which target I picked.
 
+## Proof status
+
+**PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM, kernel 6.17.0-29-generic), 2026-05-20.
+Proof marker: `SCHED_WEAPON_PROVEN flips=1`.
+
 ## Hook points
 
 - `kprobe/__arm64_sys_sched_setscheduler` — record caller into inflight map.
@@ -578,4 +583,6 @@ docker run --rm -v "$PWD":/work -w /work dbpf-base \
 - The kprobe target is arch-specific — `__arm64_sys_*` on aarch64, `__x64_sys_*` on x86_64. The BPF object as shipped is aarch64 only.
 - `bpf_override_return` requires `CONFIG_BPF_KPROBE_OVERRIDE=y` AND the target syscall to be in `/sys/kernel/debug/error_injection/list`. Most internal kernel functions are not on the list, which is why we hook the syscall entrypoint rather than the deeper `__sched_setscheduler` core.
 - The override does not change actual scheduler state — only what userspace observes. A subsequent `sched_getscheduler()` returns the real, unchanged policy.
-- On stock cloud kernels with hardened lockdown or SELinux, `bpf_override_return` may be denied even with `CAP_SYS_ADMIN`.
+- Proven on Ubuntu 6.17.0-29-generic aarch64 (Lima VM). On stock
+  cloud kernels with hardened lockdown or SELinux, `bpf_override_return`
+  may be denied even with `CAP_SYS_ADMIN`.

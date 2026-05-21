@@ -71,8 +71,6 @@ static __always_inline void emit(long ret, int hook, int flipped)
     bpf_ringbuf_submit(e, 0);
 }
 
-// NOTE: arch-specific symbol. On x86_64 use __x64_sys_finit_module instead.
-// The loader should select the correct symbol at runtime based on uname -m.
 SEC("kretprobe/__arm64_sys_finit_module")
 int BPF_KRETPROBE(kr_finit_module, long ret)
 {
@@ -85,7 +83,6 @@ int BPF_KRETPROBE(kr_finit_module, long ret)
     return 0;
 }
 
-// NOTE: arch-specific symbol. On x86_64 use __x64_sys_init_module instead.
 SEC("kretprobe/__arm64_sys_init_module")
 int BPF_KRETPROBE(kr_init_module, long ret)
 {

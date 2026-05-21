@@ -6,7 +6,7 @@ date: 2025-03-01
 
 # Chapter 12: Flipping the Kernel's Module-Load Verdict
 
-> **Note**: The real primitive in this chapter — a BPF LSM fmod_ret flip on `kernel_read_file` — does not fire on the linuxkit 6.12 aarch64 host we use for day-to-day development, because that kernel does not enforce module signatures. It fires on the Fedora 42 aarch64 QEMU VM run by `run-qemu-tests.sh`, which does enforce them. A secondary syscall-return illusion (registered as `ch12s`) fires on linuxkit and is kept because it is the only ch12-shape primitive that host can execute. The chapter is explicit about which does what.
+> **Status**: All three variants proved on Ubuntu 6.17.0-29-generic aarch64 (Lima VM) — `ch12-signed-driver-swap` (observer), `ch12-signed-driver-swap-lsm` (real LSM flip), and `ch12-signed-driver-swap-syscall` (syscall illusion). The BPF LSM fmod_ret flip on `kernel_read_file` fires on this kernel; the syscall illusion fires on any kernel with the module-load syscalls in the error-injection allowlist. The chapter remains explicit about which does what.
 
 ## The Question and the Honest Answer
 

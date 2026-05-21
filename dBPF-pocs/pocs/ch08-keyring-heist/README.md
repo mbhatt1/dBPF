@@ -1,46 +1,40 @@
-# Ch08 -- Keyring Heist
+# ch08 — Keyring Heist (observer)
 
-**Category**: REAL
-**Primitive**: kprobe on keyring access functions with CO-RE metadata extraction
-**Hook(s)**: `SEC("kprobe/key_task_permission")`, `SEC("kprobe/lookup_user_key")`
-**Architecture**: aarch64 + x86_64
+## Mechanism
+kprobe on `key_task_permission` and `lookup_user_key`. For each call, CO-RE
+reads `struct key → {serial, datalen, type->name, description}` and emits a
+ringbuf event. No mutation — observation with full metadata disclosure.
 
-## What this demonstrates
+## Hook points
+- `kprobe/key_task_permission`
+- `kprobe/lookup_user_key`
 
-Kprobes `key_task_permission` and `lookup_user_key`. For each call, CO-RE reads `struct key -> {serial, datalen, type->name, description}` and emits a ringbuf event. Provides full metadata disclosure of every kernel keyring access without mutation.
+## Build
+    docker run --rm -v "$PWD/../..":/work -w /work dbpf-base \
+      bash -c 'cd pocs/ch08-keyring-heist && make'
 
-## What this does NOT do
+## Run
+    sudo ./build/ch08-keyring-heist
+    sudo bash trigger.sh
 
-Observer-only. Real mutation requires BPF LSM fmod_ret on `security_key_permission` -- see `ch08-keyring-heist-lsm/`. Does not attempt to read `key->payload` (requires invoking the key's `type->read` method, which is not safe from BPF).
+## Evidence
+    [ch08] hook=key_task_perm   pid=1234 comm=keyctl serial=0x3843722f type=user desc='ch08-test-101' len=21
+On clean exit:
+    [ch08] CH08_PROVEN events=N   (if ≥3 events captured)
+    [ch08] CH08_SKIP reason="..." (otherwise)
 
-## Prerequisites
+## Proof status
 
-- `key_task_permission` and `lookup_user_key` present in `/proc/kallsyms`
-- CO-RE BTF available (vmlinux BTF shipped with the kernel)
-- `keyctl(1)` from `keyutils` (the trigger uses it)
-- Docker: `--privileged --pid=host`
-
-## Files
-
-| File | Purpose |
-|------|---------|
-| `ch08-keyring-heist.bpf.c` | Kernel-side BPF program (kprobes on key_task_permission, lookup_user_key) |
-| `ch08-keyring-heist.c` | Userspace loader and ringbuf consumer |
-| `trigger.sh` | Activity generator (keyctl operations) |
-| `Makefile` | Build (uses shared/common.mk) |
-
-## Build & Run
-
-```bash
-# Inside the harness container:
-make
-sudo ./build/ch08-keyring-heist
-# In another terminal:
-bash trigger.sh
-```
+**PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM). Uses
+`bpf_probe_read_kernel` to exfiltrate keyring metadata (serial, type name,
+description) from the decision point.
 
 ## Detection
+- `bpftool prog show | grep key_`
+- `/sys/kernel/debug/tracing/kprobe_events`
 
-- `bpftool prog show | grep key_` lists the attached kprobes.
-- `/sys/kernel/debug/tracing/kprobe_events` shows live entries.
-- The `events` ringbuf appears in `bpftool map show`.
+## Limitations
+- Observer-only. Real mutation requires BPF LSM fmod_ret on
+  `security_key_permission` — see `pocs/ch08-keyring-heist-lsm/`.
+- Does not attempt to read `key->payload` (requires invoking the key's
+  `type->read` method, which is not safe from BPF).

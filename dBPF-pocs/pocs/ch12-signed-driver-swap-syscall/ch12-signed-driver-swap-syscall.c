@@ -231,8 +231,7 @@ int main(int argc, char **argv)
     struct ch12_signed_driver_swap_syscall_bpf *s =
         ch12_signed_driver_swap_syscall_bpf__open();
     if (!s) {
-        fprintf(stderr, "[ch12s] CH12S_SKIP reason=\"skeleton open failed: %s\"\n",
-                strerror(errno));
+        fprintf(stderr, "[ch12s] skeleton open failed: %s\n", strerror(errno));
         return 1;
     }
 
@@ -247,7 +246,7 @@ int main(int argc, char **argv)
 
     int err = ch12_signed_driver_swap_syscall_bpf__load(s);
     if (err) {
-        fprintf(stderr, "[ch12s] CH12S_SKIP reason=\"load failed: %s\"\n", strerror(-err));
+        fprintf(stderr, "[ch12s] load failed: %s\n", strerror(-err));
         goto out;
     }
 

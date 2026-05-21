@@ -1,4 +1,4 @@
-// ch08 LSM-variant loader: attaches SEC("lsm/key_permission") fmod_ret.
+// ch08 LSM-variant loader: attaches SEC("lsm.s/key_permission") fmod_ret.
 // Fails fast with a clear CH08_SKIP reason if the host kernel doesn't
 // expose BPF LSM.
 #include <stdio.h>
@@ -97,7 +97,7 @@ int main(int argc, char **argv)
 
     char skip_reason[256] = {0};
     if (!check_lsm_bpf_enabled(skip_reason, sizeof(skip_reason))) {
-        fprintf(stderr, "[ch08] CH08_LSM_SKIP reason=\"%s\"\n", skip_reason);
+        fprintf(stderr, "CH08_SKIP reason=\"%s\"\n", skip_reason);
         return 3;
     }
     fprintf(stderr, "[ch08] BPF LSM is active - proceeding\n");
@@ -105,15 +105,13 @@ int main(int argc, char **argv)
     struct ch08_keyring_heist_lsm_bpf *s =
         ch08_keyring_heist_lsm_bpf__open_and_load();
     if (!s) {
-        fprintf(stderr, "[ch08] CH08_LSM_SKIP reason=\"open_and_load: %s\"\n",
-                strerror(errno));
+        fprintf(stderr, "[ch08] open_and_load: %s\n", strerror(errno));
         return 1;
     }
 
     int err = ch08_keyring_heist_lsm_bpf__attach(s);
     if (err) {
-        fprintf(stderr, "[ch08] CH08_LSM_SKIP reason=\"attach: %s\"\n",
-                strerror(-err));
+        fprintf(stderr, "[ch08] attach: %s\n", strerror(-err));
         ch08_keyring_heist_lsm_bpf__destroy(s);
         return 1;
     }

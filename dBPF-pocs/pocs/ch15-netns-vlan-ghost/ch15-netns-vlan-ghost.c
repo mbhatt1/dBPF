@@ -84,29 +84,19 @@ static int handle_event(void *ctx, void *data, size_t sz)
     return 0;
 }
 
-/* On Docker Desktop linuxkit 6.12 veth, only generic mode (flag 0 =
- * xdpgeneric) actually processes packets. DRV and SKB modes attach
- * successfully but silently fail to invoke the XDP program. So we try
- * generic first, then fall back to drv/skb for non-veth devices. */
+/* Attempt drv-mode then fall back to skb-mode unless caller forced skb. */
 static int attach_xdp(int ifindex, int prog_fd, bool force_skb, unsigned int *out_flags)
 {
     int err;
-    (void)force_skb;  /* ignored — generic mode is always preferred now */
-
-    /* Generic mode first — reliable on veth. */
-    err = bpf_xdp_attach(ifindex, prog_fd, 0, NULL);
-    if (!err) { *out_flags = 0; return 0; }
-    fprintf(stderr, "[ch15] generic failed on ifindex=%d (%s); trying drv\n",
-            ifindex, strerror(-err));
-
-    err = bpf_xdp_attach(ifindex, prog_fd, XDP_FLAGS_DRV_MODE, NULL);
-    if (!err) { *out_flags = XDP_FLAGS_DRV_MODE; return 0; }
-    fprintf(stderr, "[ch15] drv-mode failed on ifindex=%d (%s); trying skb\n",
-            ifindex, strerror(-err));
-
+    if (!force_skb) {
+        err = bpf_xdp_attach(ifindex, prog_fd, XDP_FLAGS_DRV_MODE, NULL);
+        if (!err) { *out_flags = XDP_FLAGS_DRV_MODE; return 0; }
+        fprintf(stderr, "[ch15] drv-mode failed on ifindex=%d (%s); trying skb-mode\n",
+                ifindex, strerror(-err));
+    }
     err = bpf_xdp_attach(ifindex, prog_fd, XDP_FLAGS_SKB_MODE, NULL);
     if (!err) { *out_flags = XDP_FLAGS_SKB_MODE; return 0; }
-    fprintf(stderr, "[ch15] all XDP attach modes failed on ifindex=%d: %s\n",
+    fprintf(stderr, "[ch15] skb-mode attach failed on ifindex=%d: %s\n",
             ifindex, strerror(-err));
     return err;
 }
@@ -194,8 +184,7 @@ int main(int argc, char **argv)
     struct ring_buffer *rb = NULL;
     struct ch15_netns_vlan_ghost_bpf *s = ch15_netns_vlan_ghost_bpf__open_and_load();
     if (!s) {
-        fprintf(stderr, "[ch15] CH15_SKIP reason=\"open_and_load failed: %s\"\n",
-                strerror(errno));
+        fprintf(stderr, "[ch15] open_and_load failed: %s\n", strerror(errno));
         return 1;
     }
 

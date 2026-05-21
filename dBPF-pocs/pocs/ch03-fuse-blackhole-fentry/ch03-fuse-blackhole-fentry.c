@@ -86,23 +86,10 @@ int main(int argc, char **argv)
     }
 
     struct ch03_fuse_blackhole_fentry_bpf *s = ch03_fuse_blackhole_fentry_bpf__open();
-    if (!s) {
-        fprintf(stderr, "[ch03-fe] CH03_FE_SKIP reason=\"skeleton open: %s\"\n",
-                strerror(errno));
-        return 1;
-    }
+    if (!s) { fprintf(stderr, "[ch03-fe] open: %s\n", strerror(errno)); return 1; }
 
     int have_mr = btf_has_func("audit_log_start");
     int have_lsm = check_lsm_bpf_enabled();
-
-    // On kernels where BPF LSM is available, prefer lsm/syslog over
-    // fmod_ret/audit_log_start. The fmod_ret path fails with -EINVAL on
-    // kernel 6.14+ (audit_log_start not in modify_return allowlist) and
-    // the verifier rejects it at load time, poisoning the whole skeleton.
-    // Disable the fmod_ret program when LSM is available.
-    if (have_lsm) {
-        have_mr = 0;  // skip fmod_ret — use LSM instead
-    }
 
     if (!have_mr)
         bpf_program__set_autoload(s->progs.mr_audit_log_start, false);
@@ -111,14 +98,15 @@ int main(int argc, char **argv)
 
     if (!have_mr && !have_lsm) {
         fprintf(stderr,
-            "[ch03-fe] CH03_FE_SKIP reason=\"neither fmod_ret/audit_log_start "
-            "nor BPF LSM available on this kernel\"\n");
+            "[ch03-fe] ERROR: neither path available.\n"
+            "  - audit_log_start not in vmlinux BTF (no fmod_ret target)\n"
+            "  - /sys/kernel/security/lsm does not contain 'bpf'\n");
         ch03_fuse_blackhole_fentry_bpf__destroy(s);
         return 3;
     }
 
     if (ch03_fuse_blackhole_fentry_bpf__load(s) != 0) {
-        fprintf(stderr, "[ch03-fe] CH03_FE_SKIP reason=\"load: %s\"\n", strerror(errno));
+        fprintf(stderr, "[ch03-fe] load: %s\n", strerror(errno));
         ch03_fuse_blackhole_fentry_bpf__destroy(s);
         return 1;
     }
@@ -152,8 +140,7 @@ int main(int argc, char **argv)
     }
 
     if (!used_mr && !used_lsm) {
-        fprintf(stderr, "[ch03-fe] CH03_FE_SKIP reason=\"no suppression path "
-                        "attached (both fmod_ret and lsm attach failed)\"\n");
+        fprintf(stderr, "[ch03-fe] ERROR: no suppression path attached\n");
         ch03_fuse_blackhole_fentry_bpf__destroy(s);
         return 4;
     }

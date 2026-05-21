@@ -10,22 +10,16 @@ BIN="$HERE/build/ch14-sched-fifo"
 LOG="${LOG:-/tmp/ch14-imp.log}"
 USER_NAME="${USER_NAME:-t14}"
 
-LOADER_PID=""
-
 cleanup() {
-    [ -n "$LOADER_PID" ] && kill "$LOADER_PID" 2>/dev/null && wait "$LOADER_PID" 2>/dev/null
+    [[ -n "$LOADER_PID" ]] && kill "$LOADER_PID" 2>/dev/null
+    wait 2>/dev/null
     userdel "$USER_NAME" 2>/dev/null
-    rm -f "$LOG"
 }
 trap cleanup EXIT INT TERM
 
-if [ ! -x "$BIN" ]; then
-    echo "=== CH14_SKIP reason=\"loader not built at $BIN\" ==="
-    exit 0
-fi
-if ! command -v chrt >/dev/null 2>&1; then
-    echo "=== CH14_SKIP reason=\"chrt not available (needs util-linux)\" ==="
-    exit 0
+if [[ ! -x "$BIN" ]]; then
+    echo "missing binary: $BIN — run 'make' first" >&2
+    exit 1
 fi
 
 useradd -M "$USER_NAME" 2>/dev/null
@@ -42,8 +36,7 @@ sleep 1
 if ! kill -0 "$LOADER_PID" 2>/dev/null; then
     echo "loader exited early; log:" >&2
     cat "$LOG" >&2
-    echo "=== CH14_SKIP reason=\"loader failed to start (kretprobe attach failed)\" ==="
-    exit 0
+    exit 1
 fi
 
 echo ""

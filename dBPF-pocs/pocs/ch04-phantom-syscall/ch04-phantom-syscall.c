@@ -2,7 +2,6 @@
 #include <string.h>
 #include <signal.h>
 #include <unistd.h>
-#include <errno.h>
 #include <bpf/libbpf.h>
 #include "ch04-phantom-syscall.skel.h"
 
@@ -11,93 +10,32 @@ struct evt {
     char comm[16];
     char parent_comm[16];
     char payload[32];
-    int signal_sent;
 };
 
-static unsigned long long total_events;
-static unsigned long long signal_events;
+static volatile int stop;
+static void sig(int _){ (void)_; stop=1; }
 
-static volatile sig_atomic_t stop;
-static void on_sig(int s){ (void)s; stop = 1; }
-
-static int handle(void *ctx, void *data, size_t sz)
-{
-    (void)ctx;
-    if (sz < sizeof(struct evt))
-        return 0;
-    const struct evt *e = data;
-    /* Defensive: ensure strings are NUL-terminated before %s */
-    char comm[17] = {0}, pcomm[17] = {0}, payload[33] = {0};
-    memcpy(comm, e->comm, 16);
-    memcpy(pcomm, e->parent_comm, 16);
-    memcpy(payload, e->payload, 32);
-    total_events++;
-    if (e->signal_sent) signal_events++;
-    printf("[phantom] pid=%u tgid=%u uid=%u euid=%u comm=%s parent=%s payload='%s'",
-           e->pid, e->tgid, e->uid, e->euid, comm, pcomm, payload);
-    if (e->signal_sent)
-        printf(" SIGUSR1_SENT");
-    printf("\n");
-    fflush(stdout);
+static int handle(void *ctx, void *data, size_t sz){
+    (void)ctx; (void)sz;
+    struct evt *e = data;
+    printf("[phantom] pid=%u tgid=%u uid=%u euid=%u comm=%s parent=%s payload='%s'\n",
+           e->pid, e->tgid, e->uid, e->euid, e->comm, e->parent_comm, e->payload);
     return 0;
 }
 
-int main(void)
-{
-    int rc = 1;
-    struct ring_buffer *rb = NULL;
+int main(void){
     struct ch04_phantom_syscall_bpf *s = ch04_phantom_syscall_bpf__open_and_load();
-    if (!s) {
-        fprintf(stderr, "[ch04] CH04_SKIP reason=\"open_and_load failed: %s\"\n",
-                strerror(errno));
-        return 1;
-    }
-    /* Prevent stage2 from auto-attaching to sys_enter_write directly. */
+    if(!s){ fprintf(stderr,"open_and_load failed\n"); return 1; }
+    // Prevent stage2 from auto-attaching to sys_enter_write directly.
     bpf_program__set_autoattach(s->progs.phantom_stage2, false);
     int stage2_fd = bpf_program__fd(s->progs.phantom_stage2);
     unsigned int k = 0;
     bpf_map__update_elem(s->maps.jumps, &k, sizeof(k), &stage2_fd, sizeof(stage2_fd), BPF_ANY);
-
-    int err = ch04_phantom_syscall_bpf__attach(s);
-    if (err) {
-        fprintf(stderr, "[ch04] CH04_SKIP reason=\"attach failed: %s\"\n",
-                strerror(-err));
-        goto out;
-    }
-
-    rb = ring_buffer__new(bpf_map__fd(s->maps.events), handle, NULL, NULL);
-    if (!rb) {
-        fprintf(stderr, "[ch04] ring_buffer__new failed: %s\n", strerror(errno));
-        goto out;
-    }
-
-    struct sigaction sa = { .sa_handler = on_sig };
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGINT, &sa, NULL);
-    sigaction(SIGTERM, &sa, NULL);
-
-    fprintf(stderr, "[ch04] attached — phantom active (magic: 'PHANTOM\\0', SIGUSR1 on exfil)\n");
-    while (!stop) {
-        int n = ring_buffer__poll(rb, 200);
-        if (n < 0 && n != -EINTR) {
-            fprintf(stderr, "[ch04] ring_buffer__poll: %s\n", strerror(-n));
-            break;
-        }
-    }
-    rc = 0;
-
-    fprintf(stderr, "[ch04] total_events=%llu signal_events=%llu\n",
-            total_events, signal_events);
-    if (signal_events > 0)
-        printf("[ch04] EXFIL_COMPLETE exfil=%llu signals=%llu\n",
-               total_events, signal_events);
-    else if (total_events > 0)
-        printf("[ch04] CH04_PROVEN exfil=%llu\n", total_events);
-
-out:
-    if (rb)
-        ring_buffer__free(rb);
-    if (s)
-        ch04_phantom_syscall_bpf__destroy(s);
-    return rc;
+    if(ch04_phantom_syscall_bpf__attach(s)){ fprintf(stderr,"attach failed\n"); return 1; }
+    struct ring_buffer *rb = ring_buffer__new(bpf_map__fd(s->maps.events), handle, NULL, NULL);
+    signal(SIGINT,sig); signal(SIGTERM,sig);
+    fprintf(stderr,"attached — phantom active (magic: 'PHANTOM\\0')\n");
+    while(!stop) ring_buffer__poll(rb, 200);
+    ring_buffer__free(rb); ch04_phantom_syscall_bpf__destroy(s);
+    return 0;
 }

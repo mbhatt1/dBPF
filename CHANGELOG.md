@@ -20,6 +20,40 @@ ISO 8601.
 - All `build/` directory contents from git tracking; `.gitignore` now
   covers them so they stay local.
 
+## [0.5.0] - 2026-05-20 — Full verification pass: Ubuntu 6.17 aarch64
+
+### Verified
+- All 25 POCs (ch01–ch18, ch23–ch25) run against Ubuntu 6.17.0-29-generic
+  aarch64 in a Lima VM on Apple Silicon (macOS). Result: **24 proven, 1 skip
+  (ch24), 0 failures**.
+- ch24 (BPF Token Delegation) skipped on all tested kernels: `CONFIG_BPF_TOKEN=n`
+  is absent on linuxkit 6.12, Fedora 42 6.14, and Ubuntu 6.17; requires
+  kernel ≥ 6.9 with BPF token support explicitly enabled at build time.
+
+### Fixed
+- **ch01**: Added `bpf_send_signal(SIGUSR1)` — capability denial now
+  delivers a real POSIX signal to the target process, not just a ringbuf
+  event.
+- **ch06**: Added `ch06-silence-selinux-lsm-synthetic` variant — attaches
+  `lsm.s/file_open` directly without requiring `selinux_loaded()`, proving
+  the deny-then-flip primitive on kernels without SELinux active.
+- **ch10**: BPF map renamed `active` → `active_calls` to fix a symbol
+  collision with a vmlinux.h kernel enum on kernel 6.17.
+- **ch13**: `trigger.sh` updated for aarch64 — builds a kernel module that
+  calls `powercap_register_control_type` (RAPL is x86-only); the analog
+  variant uses `bpf_probe_write_user` on userspace sensor reads.
+- **ch15**: Documents `--net=host` requirement for XDP to access host
+  network interfaces.
+- **ch17**: Documents custom `fw_trigger.ko` kernel module requirement;
+  `test_firmware` is not loadable on Ubuntu 6.17.
+- **ch23**: kprobe on `tpm2_unseal_trusted` confirmed attached; TPM keyctl
+  path documented as unavailable in VM without boot-time TPM.
+
+### Added
+- `ch06-silence-selinux-lsm-synthetic/README.md` — full documentation for
+  the synthetic SELinux bypass variant including mechanism, diff from sibling
+  variants, build/run instructions, and proof marker.
+
 ## [0.4.0] - 2026-04-17 — Act 4: cross-boundary primitives
 
 ### Added

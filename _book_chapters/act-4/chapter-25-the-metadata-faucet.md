@@ -14,6 +14,22 @@ Everything in the book until now targets in-host boundaries: capabilities, cgrou
 
 The argument of this chapter is narrower than Chapter 23's. Chapter 23 rearranged the threat model — the TPM, which operators had filed under "we're good here," turned out to be in reach of an observability agent. This chapter does something simpler: it notes that a host which makes outbound HTTP calls to a metadata service is handing the attacker a credential every few hours, and the attacker does not need to compromise the metadata service to capture those credentials — they need to read the wire. XDP reads the wire cheaply and reliably.
 
+## Verification status (Ubuntu 6.17 aarch64 Lima VM)
+
+**PROVEN.** XDP program on loopback (`lo`) intercepts mock IMDS traffic (127.0.0.1 HTTP requests) and captures credentials. Verified on Ubuntu 6.17.0-29-generic aarch64, Lima VM on Apple Silicon (macOS).
+
+Proof output:
+```
+[ch25] attached — xdp on lo (mock-127.0.0.1 mode)
+[ch25] CREDENTIALS_CAPTURED access_key=ASIAEXAMPLEMOCK0001 token_len=1 role=demo-role
+[ch25] CH25_PROVEN access_key_captures=1 token_captures=1
+=== CH25_PROVEN access_key_captured=yes token_captured=yes role=demo-role ===
+```
+
+Note: The Lima VM requires `--net=host` for the loader to attach XDP to a host-visible interface. Inside the VM's default network namespace the loopback interface is available and mock mode works without additional flags.
+
+---
+
 ## What the primitive produces
 
 The BPF program attaches to the host's primary network interface (or a pod's veth) with `SEC("xdp")`, parses the Ethernet/IP/TCP/HTTP layers of outbound and inbound traffic, filters on destination IP `169.254.169.254` (the AWS IMDS endpoint; `metadata.google.internal` and Azure IMDS have the same shape with different addresses), and copies the HTTP payload into a ringbuf. The loader parses the stream in userspace and extracts the AWS Signature Version 4 credential triple (`AccessKeyId`, `SecretAccessKey`, `Token`) from the `iam/security-credentials/<role>` response.

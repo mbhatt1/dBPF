@@ -1,47 +1,88 @@
-# Ch06 -- Silencing SELinux
+# ch06 — Silencing SELinux (observer)
 
-**Category**: REAL
-**Primitive**: kprobe on SELinux AVC and file-permission functions
-**Hook(s)**: `SEC("kprobe/avc_has_perm")`, `SEC("kprobe/avc_has_perm_noaudit")`, `SEC("kprobe/selinux_file_permission")`
-**Architecture**: aarch64 + x86_64
+## Mechanism
+Kprobes the SELinux access-vector cache (AVC) and the file-permission
+LSM hook. Every labeled decision — granted or denied — streams a ringbuf
+event containing `{pid, comm, hook, ssid, tsid, tclass, requested}`.
 
-## What this demonstrates
+Pure observation: true silencing of SELinux requires mutating the return
+value on the decision path, which is only safe via BPF LSM
+(`fmod_ret`). See the override path below.
 
-Kprobes the SELinux access-vector cache (AVC) and the file-permission LSM hook. Every labeled decision -- granted or denied -- streams a ringbuf event containing `{pid, comm, hook, ssid, tsid, tclass, requested}`. Provides full visibility into every SELinux access check on the system.
+## Hook points
+- `kprobe/avc_has_perm`            — audited AVC lookup; ssid/tsid/tclass/requested in regs.
+- `kprobe/avc_has_perm_noaudit`    — inner, used by hot paths; args differ across kernels (see note).
+- `kprobe/selinux_file_permission` — per-file read/write mask check.
 
-## What this does NOT do
+Cross-kernel note: `avc_has_perm_noaudit` has two shapes
+(`(state, ssid, tsid, tclass, requested, ...)` on some trees, scalar-first
+on others). The BPF program records both argument positions and reports
+whichever is non-zero.
 
-Cannot mutate -- `avc_has_perm` is not on the error-injection allowlist of stock kernels, so `bpf_override_return` is blocked. True silencing of SELinux requires BPF LSM `fmod_ret` -- see `ch06-silence-selinux-lsm/`. On kernels where SELinux is compiled out, every symbol is absent; the loader exits with `CH06_SKIP`.
-
-## Prerequisites
-
-- `CONFIG_SECURITY_SELINUX=y` (SELinux compiled into the kernel)
-- `CONFIG_KPROBES=y`
-- SELinux symbols (`avc_has_perm` etc.) present in `/proc/kallsyms`
-- Docker: `--privileged --pid=host`
-
-## Files
-
-| File | Purpose |
-|------|---------|
-| `ch06-silence-selinux.bpf.c` | Kernel-side BPF program (three kprobes on SELinux AVC + file_permission) |
-| `ch06-silence-selinux.c` | Userspace loader and ringbuf consumer |
-| `trigger.sh` | Activity generator |
-| `Makefile` | Build (uses shared/common.mk) |
-
-## Build & Run
-
-```bash
-# Inside the harness container:
+## Build
+```
+cd pocs/ch06-silence-selinux
 make
-sudo ./build/ch06-silence-selinux          # observe-only
-# In another terminal:
-bash trigger.sh
 ```
 
-## Detection
+## Run
+```
+sudo ./build/ch06-silence-selinux -h
+sudo ./build/ch06-silence-selinux          # observe-only
+sudo ./build/ch06-silence-selinux -v       # verbose libbpf
+```
+Events go to stdout (`[ch06] tag=avc ...`); status to stderr.
+SIGINT / SIGTERM cleanly tear down the ring buffer.
 
+## Evidence (expected on a SELinux host)
+```
+[ch06] === symbol availability ===
+  avc_has_perm                 : present
+  avc_has_perm_noaudit         : present
+  selinux_file_permission      : present
+[ch06] attached=3	status=ready
+[ch06] CH06_PROVEN hook=avc_has_perm events=1
+[ch06] tag=avc	pid=2134	comm=cat             	hook=avc_has_perm	ssid=27	tsid=42	tclass=6	req=0x2
+[ch06] CH06_PROVEN hook=selinux_file_permission events=1
+[ch06] tag=avc	pid=2134	comm=cat             	hook=selinux_file_permission	ssid=0	tsid=0	tclass=0	req=0x1
+```
+
+On hosts without SELinux (linuxkit aarch64, minimal containers) the loader
+exits with `CH06_SKIP reason="SELinux not loaded"` and the harness records
+an honest skip.
+
+## Detection
 - `bpftool prog show | grep avc_has_perm` lists the attached kprobes.
 - `cat /sys/kernel/debug/tracing/kprobe_events` shows the live kprobe records.
 - `bpftool map show` lists the `events` ringbuf.
-- A monitoring system can watch for `/proc/kallsyms`-resident kprobes on `avc_*` symbols.
+- AVC activity volume drops to zero if the probe is attached but the
+  ringbuf is not drained; a monitoring system can watch for
+  `/proc/kallsyms`-resident kprobes on `avc_*` symbols.
+
+## Limitations
+- No mutation: `bpf_override_return` is blocked — `avc_has_perm` is not on
+  the error-injection allowlist of stock kernels.
+- On kernels where SELinux is compiled out, every symbol is absent; the
+  loader disables autoload on each program and exits 2 with `CH06_SKIP`.
+- `avc_has_perm_noaudit`'s signature skew across kernels means the
+  recorded ssid/tsid may be shifted by one slot on certain trees — the
+  heuristic in the BPF program picks the likely-scalar arguments.
+
+## Status
+
+**PROVEN** on Ubuntu 6.17.0 aarch64 (Lima VM, kernel 6.17.0-29-generic).
+No code changes were required — the POC worked as-is.
+
+Note: on hosts where `selinux_loaded()` returns false at startup (e.g. kernels
+built with SELinux but running without a policy), the standard preflight check
+will skip. See `ch06-silence-selinux-lsm-synthetic/` for a variant that
+bypasses the preflight and attaches kprobes directly to SELinux symbols found
+in kallsyms.
+
+## Override path
+To actually silence denials you need BPF LSM + `fmod_ret`. See
+[`../ch06-silence-selinux-lsm/`](../ch06-silence-selinux-lsm/), which
+attaches `SEC("lsm.s/file_permission")`, `SEC("lsm.s/inode_permission")`,
+and `SEC("lsm.s/bprm_check_security")` and returns 0 for target tgids —
+flipping denial to grant on kernels with `CONFIG_BPF_LSM=y` and
+`lsm=bpf,selinux` on the boot cmdline.

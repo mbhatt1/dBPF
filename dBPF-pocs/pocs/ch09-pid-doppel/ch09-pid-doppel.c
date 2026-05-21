@@ -22,11 +22,7 @@ struct evt {
     unsigned long ns_inum;
     char comm[16];
     int src;
-    int signal_sent;
 };
-
-static unsigned long long total_events;
-static unsigned long long signal_events;
 
 static volatile sig_atomic_t stop;
 static void on_signal(int sig)
@@ -50,15 +46,9 @@ static int handle(void *ctx, void *data, size_t sz)
     if (sz < sizeof(struct evt))
         return 0;
     const struct evt *e = data;
-    total_events++;
-    if (e->signal_sent) signal_events++;
-    printf("[ch09] src=%-4s\thost_pid=%u\thost_tgid=%u\tns_pid=%u\tlevel=%u\tns_inum=%lu\tcomm=%s",
+    printf("[ch09] src=%-4s\thost_pid=%u\thost_tgid=%u\tns_pid=%u\tlevel=%u\tns_inum=%lu\tcomm=%s\n",
            src_str(e->src), e->host_pid, e->host_tgid,
            e->ns_pid, e->ns_level, e->ns_inum, e->comm);
-    if (e->signal_sent)
-        printf("\tSIGUSR1_SENT");
-    printf("\n");
-    fflush(stdout);
     return 0;
 }
 
@@ -163,8 +153,7 @@ int main(int argc, char **argv)
     struct ring_buffer *rb = NULL;
     struct ch09_pid_doppel_bpf *s = ch09_pid_doppel_bpf__open();
     if (!s) {
-        fprintf(stderr, "[ch09] CH09_SKIP reason=\"skeleton open failed: %s\"\n",
-                strerror(errno));
+        fprintf(stderr, "[ch09] skeleton open failed: %s\n", strerror(errno));
         return 1;
     }
 
@@ -181,19 +170,8 @@ int main(int argc, char **argv)
 
     int err = ch09_pid_doppel_bpf__load(s);
     if (err) {
-        fprintf(stderr, "[ch09] CH09_SKIP reason=\"load failed: %s\"\n", strerror(-err));
+        fprintf(stderr, "[ch09] load failed: %s\n", strerror(-err));
         goto out;
-    }
-
-    // Arm cross-namespace signaling: set cfg[0] = 1.
-    {
-        unsigned int key = 0, val = 1;
-        int e2 = bpf_map__update_elem(s->maps.cfg, &key, sizeof(key),
-                                       &val, sizeof(val), BPF_ANY);
-        if (e2)
-            fprintf(stderr, "[ch09] warning: cfg arm failed: %s\n", strerror(-e2));
-        else
-            fprintf(stderr, "[ch09] cross-namespace SIGUSR1 armed\n");
     }
 
     int n_attached = 0, n_skipped = 0, n_failed = 0;
@@ -244,14 +222,6 @@ int main(int argc, char **argv)
     // Post-run mapping table — walk the HASH map and print every recorded
     // host<->ns pid pair as a summary.
     dump_mapping(s->maps.mapping);
-
-    fprintf(stderr, "[ch09] total_events=%llu signal_events=%llu\n",
-            total_events, signal_events);
-    if (signal_events > 0)
-        printf("[ch09] PID_NS_ESCAPE_PROVEN signals=%llu events=%llu\n",
-               signal_events, total_events);
-    else if (total_events > 0)
-        printf("[ch09] CH09_PROVEN events=%llu (observation only)\n", total_events);
 
 out:
     if (rb)

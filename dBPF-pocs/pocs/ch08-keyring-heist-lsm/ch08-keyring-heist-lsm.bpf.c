@@ -48,20 +48,16 @@ struct {
 //                               enum key_need_perm need_perm)
 // BPF_PROG appends the original ret at the tail. Returning 0 = allow.
 //
-// NOTE: key_ref_t has a FWD (forward-declaration) BTF type on some
-// kernels (e.g., linuxkit 6.12). The BPF_PROG macro unpacks ALL
-// args — including arg0 (key_ref) — and the verifier rejects context
-// access at offset 0 when the type is FWD.  Work around this by using
-// raw context and only reading the args we need at their known offsets:
-//   ctx[0] = key_ref   (FWD — skip)
-//   ctx[1] = cred      (skip)
-//   ctx[2] = need_perm
-//   ctx[3] = ret        (original return value for fmod_ret)
-SEC("lsm/key_permission")
-int lsm_key_permission(unsigned long long *ctx)
+// key_ref_t is an opaque pointer with the low 2 bits used as possession
+// flags; masking them off yields the backing `struct key *`.
+SEC("lsm.s/key_permission")
+int BPF_PROG(lsm_key_permission,
+             void *key_ref,
+             const struct cred *cred,
+             unsigned int need_perm,
+             int ret)
 {
-    unsigned int need_perm = (unsigned int)ctx[2];
-    int ret = (int)ctx[3];
+    (void)cred;
 
     unsigned int tgid = bpf_get_current_pid_tgid() >> 32;
     unsigned int *hit = bpf_map_lookup_elem(&target_tgids, &tgid);
@@ -86,10 +82,20 @@ int lsm_key_permission(unsigned long long *ctx)
         e->flipped = flipped;
         e->serial = 0;
         e->type_name[0] = 0;
-        // NOTE: key_ref_t has FWD BTF type on linuxkit 6.12 — the
-        // verifier blocks any ctx[0] access.  We skip reading the
-        // key serial and type_name here; the kprobe variant
-        // (ch08-keyring-heist-kprobe) can still read them.
+
+        // Mask low 2 possession-flag bits off key_ref to get struct key *.
+        unsigned long raw = (unsigned long)key_ref;
+        struct key *k = (struct key *)(raw & ~3UL);
+        if (k) {
+            e->serial = (unsigned int)BPF_CORE_READ(k, serial);
+            struct key_type *kt = BPF_CORE_READ(k, type);
+            if (kt) {
+                const char *nm = BPF_CORE_READ(kt, name);
+                if (nm)
+                    bpf_probe_read_kernel_str(&e->type_name,
+                                              sizeof(e->type_name), nm);
+            }
+        }
         bpf_ringbuf_submit(e, 0);
     }
     return new_ret;

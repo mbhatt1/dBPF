@@ -1,4 +1,4 @@
-// ch06 Silence SELinux LSM-variant loader: attaches three non-sleepable
+// ch06 Silence SELinux LSM-variant loader: attaches three sleepable
 // fmod_ret programs (file_permission, inode_permission, bprm_check_security)
 // and flips any pending deny to allow for tgids in target_tgids.
 //
@@ -104,7 +104,7 @@ int main(int argc, char **argv)
 
     if (!check_lsm_bpf_enabled()) {
         fprintf(stderr,
-                "[ch06] CH06_LSM_SKIP reason=\"BPF LSM not enabled "
+                "CH06_SKIP reason=\"BPF LSM not enabled "
                 "(boot with lsm=bpf,selinux,...)\"\n");
         return 3;
     }
@@ -113,15 +113,13 @@ int main(int argc, char **argv)
     struct ch06_silence_selinux_lsm_bpf *s =
         ch06_silence_selinux_lsm_bpf__open_and_load();
     if (!s) {
-        fprintf(stderr, "[ch06] CH06_LSM_SKIP reason=\"open_and_load: %s\"\n",
-                strerror(errno));
+        fprintf(stderr, "[ch06] open_and_load: %s\n", strerror(errno));
         return 1;
     }
 
     int err = ch06_silence_selinux_lsm_bpf__attach(s);
     if (err) {
-        fprintf(stderr, "[ch06] CH06_LSM_SKIP reason=\"attach: %s\"\n",
-                strerror(-err));
+        fprintf(stderr, "[ch06] attach: %s\n", strerror(-err));
         ch06_silence_selinux_lsm_bpf__destroy(s);
         return 1;
     }

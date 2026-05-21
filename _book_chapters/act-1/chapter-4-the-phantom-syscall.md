@@ -8,6 +8,8 @@ date: 2025-02-03
 
 > **See also**: [Blog post]({{ site.baseurl }}/the-phantom-syscall.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch04-phantom-syscall) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
+> **Proof status**: `ch04-phantom-syscall` has been proved on Ubuntu 6.17.0 aarch64 (Lima VM, kernel 6.17.0-29-generic). No code changes were required.
+
 The POC for this chapter issues exactly one syscall from userspace and uses that one syscall as a trigger. The syscall is `write(2)`. The entry tracepoint `tp/syscalls/sys_enter_write` inspects the user buffer for a magic prefix; on match, it tail-calls a second BPF program that reads `current->cred` and `current->real_parent->comm` and ships the results to userspace via ringbuf. There is no second syscall, no side channel, no shared memory region. The one `write()` call is the whole conversation. What follows is a walk through `ch04-phantom-syscall.bpf.c`, `ch04-phantom-syscall.c`, and `trigger.sh`, in the order the kernel runs them.
 
 ## Why one syscall

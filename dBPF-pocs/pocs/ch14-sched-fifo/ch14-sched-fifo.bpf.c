@@ -40,8 +40,6 @@ struct {
     __uint(max_entries, 4096);
 } inflight SEC(".maps");
 
-// NOTE: arch-specific symbol. On x86_64 use __x64_sys_sched_setscheduler.
-// The loader should select the correct symbol at runtime based on uname -m.
 SEC("kprobe/__arm64_sys_sched_setscheduler")
 int BPF_KPROBE(kp_sched, struct pt_regs *regs)
 {
@@ -56,7 +54,6 @@ int BPF_KPROBE(kp_sched, struct pt_regs *regs)
     return 0;
 }
 
-// NOTE: arch-specific symbol. On x86_64 use __x64_sys_sched_setscheduler.
 SEC("kretprobe/__arm64_sys_sched_setscheduler")
 int BPF_KRETPROBE(kr_sched, long ret)
 {

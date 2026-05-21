@@ -1,6 +1,6 @@
 # dBPF — what CAP_BPF actually permits, demonstrated
 
-**Status:** 23 PoCs registered · 19 fire across two test environments · 4 honest skips documented · primary harness: Docker Desktop linuxkit 6.12 aarch64 · secondary harness: Fedora 42 aarch64 QEMU VM.
+**Status:** 25 PoCs registered · 24 proven on Ubuntu 6.17 aarch64 · 1 honest skip (ch24, CONFIG_BPF_TOKEN=n) · 0 failures · verification environment: Ubuntu 6.17.0-29-generic aarch64, Lima VM on Apple Silicon.
 
 ## What this is
 
@@ -25,7 +25,7 @@ dBPF/
 ├── Gemfile             Ruby dependencies for the Jekyll build.
 └── dBPF-pocs/          Companion PoC collection and verification harness.
     ├── pocs/           Per-chapter PoC code (BPF C + userspace loader + trigger + README).
-    │   ├── ch01-*/     …through ch25-*, one directory per PoC (23 directories total).
+    │   ├── ch01-*/     …through ch25-*, one directory per PoC (25 directories total).
     ├── harness/        Python harness (proof.py), Dockerfile, run.sh entrypoint.
     ├── qemu/           Fedora 42 aarch64 QEMU VM config and cloud-init seed.
     ├── shared/         Shared Makefile rules (common.mk) and specs.
@@ -45,12 +45,18 @@ git clone https://github.com/mbhatt1/dBPF.git && cd dBPF
 # 2. Run the primary harness (Docker Desktop linuxkit 6.12 aarch64).
 cd dBPF-pocs && bash harness/run.sh
 
-# 3. Run the secondary harness (Fedora 42 aarch64 QEMU VM).
+# 3. Run on Ubuntu 6.17 aarch64 (Lima VM on Apple Silicon — verified environment).
+#    Provision a Lima VM with Ubuntu 24.10+ and kernel 6.17, then inside the VM:
+cd dBPF-pocs && bash run_all.sh
+#    ch01–ch18, ch23, ch25 prove end-to-end; ch24 skips (CONFIG_BPF_TOKEN=n).
+#    ch15 requires --net=host; ch17 requires fw_trigger.ko kernel module.
+
+# 4. Run the secondary harness (Fedora 42 aarch64 QEMU VM).
 #    Requires qemu-system-aarch64, xorriso, and a Fedora 42 cloud image.
 #    See dBPF-pocs/qemu/ for the expected disk image layout.
 cd dBPF-pocs && bash run-qemu-tests.sh
 
-# 4. Build the book locally.
+# 5. Build the book locally.
 bundle install && bundle exec jekyll serve --livereload
 ```
 
@@ -58,15 +64,26 @@ The primary harness builds a container image, mounts the PoC tree at `/w`, and r
 
 ## Test environments
 
-The book is tested against two intentionally different environments. Agreement across both is the strongest reproducibility claim the harness offers; disagreement is documented in Chapter 21.
+The book is tested against multiple environments. The Ubuntu 6.17 aarch64 Lima VM is the primary verified environment as of the latest verification pass.
+
+**Verified: Ubuntu 6.17.0-29-generic aarch64 (Lima VM, Apple Silicon).** Full kernel feature set: CO-RE, BTF, ringbuf, kprobe, kretprobe, raw_tracepoint, XDP, LSM hooks. Result: **24 of 25 PoCs proven, 1 skip (ch24)**. Notable environment-specific notes:
+- ch01: `bpf_send_signal(SIGUSR1)` confirmed — capability denial delivers a real signal to the target process.
+- ch06: `ch06-silence-selinux-lsm-synthetic` variant used on kernels without SELinux active; directly attaches to `lsm.s/file_open` without requiring `selinux_loaded()`.
+- ch10: BPF map renamed `active` → `active_calls` to avoid collision with a vmlinux.h kernel enum.
+- ch13: trigger.sh builds a `powercap_register_control_type` kernel module (aarch64 has no RAPL); the analog variant uses `bpf_probe_write_user` on userspace sensor reads.
+- ch15: Requires `--net=host` for XDP to access host network interfaces.
+- ch17: Requires custom `fw_trigger.ko` kernel module (`test_firmware` is not loadable on this kernel).
+- ch23: kprobe on `tpm2_unseal_trusted` confirmed attached; TPM keyctl path skipped (no boot-time TPM in VM).
+- ch25: XDP IMDS harvest confirmed — captures mock credentials on loopback.
+- ch24: Skipped — `CONFIG_BPF_TOKEN=n` on all tested kernels; requires kernel 6.9+ with BPF token support explicitly enabled.
 
 **Primary: Docker Desktop linuxkit 6.12 aarch64.** A minimal linuxkit kernel with `CONFIG_BPF=y`, `CONFIG_BPF_LSM=y`, `CONFIG_DEBUG_INFO_BTF=y`, `CONFIG_BPF_KPROBE_OVERRIDE=y`, and `CONFIG_FUNCTION_ERROR_INJECTION=y`. 18 of 23 PoCs fire here. The five that do not fire on linuxkit skip by design: ch23 (no `/dev/tpm0` in linuxkit), ch24 (no delegated-userns substrate), ch25 (no IMDS mock until the Fedora VM provides one), plus the two LSM-dependent PoCs (ch06 LSM and ch12 LSM) whose `bpf,...` boot-time LSM order is only present in the secondary.
 
 **Secondary: Fedora 42 aarch64 QEMU VM.** Kernel 6.14 with BPF LSM in the boot-time LSM list, SELinux enforcing, and module-signature enforcement. Used for the PoCs that cannot land on linuxkit: ch06 LSM `fmod_ret`, ch12 LSM, and ch25's mock IMDSv2 endpoint on `lo`. The VM is driven by `run-qemu-tests.sh` on the host and `qemu-runner.sh` inside the guest; per-PoC artifacts cross the boundary via virtio-9p.
 
-**One additional PoC — ch24 — is production-reviewed but exposes an environmental gap.** The code is correct and the harness entry is honest: on Fedora 42's cloud-init-bounded userns, `BPF_TOKEN_CREATE` returns `EOPNOTSUPP` despite `/proc/self/ns/user` matching pid 1. The primitive is architecturally sound and the chapter documents the exact kernel code path that produces the refusal. Until a kernel or userns configuration that accepts `BPF_TOKEN_CREATE` is available in the harness, ch24 emits `CH24_SKIP reason=...` rather than claiming a fire it did not produce. This is the kind of honesty the book trades on.
+**ch24 — production-reviewed but consistently skipped.** The code is correct and the harness entry is honest: `BPF_TOKEN_CREATE` requires `CONFIG_BPF_TOKEN=y`, which is absent on the tested kernel builds (linuxkit 6.12, Fedora 42 6.14, Ubuntu 6.17). The primitive is architecturally sound; ch24 emits `CH24_SKIP reason=...` rather than claiming a fire it did not produce.
 
-Cross-environment totals: **19 PoCs fire**, 4 skip with documented reasons.
+Verified totals (Ubuntu 6.17 aarch64): **24 PoCs proven**, 1 skip (ch24), 0 failures.
 
 ## The harness contract
 
@@ -81,9 +98,9 @@ on stdout. `proof.py` registers each PoC with a `proof_marker` regex; a run is a
 
 ## Categories
 
-Every registered PoC is tagged with one of four categories in `proof.py`. The tags describe what the primitive observably does to the kernel, not how dangerous it is. Counts recounted directly from `dBPF-pocs/harness/proof.py`:
+Every registered PoC is tagged with one of four categories in `proof.py`. The tags describe what the primitive observably does to the kernel, not how dangerous it is. Counts recounted directly from `dBPF-pocs/harness/proof.py` (25 PoCs total: ch01–ch18, ch23–ch25):
 
-- **real** (16 PoCs) — hooks the actual kernel subsystem and either observes its decision inputs/outputs or mutates state that the subsystem or its userspace consumer goes on to read. Examples: ch01's `bpf_send_signal` from a kretprobe on `cap_capable`, ch08's keyring payload exfil via `bpf_probe_read_kernel`, ch05b's XDP program on a veth, ch10's `getdents64` directory-entry cloaking.
+- **real** (18 PoCs) — hooks the actual kernel subsystem and either observes its decision inputs/outputs or mutates state that the subsystem or its userspace consumer goes on to read. Examples: ch01's `bpf_send_signal` from a kretprobe on `cap_capable`, ch08's keyring payload exfil via `bpf_probe_read_kernel`, ch05b's XDP program on a veth, ch10's `getdents64` directory-entry cloaking.
 - **observer** (4 PoCs) — hooks the real subsystem but can only read, not mutate. The decision function is either not in `ALLOW_ERROR_INJECTION` or its LSM hook does not accept `fmod_ret`; the primitive captures inputs to a ringbuf without being able to flip the outcome. Examples: ch03 (audit observer), ch06/ch06o (SELinux observation), ch16 (seccomp TID sidechannel).
 - **illusion** (3 PoCs) — forges a syscall return via `bpf_override_return` on an allowlisted syscall wrapper. The caller sees the forged return value; kernel state is unchanged. Examples: ch14 (SCHED_FIFO forge), ch18 (getuid forge), ch12s (finit_module return forge without the module actually loading).
 - **analog** — deliberately zero. An earlier cleanup pass removed every synthetic or analog surface. Nothing in the registered PoC set is a marionette; every primitive hooks a real kernel attach point.

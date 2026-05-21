@@ -154,8 +154,7 @@ int main(int argc, char **argv)
 
     skel = ch05b_ghost_nic_bpf__open_and_load();
     if (!skel) {
-        fprintf(stderr, "[ghost] CH05B_SKIP reason=\"open_and_load failed: %s\"\n",
-                strerror(errno));
+        fprintf(stderr, "[ghost] open_and_load failed: %s\n", strerror(errno));
         goto out;
     }
 

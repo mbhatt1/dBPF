@@ -5,34 +5,20 @@
 # (audit_log_start path) or blocked syslog reads (fallback path).
 set +e
 HERE="$(cd "$(dirname "$0")" && pwd)"
-LPID=""
 
 if ! command -v auditctl >/dev/null 2>&1; then
-  echo "=== CH03_SKIP reason=\"auditctl not installed (install audit userspace)\" ==="
-  exit 0
-fi
-if [ ! -x "$HERE/build/ch03-fuse-blackhole-fentry" ]; then
-  echo "=== CH03_SKIP reason=\"loader not built at $HERE/build/ch03-fuse-blackhole-fentry\" ==="
-  exit 0
+  echo "[trigger] ERROR: auditctl not installed (install audit userspace)"
+  exit 2
 fi
 
 AUDIT_LOG="/var/log/audit/audit.log"
 [ -r "$AUDIT_LOG" ] || AUDIT_LOG="$(ls -1 /var/log/audit/audit.log* 2>/dev/null | head -1)"
 [ -n "$AUDIT_LOG" ] || AUDIT_LOG="/var/log/audit/audit.log"
 
-cleanup() {
-  [ -n "$LPID" ] && kill "$LPID" 2>/dev/null && wait "$LPID" 2>/dev/null
-  auditctl -D >/dev/null 2>&1
-  rm -f "$TARGET" /tmp/ch03-fe.log
-}
-trap cleanup EXIT INT TERM
-
 echo "=== installing audit rule on openat ==="
 auditctl -D >/dev/null 2>&1
 auditctl -a always,exit -F arch=b64 -S openat -k ch03 || {
-  echo "=== CH03_SKIP reason=\"failed to install audit rule (audit subsystem unavailable)\" ==="
-  exit 0
-}
+  echo "[trigger] ERROR: failed to install audit rule"; exit 3; }
 auditctl -l | grep ch03
 
 TARGET="$(mktemp /tmp/ch03-target.XXXXXX)"
@@ -55,7 +41,6 @@ echo "audit records: before=$B0 after=$B1 delta=$((B1-B0))"
 echo "=== starting BPF audit suppressor ==="
 "$HERE/build/ch03-fuse-blackhole-fentry" >/tmp/ch03-fe.log 2>&1 &
 LPID=$!
-echo "loader_pid=$LPID"
 sleep 1
 
 echo "=== with BPF loaded: 5 more openat events ==="
@@ -71,24 +56,14 @@ echo "dmesg ret=$?"
 
 sleep 1
 kill $LPID 2>/dev/null
-wait $LPID 2>/dev/null
-LPID=""
+wait 2>/dev/null
 echo "=== loader log ==="
 cat /tmp/ch03-fe.log
+auditctl -D >/dev/null 2>&1
+rm -f "$TARGET"
 echo ""
 echo "Interpretation:"
 echo "  - If 'attached fmod_ret/audit_log_start' appeared in the loader"
 echo "    log, the delta after BPF load should be 0 (full suppression)."
 echo "  - If 'attached lsm.s/syslog (fallback)' appeared, audit.log will"
 echo "    still grow, but SYSLOG_ACTION_* reads (dmesg) should return EPERM."
-
-# Proof marker: check if any suppression events fired
-SUPPRESSED=$(grep -c 'SUPPRESSED' /tmp/ch03-fe.log 2>/dev/null)
-SUPPRESSED=${SUPPRESSED:-0}
-if [ "$SUPPRESSED" -gt 0 ]; then
-  echo "=== CH03_FE_PROVEN suppressed=$SUPPRESSED ==="
-elif grep -q 'attached' /tmp/ch03-fe.log 2>/dev/null; then
-  echo "=== CH03_FE_PROVEN attached=yes ==="
-else
-  echo "=== CH03_FE_SKIP reason=\"no suppression events\" ==="
-fi

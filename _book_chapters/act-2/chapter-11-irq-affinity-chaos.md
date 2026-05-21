@@ -8,6 +8,8 @@ date: 2025-02-11
 
 > **See also**: [Blog post]({{ site.baseurl }}/irq-affinity-chaos.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch11-irq-chaos) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
+> **Status**: Proved on Ubuntu 6.17.0-29-generic aarch64 (Lima VM).
+
 ## The Fantasy I Started With
 
 I started this one wanting to rewrite CPU affinity masks inside `irq_dispatch()` from BPF. That was the fantasy. I had a specific shape in mind: attach a kprobe somewhere on the inbound IRQ path, detect that the IRQ in question was routed at CPU0, and before the handler ran, rewrite the target mask to shove that IRQ onto some other core. The implementation in my head looked the same as half the other chapters in this book — a kprobe, a CO-RE read to pull the `irq_desc`, a `bpf_override_return` or a targeted write, and then walk away with a real re-steering primitive. The dream was enforcement, not observation.

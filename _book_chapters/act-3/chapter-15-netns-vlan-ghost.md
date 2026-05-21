@@ -606,6 +606,15 @@ This is a recurring theme. The Linux kernel is a collection of subsystems with t
 
 That is the implicit argument of the whole book. The chapters are case studies; the pattern is what matters.
 
+## Proof status
+
+**PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM, kernel 6.17.0-29-generic), 2026-05-20.
+Proof marker: `VLAN_GHOST_CROSSNS_PROVEN redirect_count=3`.
+
+`--net=host` is required in the Docker run command so the XDP program can
+attach to host-side veth interfaces. Without it the container's netns hides
+the veths.
+
 ## Hook points
 
 **Category: REAL.** This is actual VLAN header manipulation and cross-namespace packet redirect, not a userspace illusion. The XDP program physically strips the 802.1Q tag and `bpf_redirect_map` delivers the frame to a device in a different network namespace. The orchestrator's VLAN-enforcement layer is preempted because XDP runs before the bridge and netfilter.
@@ -653,7 +662,7 @@ SIGINT/SIGTERM detaches XDP from every interface it attached to; if the loader e
 End-to-end demo (creates ghost_a / ghost_b netns, sends one VLAN-142-tagged AF_PACKET frame from inside ghost_a, sniffs egress on veth_host2):
 
 ```
-docker run --rm --privileged --pid=host \
+docker run --rm --privileged --pid=host --net=host \
   -v "$PWD":/work -w /work \
   -v /sys/kernel/debug:/sys/kernel/debug \
   -v /sys/fs/bpf:/sys/fs/bpf \
@@ -669,7 +678,7 @@ docker run --rm --privileged --pid=host \
 
 ## Limitations / arch notes
 
-- Docker Desktop linuxkit aarch64: veth drivers do not implement native XDP; the loader falls back to SKB-mode (or use `--skb` to skip the probe). Native-mode redirect is unavailable.
+- Ubuntu 6.17 aarch64 (Lima VM): veth drivers do not implement native XDP; the loader falls back to SKB-mode (or use `--skb` to skip the probe). Native-mode redirect is unavailable. `--net=host` is required for the Docker run command.
 - `bpf_redirect_map` to a device in another netns requires the egress device to also have an XDP program loaded on many kernels; the loader attaches the same program there.
 - The verifier rejects skb writes from kprobe context, so the chapter's original `__netif_receive_skb_core` mutation cannot be done directly. XDP at the NIC edge is the equivalent primitive.
 - `arping` and `ping` will not generate the covert frames reliably; the trigger uses an embedded AF_PACKET sender for deterministic VLAN-142 emission with inner ethertype `0x88b5`.

@@ -12,11 +12,6 @@
 #      on any signed-module kernel.
 set +e
 
-if ! command -v insmod >/dev/null 2>&1; then
-    echo "=== CH12_SKIP reason=\"insmod not available\" ==="
-    exit 0
-fi
-
 FAKE_KO="$(mktemp -u /tmp/ch12-fake.XXXXXX.ko)"
 cleanup() {
     rm -f "$FAKE_KO"

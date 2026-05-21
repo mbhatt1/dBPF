@@ -30,29 +30,29 @@ trap cleanup EXIT INT TERM
 
 # --- Preflight: BPF LSM available ---
 if ! grep -q bpf /sys/kernel/security/lsm 2>/dev/null; then
-  echo '=== CH08_SKIP reason="kernel lacks bpf in /sys/kernel/security/lsm" ==='
+  echo 'CH08_SKIP reason="kernel lacks bpf in /sys/kernel/security/lsm"'
   exit 0
 fi
 if ! command -v keyctl >/dev/null 2>&1; then
-  echo '=== CH08_SKIP reason="keyctl(1) not available (install keyutils)" ==='
+  echo 'CH08_SKIP reason="keyctl(1) not available (install keyutils)"'
   exit 0
 fi
 if [ ! -x "$LOADER" ]; then
-  echo "=== CH08_SKIP reason=\"loader not built at $LOADER\" ==="
+  echo "CH08_SKIP reason=\"loader not built at $LOADER\""
   exit 0
 fi
 
 # --- Create dut user ---
 useradd -M dut08 2>/dev/null
 if ! id dut08 >/dev/null 2>&1; then
-  echo '=== CH08_SKIP reason="cannot create dut08 user" ==='
+  echo 'CH08_SKIP reason="cannot create dut08 user"'
   exit 0
 fi
 
 # --- Root adds a user-type key to @u with restrictive perms ---
 KEY_ID="$(keyctl add user dbpf_ch08_target 'locked-payload' @u 2>/dev/null)"
 if [ -z "$KEY_ID" ]; then
-  echo '=== CH08_SKIP reason="keyctl add user @u failed (kernel keyring unavailable)" ==='
+  echo 'CH08_SKIP reason="keyctl add user @u failed (kernel keyring unavailable)"'
   exit 0
 fi
 # Perms 0x3f010000: owner=all(0x3f), user=view-only(0x01), group=none, other=none.
@@ -77,7 +77,7 @@ if ! kill -0 "$LPID" 2>/dev/null; then
     grep '^CH08_SKIP' "$LOG"
     exit 0
   fi
-  echo '=== CH08_SKIP reason="loader crashed on startup" ==='
+  echo 'CH08_SKIP reason="loader crashed on startup"'
   exit 0
 fi
 
@@ -106,5 +106,5 @@ elif [ "$FLIPS" -gt 0 ]; then
   # Still count it — the primitive fired.
   echo "CH08_PROVEN flipped=$FLIPS"
 else
-  echo '=== CH08_SKIP reason="no key_permission flip observed (LSM may not gate this keyring path)" ==='
+  echo 'CH08_SKIP reason="no key_permission flip observed (LSM may not gate this keyring path)"'
 fi

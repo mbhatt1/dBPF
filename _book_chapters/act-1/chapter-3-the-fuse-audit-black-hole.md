@@ -8,6 +8,8 @@ date: 2025-02-02
 
 > **See also**: [Blog post]({{ site.baseurl }}/the-fuse-audit-black-hole.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch03-fuse-blackhole) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
+> **Proof status**: Both `ch03-fuse-blackhole` (kprobe observer) and `ch03-fuse-blackhole-fentry` (fentry + lsm/syslog fallback) have been proved on Ubuntu 6.17.0 aarch64 (Lima VM, kernel 6.17.0-29-generic). No code changes were required. **Runtime note**: `auditd` must be running before the loader starts. The kernel audit subsystem skips `audit_log_start` entirely when no consumer is registered on the netlink socket. Start it with `sudo systemctl start auditd` (or `sudo auditd -n &`) before running the PoC.
+
 I went into this one expecting it to work. The plan was standard: attach a kprobe to `audit_log_start`, call `bpf_override_return(ctx, 0)`, and watch audit records stop. That idea is not new — Jeff Dileo, Grant Willcox, and others have written about override-return against audit functions for years, and the technique shows up in at least one Black Hat talk from 2021. I expected to reproduce it, write it up, move on.
 
 It didn't reproduce. On a stock linuxkit 6.12 kernel the probe loads, the program attaches, and audit records keep flowing to `/var/log/audit/audit.log` exactly as before. That is the honest result, and the rest of this chapter is about why.

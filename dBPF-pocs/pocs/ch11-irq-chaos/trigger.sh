@@ -13,17 +13,6 @@ ERR=/tmp/ch11.err
 : > "$LOG"
 : > "$ERR"
 
-if [ ! -x "$LOADER" ]; then
-    echo "=== CH11_SKIP reason=\"loader not built at $LOADER\" ==="
-    exit 0
-fi
-
-cleanup() {
-    [ -n "${LOADER_PID:-}" ] && kill "$LOADER_PID" 2>/dev/null && wait "$LOADER_PID" 2>/dev/null
-    rm -f "$LOG" "$ERR"
-}
-trap cleanup EXIT INT TERM
-
 # ----------------------------------------------------------------------------
 # BEFORE: what the kernel already exposes via /proc/interrupts.
 # /proc/interrupts is a snapshot of counters-so-far. You can diff two
@@ -52,8 +41,7 @@ for _ in $(seq 1 100); do
     if ! kill -0 "$LOADER_PID" 2>/dev/null; then
         echo "=== loader exited early; stderr: ==="
         cat "$ERR"
-        echo "=== CH11_SKIP reason=\"loader failed to attach (IRQ kprobe unavailable)\" ==="
-        exit 0
+        exit 1
     fi
     sleep 0.1
 done

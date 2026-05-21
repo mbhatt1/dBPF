@@ -1,9 +1,24 @@
 # Ch25 — The Metadata Faucet (IMDS credential capture via XDP)
 
+**Status**: PROVEN
 **Category**: REAL
 **Primitive**: `SEC("xdp")` program taps HTTP traffic to `169.254.169.254` (or `127.0.0.1` in mock mode). Returns `XDP_PASS`; the legitimate SDK still gets its response. Userspace reassembles per-connection bytes and extracts the AWS SigV4 credential triple from the IMDSv2 response JSON.
 **Hook(s)**: `SEC("xdp")` on the host or pod network interface
 **Architecture**: aarch64 + x86_64
+**Verified on**: Ubuntu 6.17.0-29-generic aarch64 (Lima VM, Apple Silicon)
+
+## Verification notes (Ubuntu 6.17 Lima VM)
+
+XDP program on loopback (`lo`) with mock IMDSv2 on 127.0.0.1. Captures credentials end-to-end.
+
+```
+[ch25] attached — xdp on lo (mock-127.0.0.1 mode)
+[ch25] CREDENTIALS_CAPTURED access_key=ASIAEXAMPLEMOCK0001 token_len=1 role=demo-role
+[ch25] CH25_PROVEN access_key_captures=1 token_captures=1
+=== CH25_PROVEN access_key_captured=yes token_captured=yes role=demo-role ===
+```
+
+Note: In Docker container contexts, `--net=host` is required for XDP to attach to a host-visible interface. Inside the Lima VM's network namespace, the loopback interface is directly available.
 
 ## What this demonstrates
 

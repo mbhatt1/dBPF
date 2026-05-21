@@ -194,8 +194,7 @@ int main(int argc, char **argv)
     struct ring_buffer *rb = NULL;
     struct ch02_overlayfs_bpf *s = ch02_overlayfs_bpf__open();
     if (!s) {
-        fprintf(stderr, "[ch02] CH02_SKIP reason=\"skeleton open failed: %s\"\n",
-                strerror(errno));
+        fprintf(stderr, "[ch02] skeleton open failed: %s\n", strerror(errno));
         return 1;
     }
 
@@ -224,7 +223,7 @@ int main(int argc, char **argv)
 
     int err = ch02_overlayfs_bpf__load(s);
     if (err) {
-        fprintf(stderr, "[ch02] CH02_SKIP reason=\"load failed: %s\"\n", strerror(-err));
+        fprintf(stderr, "[ch02] load failed: %s\n", strerror(-err));
         goto out;
     }
 

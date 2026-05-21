@@ -639,7 +639,9 @@ This honest framing is the chapter's final and most important takeaway.
 
 ## Hook points
 
-**Category: REAL (observer only).** `__secure_computing` is NOT in `/sys/kernel/debug/error_injection/list` on 6.12.54-linuxkit aarch64, so `bpf_override_return` cannot be used --- attempting it would either fail at load or silently degrade. The shipped program is strictly an observer. It does not and cannot mutate seccomp decisions on stock kernels. The chapter should not be read as implying mutation is possible without a custom kernel that adds the `ALLOW_ERROR_INJECTION` annotation to `__secure_computing`.
+**PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM), 2026-05-20. Proof marker: `SECCOMP_SIDECHANNEL_PROVEN`.
+
+**Category: REAL (observer only).** `__secure_computing` is NOT in `/sys/kernel/debug/error_injection/list` on Ubuntu 6.17 aarch64, so `bpf_override_return` cannot be used --- attempting it would either fail at load or silently degrade. The shipped program is strictly an observer. It does not and cannot mutate seccomp decisions on stock kernels. The chapter should not be read as implying mutation is possible without a custom kernel that adds the `ALLOW_ERROR_INJECTION` annotation to `__secure_computing`.
 
 - `SEC("kprobe/__secure_computing")` — fires before every seccomp evaluation. Present in `/proc/kallsyms` on 6.12.54 aarch64.
 - `SEC("kretprobe/__secure_computing")` — captures the final return value (0 = allow, non-zero = filtered).
@@ -695,6 +697,6 @@ docker run --rm --privileged --pid=host \
 
 ## Limitations / arch notes
 
-- Docker Desktop linuxkit aarch64 (6.12.54): `__secure_computing` is not in `/sys/kernel/debug/error_injection/list`, so the override path is dormant — observation only. The `override_attempted` flag records intent.
+- Ubuntu 6.17.0-29-generic aarch64 (Lima VM): `__secure_computing` is not in `/sys/kernel/debug/error_injection/list`, so the override path is dormant — observation only. The `override_attempted` flag records intent.
 - `task->seccomp.filter` chain is itself a BPF program, not data — there is no in-place mutation primitive even on x86.
 - Reading the syscall number from `__secure_computing` is arch-specific (arm64 stashes `nr` in `pt_regs->regs[8]`); the shipped program returns `-1` for `syscall_nr` on entry and uses the kretprobe's return value as the meaningful field. Userspace can correlate via `comm` + `ts_ns` if a precise `nr` is needed.

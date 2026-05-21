@@ -38,6 +38,13 @@ sudo ./build/ch08-keyring-heist-kprobe
 bash trigger.sh
 ```
 
+## Proof status
+
+**PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM). Uses
+`bpf_probe_read_kernel` (via CO-RE `BPF_CORE_READ`) to exfiltrate keyring
+data (serial, type name, description) — the BTF FWD workaround via
+PT_REGS_PARM1 is confirmed working on this kernel.
+
 ## Detection
 
 - `bpftool prog show | grep key_` lists the attached kprobes.

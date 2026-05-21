@@ -14,7 +14,6 @@
 char LICENSE[] SEC("license") = "GPL";
 
 #define SIGUSR1 10
-#define SIGUSR2 12
 #define MAX_SIGNALS 16  // rate-limit: don't flood the target
 
 struct evt {
@@ -33,10 +32,11 @@ struct {
 } events SEC(".maps");
 
 // target_tgids: if a tgid is present, its denials will trigger bpf_send_signal
+// Special key 0 = wildcard (all processes)
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __type(key, unsigned int);
-    __type(value, unsigned int);   // value = max signals to send (0=unlimited)
+    __type(value, unsigned int);   // value = 1
     __uint(max_entries, 1024);
 } target_tgids SEC(".maps");
 

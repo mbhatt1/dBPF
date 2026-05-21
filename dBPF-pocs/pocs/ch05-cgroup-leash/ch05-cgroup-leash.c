@@ -100,15 +100,13 @@ int main(int argc, char **argv)
 
     skel = ch05_cgroup_leash_bpf__open_and_load();
     if (!skel) {
-        fprintf(stderr, "[ch05] CH05_SKIP reason=\"open_and_load failed: %s\"\n",
-                strerror(errno));
+        fprintf(stderr, "[ch05] open_and_load failed: %s\n", strerror(errno));
         goto out;
     }
 
     int err = ch05_cgroup_leash_bpf__attach(skel);
     if (err) {
-        fprintf(stderr, "[ch05] CH05_SKIP reason=\"attach failed: %s\"\n",
-                strerror(-err));
+        fprintf(stderr, "[ch05] attach failed: %s\n", strerror(-err));
         goto out;
     }
 

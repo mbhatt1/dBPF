@@ -1,9 +1,12 @@
 # dBPF-pocs — Defensive eBPF POCs
 
-Nineteen self-contained eBPF proof-of-concept programs covering every
+Twenty-five self-contained eBPF proof-of-concept programs covering every
 chapter of the dBPF research notebook. Each POC is built libbpf-skeleton
-+ CO-RE style and is exercised on Docker Desktop's linuxkit 6.12
-aarch64 kernel. Each lives in `pocs/<chXX>/` with the same layout:
++ CO-RE style and is verified on Ubuntu 6.17.0-29-generic aarch64 (Lima VM,
+Apple Silicon): 24 proven, 1 skip (ch24 — CONFIG_BPF_TOKEN=n), 0 failures.
+Earlier results on Docker Desktop's linuxkit 6.12 aarch64 and Fedora 42
+aarch64 QEMU VM are preserved in CHANGELOG.md. Each POC lives in
+`pocs/<chXX>/` with the same layout:
 
 ```
 pocs/chXX-name/
@@ -47,6 +50,9 @@ section below for what each suffix means.
 | 16 | seccomp TID Hop       | Bypass seccomp via TID-based override | `kprobe`/`kretprobe` `__secure_computing` | Mutates kernel behavior (override on allowlist) | `[seccomp] FLIP tid=… ret=-EPERM -> 0` | — |
 | 17 | ACPI WSMI Ping        | Hook `acpi_evaluate_object` + firmware loader | `kprobe` ACPI/firmware | Observer-only on this kernel (no ACPI) | `[acpi] evaluate_object name=\\_SB_.WMI` | `+ -analog` |
 | 18 | Token Bypass          | Forge `getuid`/`geteuid` to 0 via override | `kretprobe` `__arm64_sys_getuid`,`__arm64_sys_geteuid` | Mutates kernel behavior (override on allowlist) | `[token] FORGE pid=… comm=sh getuid: 1000 -> 0 (root)` | — |
+| 23 | TPM Unseal Heist      | Capture plaintext trusted-key payload after TPM unseal | `kprobe/kretprobe` `tpm2_unseal_trusted` | Observer (kprobe confirmed attached; TPM keyctl path skipped — no boot-time TPM in VM) | `CH23_PROVEN hook=tpm2_unseal_trusted` | — |
+| 24 | BPF Token Delegation  | Delegate BPF load rights to unprivileged process via BPF token | `BPF_TOKEN_CREATE` syscall + bpffs `delegate_*` mounts | **SKIP** — `CONFIG_BPF_TOKEN=n` on all tested kernels; requires kernel ≥ 6.9 with token support explicitly enabled | `CH24_SKIP reason=CONFIG_BPF_TOKEN=n` | — |
+| 25 | IMDS Harvest          | XDP tap on loopback captures IMDSv2 IAM credential triple | `SEC("xdp")` on loopback | Mutates kernel behavior (XDP_PASS + ringbuf exfil) | `CH25_PROVEN access_key_captured=yes token_captured=yes role=demo-role` | — |
 
 "Mutates kernel behavior" means `bpf_override_return` succeeds on this
 kernel (target is on the error-injection allowlist) or the program
@@ -89,9 +95,15 @@ has its own `README.md` describing what it attaches to and why.
 
 ## Prerequisites
 
+- **macOS + Apple Silicon + Lima VM** running Ubuntu with kernel 6.17 aarch64
+  (the verified environment: 24/25 proven), or
 - **macOS + Docker Desktop** (linuxkit 6.12 aarch64), or
 - **Any Linux** with privileged Docker access and a kernel ≥ 5.13 with
   CO-RE / BTF (`/sys/kernel/btf/vmlinux` present).
+
+Notes for the Lima VM path: ch15 requires `--net=host`; ch17 requires a
+custom `fw_trigger.ko` kernel module; ch13 trigger.sh builds a kernel module
+to call `powercap_register_control_type` (RAPL is x86-only).
 
 You need the base image once:
 

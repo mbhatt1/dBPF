@@ -43,13 +43,13 @@ cleanup() {
 trap 'cleanup' EXIT INT TERM
 
 if [ ! -x "$LOADER" ]; then
-    echo "=== CH05B_SKIP reason=\"loader not built at $LOADER\" ==="
-    exit 0
+    echo "=== loader not built: $LOADER (run: make) ==="
+    exit 1
 fi
 for tool in ip tcpdump python3; do
     if ! command -v "$tool" >/dev/null 2>&1; then
-        echo "=== CH05B_SKIP reason=\"required tool $tool not available\" ==="
-        exit 0
+        echo "missing required tool: $tool" >&2
+        exit 1
     fi
 done
 
@@ -124,8 +124,7 @@ sleep 1
 if ! kill -0 "$LOADER_PID" 2>/dev/null; then
     echo "=== loader exited early ==="
     cat "$LOG_LOADER"
-    echo "=== CH05B_SKIP reason=\"loader failed to start (XDP attach failed)\" ==="
-    exit 0
+    exit 1
 fi
 
 echo "=== AFTER: starting tcpdump on veth_g0 (XDP active) ==="

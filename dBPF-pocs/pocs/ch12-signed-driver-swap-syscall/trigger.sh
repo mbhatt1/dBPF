@@ -16,23 +16,13 @@ cd "$HERE" || exit 1
 FAKE_KO=/tmp/ch12s-fake.ko
 LOADER="$HERE/build/ch12-signed-driver-swap-syscall"
 MODNAME=ch12sfake   # what lsmod would display if the kernel actually loaded it
-LOADER_PID=""
-
-if ! command -v insmod >/dev/null 2>&1; then
-    echo "=== CH12_SKIP reason=\"insmod not available\" ==="
-    exit 0
-fi
-if [ ! -x "$LOADER" ]; then
-    echo "=== CH12_SKIP reason=\"loader not built at $LOADER\" ==="
-    exit 0
-fi
 
 cleanup() {
-    if [ -n "$LOADER_PID" ]; then
+    if [[ -n "$LOADER_PID" ]]; then
         kill "$LOADER_PID" 2>/dev/null
         wait "$LOADER_PID" 2>/dev/null
     fi
-    rm -f "$FAKE_KO" /tmp/ch12s.out /tmp/ch12s.err
+    rm -f "$FAKE_KO"
 }
 trap cleanup EXIT INT TERM
 
@@ -75,6 +65,11 @@ echo "BEFORE: insmod_rc=${BEFORE_RC} error_text=\"${ERRNAME}\""
 lsmod | grep -q "^${MODNAME}\b" && BEFORE_LSMOD=yes || BEFORE_LSMOD=no
 echo "BEFORE: lsmod_shows_module=${BEFORE_LSMOD}"
 
+if [[ ! -x "$LOADER" ]]; then
+    echo "[trigger] loader binary missing: $LOADER" >&2
+    exit 1
+fi
+
 echo
 echo "=== starting loader (wildcard, forges all callers) ==="
 "$LOADER" --all >/tmp/ch12s.out 2>/tmp/ch12s.err &
@@ -90,8 +85,7 @@ done
 if ! grep -q "status=ready" /tmp/ch12s.err 2>/dev/null; then
     echo "[trigger] loader did not become ready — stderr follows:" >&2
     cat /tmp/ch12s.err >&2
-    echo "=== CH12_SKIP reason=\"loader did not become ready (kretprobe attach failed)\" ==="
-    exit 0
+    exit 1
 fi
 echo "[trigger] loader ready (pid=$LOADER_PID)"
 
@@ -106,7 +100,7 @@ echo "insmod stderr: ${AFTER_OUT:-(empty)}"
 # forged to 0, but no module state exists.
 lsmod | grep -q "^${MODNAME}\b" && AFTER_LSMOD=yes || AFTER_LSMOD=no
 
-if [ "$AFTER_RC" -eq 0 ]; then
+if [[ "$AFTER_RC" -eq 0 ]]; then
     FORGED=yes
 else
     FORGED=no
@@ -122,7 +116,7 @@ echo
 #   - BEFORE rc was nonzero (baseline: kernel rejects bad .ko)
 #   - AFTER rc is 0 (syscall return forged)
 #   - lsmod still does not show the module (kernel state unchanged)
-if [ "$BEFORE_RC" -ne 0 ] && [ "$AFTER_RC" -eq 0 ] && [ "$AFTER_LSMOD" = "no" ]; then
+if [[ "$BEFORE_RC" -ne 0 && "$AFTER_RC" -eq 0 && "$AFTER_LSMOD" == "no" ]]; then
     echo "=== CH12_CONCEPT_PROVEN syscall_override_landed=yes module_actually_loaded=no ==="
 else
     echo "=== CH12_CONCEPT_UNPROVEN before_rc=${BEFORE_RC} after_rc=${AFTER_RC} lsmod=${AFTER_LSMOD} ==="

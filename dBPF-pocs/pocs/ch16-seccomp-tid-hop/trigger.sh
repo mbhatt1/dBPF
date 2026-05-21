@@ -27,24 +27,17 @@ cleanup() {
         kill "$L" 2>/dev/null
         wait "$L" 2>/dev/null
     fi
-    rm -f "$LOG" "$CHILD_LOG" /tmp/ch16_seccomp_child.c /tmp/ch16_seccomp_child
 }
 trap cleanup EXIT INT TERM
 
 if [ ! -x "$BIN" ]; then
-    echo "=== CH16_SKIP reason=\"loader not built at $BIN\" ==="
-    exit 0
-fi
-if ! command -v gcc >/dev/null 2>&1; then
-    echo "=== CH16_SKIP reason=\"gcc not available for compiling seccomp child\" ==="
-    exit 0
+    echo "FATAL: $BIN not built — run 'make' in $HERE first"
+    exit 2
 fi
 
 echo "=== kallsyms check ==="
 grep -E ' __secure_computing$' /proc/kallsyms || {
-  echo "=== CH16_SKIP reason=\"__secure_computing not in kallsyms\" ==="
-  exit 0
-}
+  echo "FATAL: __secure_computing not in kallsyms"; exit 2; }
 
 echo ""
 echo "=== error_injection list (for reference; override_attempt is a no-op unless listed) ==="
@@ -75,10 +68,8 @@ cat > "$CHILD_SRC" <<'EOF'
 #define SECCOMP_RET_KILL_PROCESS 0x80000000U
 #endif
 
-/* Use SYS_getpriority from syscall.h; fall back for arm64/x86_64 */
-#ifndef NR_GETPRIORITY
-#define NR_GETPRIORITY SYS_getpriority
-#endif
+/* arm64 syscall numbers */
+#define NR_GETPRIORITY 141
 
 int main(void) {
     struct sock_filter filter[] = {
@@ -115,9 +106,7 @@ EOF
 echo ""
 echo "=== compiling child ==="
 gcc -O1 -static -o "$CHILD_BIN" "$CHILD_SRC" || {
-    echo "=== CH16_SKIP reason=\"could not compile seccomp child (static libc missing?)\" ==="
-    exit 0
-}
+    echo "FATAL: could not build child"; exit 2; }
 
 # -----------------------------------------------------------------------------
 # PHASE 1 — BEFORE: run child without the BPF observer. External view: the
@@ -152,10 +141,9 @@ L=$!
 sleep 1
 
 if ! kill -0 "$L" 2>/dev/null; then
-    echo "observer exited immediately; log:"
+    echo "FATAL: observer exited immediately; log:"
     cat "$LOG"
-    echo "=== CH16_SKIP reason=\"observer loader failed to start\" ==="
-    exit 0
+    exit 3
 fi
 
 echo "=== launching seccomp-confined child ==="
@@ -199,6 +187,9 @@ fi
 
 echo ""
 echo "=== AFTER (BPF observer) === seccomp_events=$SECCOMP_EVENTS filter_decisions_leaked=$FILTER_EVENTS unique_syscalls_observed=$UNIQUE_NRS filter_reconstructed=$RECON"
-echo "=== SECCOMP_SIDECHANNEL_PROVEN events=$SECCOMP_EVENTS ==="
+echo "=== SECCOMP_SIDECHANNEL_PROVEN events=$SECCOMP_EVENTS ===" 
+if [ "$RECON" = "yes" ]; then
+    echo "=== CH16_PROVEN seccomp_events=$SECCOMP_EVENTS filter_events=$FILTER_EVENTS unique_syscalls=$UNIQUE_NRS ==="
+fi
 echo ""
 echo "=== trigger done ==="

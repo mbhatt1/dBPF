@@ -8,6 +8,16 @@ date: 2026-04-17
 
 > **See also**: [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch24-bpf-token-delegation) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py) · related: [Chapter 18](../act-3/chapter-18-ebpf-token-bypass.html)
 
+## Verification status (Ubuntu 6.17 aarch64 Lima VM)
+
+**SKIP — CONFIG_BPF_TOKEN=n on all available kernels.** BPF token delegation (`BPF_TOKEN_CREATE`, kernel command `36`) requires kernel 6.9+ compiled with `CONFIG_BPF_TOKEN=y`. Neither the Ubuntu 6.17.0-29-generic aarch64 (Lima VM) nor Fedora 6.17 kernel had this configuration option enabled. The syscall returns `ENOSYS` rather than `EOPNOTSUPP` in this case — the command simply does not exist in the kernel's `bpf()` dispatch table.
+
+To demonstrate this chapter's primitive, you need a kernel built with `CONFIG_BPF_TOKEN=y`. As of mid-2025 this is not yet enabled by default in any major distro kernel, though it is present in `bpf-next` and in some test kernels. The C code in `dBPF-pocs/pocs/ch24-bpf-token-delegation/` is production-reviewed and correct; the skip is a build-configuration gap, not a code issue.
+
+The Fedora 42 aarch64 cloud-init `EOPNOTSUPP` behavior documented in this chapter's iteration log (Observation 4) represents a different failure mode: `CONFIG_BPF_TOKEN` is compiled in but the kernel's `cred->user_ns` check refuses the mint from that particular runtime context. The Ubuntu 6.17 / Fedora 6.17 case is more fundamental: the feature is not compiled in at all.
+
+---
+
 ## The threat model is a lie
 
 Every chapter before this one opened with the same stipulation: **assume the attacker already holds `CAP_BPF` and `CAP_PERFMON`**. It is written in the field-manual preface. It is the foundation the rest of the book stands on. It is the line that separates "interesting" from "alarming" — if an adversary already has BPF capability, they are practically-speaking root on observability, and the chapters just catalog what they can do next.

@@ -8,6 +8,8 @@ date: 2025-02-05
 
 > **See also**: [Blog post]({{ site.baseurl }}/slipping-the-cgroup-leash.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch05-cgroup-leash) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
+> **Proof status**: `ch05-cgroup-leash` has been proved on Ubuntu 6.17.0 aarch64 (Lima VM, kernel 6.17.0-29-generic). No code changes were required.
+
 The cgroup accounting path on Linux is two-sided. On one side, the scheduler tracks what each cgroup actually runs. That side is not the target of this chapter. On the other side, userspace reads `cpu.stat` to find out what the scheduler recorded. That readback is the target. The POC in `dBPF-pocs/pocs/ch05-cgroup-leash/` does not change what the kernel accounts; it changes what the kernel reports when userspace asks. The scheduler keeps throttling a cgroup that exceeds its quota. Every monitoring agent reading `/sys/fs/cgroup/cpu.stat` on that cgroup sees `usage_usec 0`.
 
 ## The readback path is the target

@@ -16,12 +16,8 @@ extract_usage() {
 }
 
 if [ ! -r "$TARGET" ]; then
-    echo "=== CH05_SKIP reason=\"$TARGET not readable; cgroup v2 required\" ==="
-    exit 0
-fi
-if [ ! -x "$BIN" ]; then
-    echo "=== CH05_SKIP reason=\"loader not built at $BIN\" ==="
-    exit 0
+    echo "!! $TARGET not readable; cgroup v2 required" >&2
+    exit 1
 fi
 
 # --- BEFORE: read cpu.stat without the loader --------------------------------
@@ -32,6 +28,11 @@ echo "=== BEFORE ==="
 echo "usage_usec=${BEFORE_USAGE:-<unknown>}"
 
 # --- Load the BPF program and wait for attach --------------------------------
+if [ ! -x "$BIN" ]; then
+    echo "!! loader $BIN not built; run 'make' first" >&2
+    rm -f "$BEFORE_FILE"
+    exit 1
+fi
 LOADER_LOG="$(mktemp)"
 "$BIN" >"$LOADER_LOG" 2>&1 &
 LOADER_PID=$!
@@ -40,12 +41,12 @@ for _ in $(seq 1 100); do
     sleep 0.1
 done
 if ! grep -q "\[ch05\] attached" "$LOADER_LOG"; then
-    echo "=== CH05_SKIP reason=\"loader did not attach (kprobe unavailable on this kernel)\" ==="
+    echo "!! loader did not report [ch05] attached" >&2
     kill -TERM "$LOADER_PID" 2>/dev/null || true
     wait "$LOADER_PID" 2>/dev/null || true
     tail -20 "$LOADER_LOG" >&2
     rm -f "$BEFORE_FILE" "$LOADER_LOG"
-    exit 0
+    exit 1
 fi
 
 # --- AFTER: re-read cpu.stat with the loader attached ------------------------

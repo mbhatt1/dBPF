@@ -4,24 +4,10 @@
 # subsequent attempts succeed on a BPF-LSM-enabled kernel.
 set +e
 HERE="$(cd "$(dirname "$0")" && pwd)"
-LPID=""
-
 if ! grep -q bpf /sys/kernel/security/lsm 2>/dev/null; then
-  echo "=== CH01_SKIP reason=\"BPF LSM not active in /sys/kernel/security/lsm\" ==="
-  exit 0
+  echo "[trigger] ERROR: host kernel does not have BPF LSM active (cat /sys/kernel/security/lsm)"
+  exit 2
 fi
-if [ ! -x "$HERE/build/ch01-mirror-controls-lsm" ]; then
-  echo "=== CH01_SKIP reason=\"loader not built at $HERE/build/ch01-mirror-controls-lsm\" ==="
-  exit 0
-fi
-
-cleanup() {
-  [ -n "$LPID" ] && kill "$LPID" 2>/dev/null && wait "$LPID" 2>/dev/null
-  userdel t01lsm 2>/dev/null
-  rm -f /tmp/ch01-lsm.log
-}
-trap cleanup EXIT INT TERM
-
 useradd -M t01lsm 2>/dev/null
 echo "=== baseline (no BPF) ==="
 su t01lsm -c 'cat /etc/shadow 2>&1 | head -1; echo ret=$?'
@@ -36,7 +22,7 @@ su t01lsm -c 'cat /etc/shadow 2>&1 | head -1; echo ret=$?'
 
 sleep 1
 kill $LPID 2>/dev/null
-wait $LPID 2>/dev/null
-LPID=""
+wait 2>/dev/null
 echo "=== loader log ==="
 cat /tmp/ch01-lsm.log
+userdel t01lsm 2>/dev/null

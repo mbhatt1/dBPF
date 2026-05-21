@@ -8,6 +8,8 @@ date: 2025-02-01
 
 > **See also**: [Blog post]({{ site.baseurl }}/the-overlayfs-trojan-horse.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch02-overlayfs) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
+> **Proof status**: Both `ch02-overlayfs` (kprobe observer + userspace racer) and `ch02-overlayfs-lsm` (BPF LSM fmod_ret on `inode_copy_up`) have been proved on Ubuntu 6.17.0 aarch64 (Lima VM, kernel 6.17.0-29-generic). No code changes were required — both variants worked as-is.
+
 I started on this one after noticing, on a linuxkit 6.12 test VM, how much work `ovl_copy_up_one` actually does between the moment it allocates the upper inode and the moment the merged dentry becomes visible. That window is the thing. I wanted to measure it, and then I wanted to see whether a userspace racer could fit inside it.
 
 Up front: the BPF side of this chapter is an observation channel. The shipped PoC attaches kprobes to three entry points into the copy-up path (`ovl_copy_up`, `ovl_maybe_copy_up`, `ovl_copy_up_with_data`) and does nothing else — no `bpf_override_return`, no in-BPF payload injection. What the probe gives you is a reliable signal — a ringbuf event saying "copy-up is happening now, for this dentry, via this entry point." The effect comes from a userspace racer that consumes those events and opens the upper file before overlayfs finishes wiring it in.

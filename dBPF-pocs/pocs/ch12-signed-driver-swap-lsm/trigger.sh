@@ -27,43 +27,22 @@ trap cleanup EXIT INT TERM
 
 # --- Preflight: BPF LSM available ---
 if ! grep -q bpf /sys/kernel/security/lsm 2>/dev/null; then
-  echo '=== CH12_SKIP reason="kernel lacks bpf in /sys/kernel/security/lsm" ==='
+  echo 'CH12_SKIP reason="kernel lacks bpf in /sys/kernel/security/lsm"'
   exit 0
 fi
 if ! command -v insmod >/dev/null 2>&1; then
-  echo '=== CH12_SKIP reason="insmod(8) not available" ==='
+  echo 'CH12_SKIP reason="insmod(8) not available"'
   exit 0
 fi
 if [ ! -x "$LOADER" ]; then
-  echo "=== CH12_SKIP reason=\"loader not built at $LOADER\" ==="
+  echo "CH12_SKIP reason=\"loader not built at $LOADER\""
   exit 0
 fi
 
-# --- Fabricate fake.ko: valid ELF relocatable header for aarch64. ---
-# ELF64 header: magic, class=64, LE, EI_VERSION=1, OS_ABI=0
-# e_type=1 (ET_REL), e_machine=0xB7 (EM_AARCH64), e_version=1
-# Everything else zeroed — enough for the kernel to enter the module
-# loading path (past ELF header validation) where the LSM hooks fire.
-python3 -c '
-import struct, sys
-# ELF64 header: 64 bytes
-ident = b"\x7fELF" + b"\x02\x01\x01" + b"\x00"*9  # 16 bytes
-hdr = struct.pack("<HHIQ3QI6H",
-    1,        # e_type = ET_REL
-    0xB7,     # e_machine = EM_AARCH64
-    1,        # e_version
-    0,        # e_entry
-    0,        # e_phoff
-    0,        # e_shoff
-    0,        # e_flags
-    64,       # e_ehsize
-    0, 0,     # e_phentsize, e_phnum
-    0, 0,     # e_shentsize, e_shnum
-    0,        # e_shstrndx
-)
-sys.stdout.buffer.write(ident + hdr)
-sys.stdout.buffer.write(b"\x00" * (4096 - 64))
-' > "$FAKE"
+# --- Fabricate fake.ko: ELF magic + minimal padding, signature bogus. ---
+printf '\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00' > "$FAKE"
+# Pad to 4096 bytes so the kernel attempts a full sig parse.
+dd if=/dev/zero bs=1 count=4080 >> "$FAKE" 2>/dev/null
 
 echo "=== baseline (no BPF) ==="
 BASE_OUT="$(insmod "$FAKE" 2>&1)"
@@ -93,7 +72,7 @@ if ! kill -0 "$LPID" 2>/dev/null; then
     grep '^CH12_SKIP' "$LOG"
     exit 0
   fi
-  echo '=== CH12_SKIP reason="loader crashed on startup" ==='
+  echo 'CH12_SKIP reason="loader crashed on startup"'
   exit 0
 fi
 
@@ -135,5 +114,5 @@ elif [ "$FLIPS" -gt 0 ]; then
   # Flip fired even if the post-gate ELF validator returned the same errno.
   echo "CH12_PROVEN flipped=$FLIPS hook=$HOOK"
 else
-  echo '=== CH12_SKIP reason="no kernel_read_file/load_data/locked_down flip observed (module-sig path not taken)" ==='
+  echo 'CH12_SKIP reason="no kernel_read_file/load_data/locked_down flip observed (module-sig path not taken)"'
 fi

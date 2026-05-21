@@ -179,8 +179,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "[ch14] warning: cannot read /proc/kallsyms (%s); "
                         "proceeding optimistically\n", strerror(errno));
     } else if (have == 0) {
-        fprintf(stderr, "[ch14] CH14_SKIP reason=\"kprobe target %s missing "
-                        "from kallsyms (wrong arch or kernel)\"\n", KPROBE_TARGET);
+        fprintf(stderr, "[ch14] FATAL: kprobe target '%s' missing from kallsyms; "
+                        "wrong arch or kernel\n", KPROBE_TARGET);
         return 3;
     } else {
         fprintf(stderr, "[ch14] tag=preflight target=%s status=present\n", KPROBE_TARGET);
@@ -190,15 +190,13 @@ int main(int argc, char **argv)
     struct ring_buffer *rb = NULL;
     struct ch14_sched_fifo_bpf *s = ch14_sched_fifo_bpf__open_and_load();
     if (!s) {
-        fprintf(stderr, "[ch14] CH14_SKIP reason=\"open_and_load failed: %s\"\n",
-                strerror(errno));
+        fprintf(stderr, "[ch14] open_and_load failed: %s\n", strerror(errno));
         return 1;
     }
 
     int err = ch14_sched_fifo_bpf__attach(s);
     if (err) {
-        fprintf(stderr, "[ch14] CH14_SKIP reason=\"attach failed: %s\"\n",
-                strerror(-err));
+        fprintf(stderr, "[ch14] attach failed: %s\n", strerror(-err));
         goto out;
     }
 

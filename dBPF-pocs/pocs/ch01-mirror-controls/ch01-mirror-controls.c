@@ -1,8 +1,8 @@
 // ch01 mirror-controls — userspace loader
 //
-// Observes every cap_capable() decision; for tgids registered via -t, marks
-// what would have been flipped (bpf_override_return is gated by kernel
-// error-injection allowlist; see README "Limitations").
+// Observes every cap_capable() decision; when a targeted tgid is denied
+// a capability, fires bpf_send_signal(SIGUSR1) to prove real kernel control.
+// Use -t <tgid> to target a specific process, or -a to target all processes.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

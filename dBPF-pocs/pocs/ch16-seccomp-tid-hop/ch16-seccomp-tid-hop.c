@@ -156,20 +156,18 @@ int main(int argc, char **argv)
     fprintf(stderr, "  %-28s : %s\n", "__secure_computing",
             sc_ok == 1 ? "present" : (sc_ok == 0 ? "ABSENT" : "kallsyms-err"));
     if (sc_ok != 1) {
-        fprintf(stderr, "[ch16] CH16_SKIP reason=\"__secure_computing not in "
-                        "kallsyms (cannot attach)\"\n");
+        fprintf(stderr, "[ch16] __secure_computing not in kallsyms — "
+                        "cannot attach. Bailing.\n");
         return 3;
     }
 
     struct ch16_seccomp_tid_hop_bpf *s = ch16_seccomp_tid_hop_bpf__open_and_load();
     if (!s) {
-        fprintf(stderr, "[ch16] CH16_SKIP reason=\"open_and_load failed: %s\"\n",
-                strerror(errno));
+        fprintf(stderr, "[ch16] open_and_load failed: %s\n", strerror(errno));
         return 1;
     }
     if (ch16_seccomp_tid_hop_bpf__attach(s)) {
-        fprintf(stderr, "[ch16] CH16_SKIP reason=\"attach failed: %s\"\n",
-                strerror(errno));
+        fprintf(stderr, "[ch16] attach failed: %s\n", strerror(errno));
         ch16_seccomp_tid_hop_bpf__destroy(s);
         return 1;
     }
