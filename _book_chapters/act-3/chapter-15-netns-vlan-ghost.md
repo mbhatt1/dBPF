@@ -10,7 +10,7 @@ date: 2025-04-15
 
 My first attempt at this chapter was a kprobe on `__netif_receive_skb_core` that rewrote the namespace metadata on an incoming `skb` and let the kernel re-receive it on the other side. The verifier rejected it. Writes to `sk_buff` from kprobe context are not permitted, and `__netif_receive_skb_core` is not in the error-injection list, so there is no legal way to intercept-and-divert from that attach point on 6.12.
 
-The working form of the same primitive is XDP plus `bpf_redirect_map` into a DEVMAP slot whose target ifindex lives in a different network namespace. None of this is novel: Cilium has been using exactly this pattern since around 2019 for legitimate cross-namespace forwarding in its service-mesh datapath. The only contribution here is pointing it in a hostile direction. VLAN-based segmentation was never designed to resist host-level XDP ; an XDP program is a peer to the netdev, not above it.
+The working form of the same primitive is XDP plus `bpf_redirect_map` into a DEVMAP slot whose target ifindex lives in a different network namespace. None of this is novel: Cilium has been using exactly this pattern since around 2019 for legitimate cross-namespace forwarding in its service-mesh datapath. The only contribution here is pointing it in a hostile direction. VLAN-based segmentation was never designed to resist host-level XDP; an XDP program is a peer to the netdev, not above it.
 
 ## Mechanism
 
@@ -42,7 +42,7 @@ sent 5 VLAN-4242 covert frames
 ee:f0:6e:11:22:33 > ff:ff:ff:ff:ff:ff, ethertype Unknown (0x88b5), length 78: ...
 ```
 
-The `tcpdump` frame is untagged ; no `vlan 4242` in the dissector output, inner ethertype `0x88b5` is the outermost now. That is evidence the strip ran before the egress veth saw the packet.
+The `tcpdump` frame is untagged; no `vlan 4242` in the dissector output, inner ethertype `0x88b5` is the outermost now. That is evidence the strip ran before the egress veth saw the packet.
 
 ## Threat model, honestly
 
@@ -51,10 +51,10 @@ Calling this a "VLAN escape" is overselling it. The correct framing: **if an att
 ## Hook points
 
 - `SEC("xdp")` `xdp_vlan_ghost` on the ingress veth.
-- `BPF_MAP_TYPE_DEVMAP tx_port` ; slot 0 holds the egress ifindex for `bpf_redirect_map`.
-- `BPF_MAP_TYPE_ARRAY cfg` ; slot 0 is the mode flag, slot 1 an audit copy of the egress ifindex.
+- `BPF_MAP_TYPE_DEVMAP tx_port`; slot 0 holds the egress ifindex for `bpf_redirect_map`.
+- `BPF_MAP_TYPE_ARRAY cfg`; slot 0 is the mode flag, slot 1 an audit copy of the egress ifindex.
 
-The dead-end sketch ; the kprobe on `__netif_receive_skb_core` that the original outline called for ; is documented here because the dead end is instructive. The "rewrite skb namespace metadata" intuition is natural and wrong for two independent reasons: the verifier rejects skb writes from kprobe context, and the symbol is not error-injectable. XDP is the correct landing site.
+The dead-end sketch; the kprobe on `__netif_receive_skb_core` that the original outline called for; is documented here because the dead end is instructive. The "rewrite skb namespace metadata" intuition is natural and wrong for two independent reasons: the verifier rejects skb writes from kprobe context, and the symbol is not error-injectable. XDP is the correct landing site.
 
 ```c
 SEC("kprobe/__netif_receive_skb_core")

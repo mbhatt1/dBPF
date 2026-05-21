@@ -8,13 +8,13 @@ date: 2026-04-17
 
 > **See also**: [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch25-imds-harvest) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
-> **Navigation**: [Chapter 24 ; The Token Hand-off]({{ site.baseurl }}/book/act-4/chapter-24-the-token-hand-off.html)
+> **Navigation**: [Chapter 24; The Token Hand-off]({{ site.baseurl }}/book/act-4/chapter-24-the-token-hand-off.html)
 
 > **Proof status**: PROVEN on Ubuntu 6.17.0-29-generic aarch64 (Lima VM, Apple Silicon). XDP program on loopback (`lo`) intercepts mock IMDS traffic and captures credentials. Output: `[ch25] CREDENTIALS_CAPTURED access_key=ASIAEXAMPLEMOCK0001 token_len=1 role=demo-role` and `CH25_PROVEN access_key_captured=yes token_captured=yes`. Note: `--net=host` is required in Docker contexts for XDP to attach to the host interface. The Lima VM's loopback works directly.
 
-Everything in this book until now targets in-host boundaries. This chapter is the first one that reaches off-host. The capability that gets stolen is a cloud IAM credential. The destination the attacker uses it against is the cloud provider's API. The primitive bridging the two is an XDP program on the network interface ; the same tool the book demonstrated in the ch05b Ghost NIC POC and Chapter 15.
+Everything in this book until now targets in-host boundaries. This chapter is the first one that reaches off-host. The capability that gets stolen is a cloud IAM credential. The destination the attacker uses it against is the cloud provider's API. The primitive bridging the two is an XDP program on the network interface; the same tool the book demonstrated in the ch05b Ghost NIC POC and Chapter 15.
 
-The argument is narrower than Chapter 23's. Chapter 23 rearranged the threat model ; the TPM, which operators had filed under "we're good here," turned out to be in reach of an observability agent. This chapter does something simpler: it notes that a host which makes outbound HTTP calls to a metadata service is handing the attacker a credential every few hours, and the attacker does not need to compromise the metadata service to capture those credentials. They need to read the wire. XDP reads the wire cheaply and reliably.
+The argument is narrower than Chapter 23's. Chapter 23 rearranged the threat model; the TPM, which operators had filed under "we're good here," turned out to be in reach of an observability agent. This chapter does something simpler: it notes that a host which makes outbound HTTP calls to a metadata service is handing the attacker a credential every few hours, and the attacker does not need to compromise the metadata service to capture those credentials. They need to read the wire. XDP reads the wire cheaply and reliably.
 
 ## What the primitive produces
 
@@ -32,11 +32,11 @@ Together with the captured `AccessKeyId` and `SessionToken`, `role=<role-name>` 
 
 ## Why IMDSv2 does not help as much as operators think
 
-AWS introduced IMDSv2 in November 2019 as the mitigation for SSRF attacks. The two-step flow ; PUT to get a token, GET with that token to get credentials ; breaks most SSRF vectors because the vulnerable web app rarely permits attacker-controlled PUT requests.
+AWS introduced IMDSv2 in November 2019 as the mitigation for SSRF attacks. The two-step flow; PUT to get a token, GET with that token to get credentials; breaks most SSRF vectors because the vulnerable web app rarely permits attacker-controlled PUT requests.
 
 The secondary hardening is `HttpPutResponseHopLimit`. The token response ships with TTL=1, meaning it cannot traverse more than one hop. Containers at hop 1 from IMDS see it legitimately. A remote attacker trying to proxy credentials out sees the TTL expire.
 
-Both mitigations address the routed path from a container or a remote SSRF. Neither addresses the host network namespace itself. A BPF program attached to the host's eth0 is on the wire. It sees the PUT, the token response, the GET, the credentials. Hop limit is irrelevant to a process that reads packets before they traverse any hops. IMDSv2's token requirement is also irrelevant ; the XDP program observes the SDK's own compliant exchange and captures both halves.
+Both mitigations address the routed path from a container or a remote SSRF. Neither addresses the host network namespace itself. A BPF program attached to the host's eth0 is on the wire. It sees the PUT, the token response, the GET, the credentials. Hop limit is irrelevant to a process that reads packets before they traverse any hops. IMDSv2's token requirement is also irrelevant; the XDP program observes the SDK's own compliant exchange and captures both halves.
 
 The mitigation assumed a threat model of "compromised container, correctly-configured host." This book addresses "correctly-configured container, compromised host via observability agent with `CAP_BPF`." IMDSv2 does not move against that attacker. The gap is what this chapter reaches into.
 
@@ -131,7 +131,7 @@ Standard XDP parse-ethernet-ip-tcp chain with the packet-bound checks the verifi
 
 `XDP_PASS` is load-bearing. The legitimate SDK must still see the response. The BPF program is a tee, not a gate.
 
-The payload copy is bounded at 512 bytes. IMDSv2 responses are small ; the token response is ~50 bytes, the role-discovery response is ~20 bytes, the credential JSON is ~500 bytes. A 512-byte bound captures the full credential document in a single event.
+The payload copy is bounded at 512 bytes. IMDSv2 responses are small; the token response is ~50 bytes, the role-discovery response is ~20 bytes, the credential JSON is ~500 bytes. A 512-byte bound captures the full credential document in a single event.
 
 ## The trigger
 
@@ -209,4 +209,4 @@ The scope of the compromise is the role's IAM policy. Chapter 22's inventory ste
 
 ---
 
-**What this chapter adds to the book**: The ch05b Ghost NIC POC and Chapter 15 showed XDP can drop packets and redirect them cross-namespace. This chapter shows XDP can also read packets ; the tap case rather than the drop or redirect case. Same primitive class, aimed at a different purpose: not packet manipulation but content exfiltration across a boundary operators thought was on a separate plane. Act 4's three chapters together: a persistent key-theft primitive against the hardest host key store (Chapter 23), a threat-model subversion that changes who needs `CAP_BPF` to run any of this (Chapter 24), and a cross-boundary cloud credential capture (this chapter). The defender's response is to scope the grant ; the same answer the book has given since Chapter 22 ; but now with a clearer picture of what is at stake when the grant is not scoped.
+**What this chapter adds to the book**: The ch05b Ghost NIC POC and Chapter 15 showed XDP can drop packets and redirect them cross-namespace. This chapter shows XDP can also read packets; the tap case rather than the drop or redirect case. Same primitive class, aimed at a different purpose: not packet manipulation but content exfiltration across a boundary operators thought was on a separate plane. Act 4's three chapters together: a persistent key-theft primitive against the hardest host key store (Chapter 23), a threat-model subversion that changes who needs `CAP_BPF` to run any of this (Chapter 24), and a cross-boundary cloud credential capture (this chapter). The defender's response is to scope the grant; the same answer the book has given since Chapter 22; but now with a clearer picture of what is at stake when the grant is not scoped.

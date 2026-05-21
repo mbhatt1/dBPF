@@ -29,17 +29,17 @@ Operators deciding whether to grant `CAP_BPF` to a workload, and what to configu
 
 Every primitive in the book is one of three motions:
 
-- **Change the syscall return** (Class I ; kretprobe / LSM fmod_ret / XDP_DROP). The kernel's decision stands; the caller sees a different answer.
-- **Rewrite the userspace buffer** (Class II ; `bpf_probe_write_user` during `sys_exit`). Kernel state unchanged; userspace reads are corrupted post-return.
-- **Copy the decision out of band** (Class III ; ringbuf from a tracepoint or kprobe). Kernel state and decisions are untouched; confidentiality is lost.
+- **Change the syscall return** (Class I; kretprobe / LSM fmod_ret / XDP_DROP). The kernel's decision stands; the caller sees a different answer.
+- **Rewrite the userspace buffer** (Class II; `bpf_probe_write_user` during `sys_exit`). Kernel state unchanged; userspace reads are corrupted post-return.
+- **Copy the decision out of band** (Class III; ringbuf from a tracepoint or kprobe). Kernel state and decisions are untouched; confidentiality is lost.
 
-Two additional classes specialize these ; **Class IV** (XDP packet-path interception) is a Class I variant at the netdev layer; **Class V** (ringbuf + userspace racer) is Class III used as a trigger signal. Full taxonomy is in [chapter 20]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html).
+Two additional classes specialize these; **Class IV** (XDP packet-path interception) is a Class I variant at the netdev layer; **Class V** (ringbuf + userspace racer) is Class III used as a trigger signal. Full taxonomy is in [chapter 20]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html).
 
 ## A brief history of CAP_BPF
 
 Before kernel 5.8, loading a BPF program meant holding `CAP_SYS_ADMIN`. Commit `2c78ee898d8f` in 5.8 split the BPF surface out into its own capability. `CAP_BPF` covered most program and map types; `CAP_PERFMON` covered tracing. The split was motivated by least-privilege: observability tooling did not need the full `CAP_SYS_ADMIN` surface.
 
-The lwn.net coverage at the time noted the counterargument: if the new capability lets a program call `bpf_probe_read_kernel`, granting it to an observability agent is not meaningfully different from granting root. Alexei Starovoitov's position was that the verifier's constraints ; type-safety, memory-safety, bounded loops, helper allowlisting ; are the actual safety boundary. This book is designed to stress-test that position. The answer turns out to be a lot more than most operators expect when they check the "grant CAP_BPF" box in their DaemonSet manifest.
+The lwn.net coverage at the time noted the counterargument: if the new capability lets a program call `bpf_probe_read_kernel`, granting it to an observability agent is not meaningfully different from granting root. Alexei Starovoitov's position was that the verifier's constraints; type-safety, memory-safety, bounded loops, helper allowlisting; are the actual safety boundary. This book is designed to stress-test that position. The answer turns out to be a lot more than most operators expect when they check the "grant CAP_BPF" box in their DaemonSet manifest.
 
 The distribution-wide `unprivileged_bpf_disabled` flip to `2` in 2021 set the cultural baseline that BPF load is a privileged operation. Granting `CAP_BPF` is, in practice, the re-enabling of that privilege for a specific workload.
 
@@ -79,7 +79,7 @@ cat /sys/kernel/debug/error_injection/list | head
 # do_renameat2 EI_ETYPE_NULL
 ```
 
-The annotated set is notably skewed toward syscall entries and filesystem operations. `cap_capable` is not annotated. `security_file_permission` is not annotated. Every security-decision function is deliberately excluded. This was the original failure mode I hit in Chapter 1 ; until I found a different primitive at the same hook point.
+The annotated set is notably skewed toward syscall entries and filesystem operations. `cap_capable` is not annotated. `security_file_permission` is not annotated. Every security-decision function is deliberately excluded. This was the original failure mode I hit in Chapter 1; until I found a different primitive at the same hook point.
 
 The workflow before writing a POC: check `/sys/kernel/debug/error_injection/list`. If the target is not there, rewrite the technique around observation rather than override.
 
@@ -89,7 +89,7 @@ CAP_BPF grants every motion in the taxonomy above. Granting it to a workload mea
 
 ## The target environment
 
-The kernel is 6.12.54-linuxkit, aarch64 ; the kernel shipped by Docker Desktop on Apple Silicon as of late 2024. Key config entries:
+The kernel is 6.12.54-linuxkit, aarch64; the kernel shipped by Docker Desktop on Apple Silicon as of late 2024. Key config entries:
 
 - `CONFIG_BPF_LSM=y`
 - `CONFIG_DEBUG_INFO_BTF=y`

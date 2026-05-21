@@ -43,11 +43,11 @@ Run `id` with the probe attached:
 uid=0(root) gid=1001 groups=1001
 ```
 
-Only `uid` was forged. `getgid()` was not hooked, so `gid=1001` passed through untouched. A real root process has `gid=0`. Any tool that correlates `uid` and `gid` ; or that reads `/proc/self/status`, which sources `Uid:` and `Gid:` straight from `task_struct->cred` ; sees the divergence.
+Only `uid` was forged. `getgid()` was not hooked, so `gid=1001` passed through untouched. A real root process has `gid=0`. Any tool that correlates `uid` and `gid`; or that reads `/proc/self/status`, which sources `Uid:` and `Gid:` straight from `task_struct->cred`; sees the divergence.
 
 The attack works against `id`/`whoami`/any script that just checks `$(id -u) -eq 0`. It does not work against anything that actually cares.
 
-And critically, kernel-side credential checks do not consult `sys_getuid`. VFS checks, capability checks, LSM hooks ; they all go through `current->cred`, which is unchanged. `cat /etc/shadow` still returns `EACCES`. This is the entire point: the exploit class is narrow, well-known, and exactly as scoped as the historical userspace-query-based auth bugs it descends from.
+And critically, kernel-side credential checks do not consult `sys_getuid`. VFS checks, capability checks, LSM hooks; they all go through `current->cred`, which is unchanged. `cat /etc/shadow` still returns `EACCES`. This is the entire point: the exploit class is narrow, well-known, and exactly as scoped as the historical userspace-query-based auth bugs it descends from.
 
 ## Hook points
 
@@ -82,7 +82,7 @@ int BPF_KRETPROBE(kr_geteuid, long ret)
 char LICENSE[] SEC("license") = "GPL";
 ```
 
-**Category: ILLUSION.** Forging `getuid`/`geteuid` makes `id` show `uid=0(root)` but the kernel's `current->cred->uid` is unchanged. Actual privilege checks (VFS permission via `inode_permission`, capability gates via `cap_capable`, LSM hooks) all consult `current->cred` directly and deny. The "tell": `gid` is still 1001 because `getgid` is not hooked ; `id` output shows `uid=0(root) gid=1001 groups=1001`, which no real root session would produce.
+**Category: ILLUSION.** Forging `getuid`/`geteuid` makes `id` show `uid=0(root)` but the kernel's `current->cred->uid` is unchanged. Actual privilege checks (VFS permission via `inode_permission`, capability gates via `cap_capable`, LSM hooks) all consult `current->cred` directly and deny. The "tell": `gid` is still 1001 because `getgid` is not hooked; `id` output shows `uid=0(root) gid=1001 groups=1001`, which no real root session would produce.
 
 ## Build
 
@@ -119,7 +119,7 @@ In another shell, run `sudo bash trigger.sh`. Send `SIGINT` to detach cleanly.
 
 - aarch64 only. Symbols are spelled `__arm64_sys_getuid` / `__arm64_sys_geteuid`. On x86_64 they would be `__x64_sys_getuid` / `__x64_sys_geteuid`. The loader's symbol preflight disables affected programs cleanly if absent.
 - `bpf_override_return` only succeeds on functions present in `/sys/kernel/debug/error_injection/list`. Both targets happen to be on the linuxkit 6.12 list. On a hardened kernel without those entries, the kretprobe attaches but the override silently no-ops; the loader still emits events, but `flipped=0` and the userspace illusion does not occur.
-- Userspace illusion only. No kernel access check is bypassed. This is intentional ; the POC demonstrates the class of bug, which is identical in shape to the historical "trust-the-query, not-the-cred" CVEs.
+- Userspace illusion only. No kernel access check is bypassed. This is intentional; the POC demonstrates the class of bug, which is identical in shape to the historical "trust-the-query, not-the-cred" CVEs.
 - Requires `CAP_BPF` + `CAP_PERFMON` (or root). Inside Docker, run with `--privileged --pid=host`.
 
 > **Proof status**: **PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM), 2026-05-20. Proof marker: `TOKEN_FORGE_PROVEN`.

@@ -14,7 +14,7 @@ The target here is not the cgroup enforcement path. It is the readback path. The
 
 The POC waits for a process to open `cpu.stat`, waits for the subsequent `read()` to complete, then overwrites the returned bytes in userspace memory with a constant string of zeros before the reader's `read()` returns. The kernel read path ran. The scheduler provided the real numbers. Those bytes were copied to the user buffer. Between that copy and the reader regaining control, a BPF program running in the `sys_exit_read` tracepoint overwrote the user buffer.
 
-The reader sees `usage_usec 0`. Prometheus, Datadog, Netdata, cAdvisor, k8s metrics-server ; all see `usage_usec 0`. The scheduler still throttles the cgroup. The observation plane and the control plane have been split.
+The reader sees `usage_usec 0`. Prometheus, Datadog, Netdata, cAdvisor, k8s metrics-server; all see `usage_usec 0`. The scheduler still throttles the cgroup. The observation plane and the control plane have been split.
 
 Prior art on `cpu.stat` spoofing via BPF goes back to ~2021. The contribution here is a harness with clean BEFORE/AFTER and honest detection notes.
 
@@ -68,14 +68,14 @@ out:
 
 Verifier notes from the investigation: unbounded string compare against `"cpu.stat"` is rejected; you have to `#pragma unroll` a bounded loop or use `streq_bounded` with a constant length.
 
-The five-hop struct walk ; `task → files_struct → fdtable → file* array → file → path → dentry → qstr → name bytes` ; requires CO-RE for portability. `struct files_struct`, `fdtable`, `file`, and `dentry` have minor layout shifts across kernel versions; CO-RE adjusts at load time. Without it you would hardcode offsets and get silent data corruption on any kernel where the layout differs.
+The five-hop struct walk; `task → files_struct → fdtable → file* array → file → path → dentry → qstr → name bytes`; requires CO-RE for portability. `struct files_struct`, `fdtable`, `file`, and `dentry` have minor layout shifts across kernel versions; CO-RE adjusts at load time. Without it you would hardcode offsets and get silent data corruption on any kernel where the layout differs.
 
 The filename comparison is basename-only. There is no check on the directory, filesystem type, or superblock magic. A file named `cpu.stat` anywhere on the system triggers the rewrite. A production version would add `f_path.mnt->mnt_sb->s_magic == CGROUP2_SUPER_MAGIC` (0x63677270) to eliminate false positives on non-cgroup filesystems. The POC omits this; false positives would be detectable noise in a real deployment.
 
 ## Hook points
 
-- `tp/syscalls/sys_enter_read` ; identify reads of `cpu.stat`, stash user buffer.
-- `tp/syscalls/sys_exit_read` ; overwrite user buffer on success.
+- `tp/syscalls/sys_enter_read`; identify reads of `cpu.stat`, stash user buffer.
+- `tp/syscalls/sys_exit_read`; overwrite user buffer on success.
 
 ## Reproduction
 
@@ -92,13 +92,13 @@ cat /sys/fs/cgroup/cpu.stat          # zeros
 
 ## Detection
 
-- `bpf_probe_write_user` invocation triggers a `pr_warn_ratelimited` in dmesg at program load time: `<loader>[<pid>] is installing a program with bpf_probe_write_user helper that may corrupt user memory!` ; one per loader process, not per invocation, not suppressible short of patching the kernel.
+- `bpf_probe_write_user` invocation triggers a `pr_warn_ratelimited` in dmesg at program load time: `<loader>[<pid>] is installing a program with bpf_probe_write_user helper that may corrupt user memory!`; one per loader process, not per invocation, not suppressible short of patching the kernel.
 - On kernels older than ~5.13, loading this helper also set `TAINT_USER` (bit 6, value 64) in `/proc/sys/kernel/tainted`. That taint call was removed in later kernels. On 6.12 the taint word is not set; dmesg is the primary signal.
-- `bpftool prog show | grep tracepoint` ; a tracepoint on `sys_exit_read` with `bpf_probe_write_user` calls is an unusual fingerprint.
+- `bpftool prog show | grep tracepoint`; a tracepoint on `sys_exit_read` with `bpf_probe_write_user` calls is an unusual fingerprint.
 - Out-of-band cross-check: compute per-cgroup CPU usage from `/proc/schedstat` and per-task `/proc/[pid]/stat`, compare against `cpu.stat`. Any drift larger than a few hundred microseconds per second of wall time is suspicious.
 
 ## Scope
 
 Class II primitive from chapter 20 (userspace buffer rewrite). Anything gated on `cpu.stat` for metrics (Prometheus node-exporter, Datadog, Netdata, k8s metrics-server, Sysdig, systemd's own `systemctl status`) is affected. Anything consulting the scheduler directly is not. The same shape trivially extends to `memory.current`, `io.stat`, and `cpu.pressure`.
 
-systemd deserves a specific note. When `CPUAccounting=yes` is set in a unit file, systemd reads the unit's `cpu.stat` at regular intervals for `systemctl status` output and for `CPUQuota=` enforcement decisions. A unit running at 80% CPU with a 50% quota still gets throttled by the scheduler ; that side is untouched ; but systemd's own logging and unit-level policy decisions misfire silently. This attack surface is underappreciated in the public literature, which tends to focus on external monitoring agents.
+systemd deserves a specific note. When `CPUAccounting=yes` is set in a unit file, systemd reads the unit's `cpu.stat` at regular intervals for `systemctl status` output and for `CPUQuota=` enforcement decisions. A unit running at 80% CPU with a 50% quota still gets throttled by the scheduler; that side is untouched; but systemd's own logging and unit-level policy decisions misfire silently. This attack surface is underappreciated in the public literature, which tends to focus on external monitoring agents.

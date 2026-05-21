@@ -8,17 +8,17 @@ date: 2025-02-01
 
 > **See also**: [Blog post]({{ site.baseurl }}/the-overlayfs-trojan-horse.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch02-overlayfs) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
-> **Proof status**: Both `ch02-overlayfs` (kprobe observer + userspace racer) and `ch02-overlayfs-lsm` (BPF LSM fmod_ret on `inode_copy_up`) have been proved on Ubuntu 6.17.0 aarch64 (Lima VM, kernel 6.17.0-29-generic). No code changes were required ; both variants worked as-is.
+> **Proof status**: Both `ch02-overlayfs` (kprobe observer + userspace racer) and `ch02-overlayfs-lsm` (BPF LSM fmod_ret on `inode_copy_up`) have been proved on Ubuntu 6.17.0 aarch64 (Lima VM, kernel 6.17.0-29-generic). No code changes were required; both variants worked as-is.
 
 I started on this one after noticing, on a linuxkit 6.12 test VM, how much work `ovl_copy_up_one` actually does between allocating the upper inode and the merged dentry becoming visible. The interesting question was whether a userspace process with the ringbuf could win the race against the container process whose write triggered the copy-up.
 
-Up front: the BPF side of this chapter is an observation channel. The shipped POC attaches kprobes to three entry points into the copy-up path and does nothing else ; no `bpf_override_return`, no in-BPF payload injection. What the probe gives you is a reliable signal: a ringbuf event saying "copy-up is happening now, for this dentry, via this entry point." The effect comes from a userspace racer that consumes those events and opens the upper file before overlayfs finishes wiring it in.
+Up front: the BPF side of this chapter is an observation channel. The shipped POC attaches kprobes to three entry points into the copy-up path and does nothing else; no `bpf_override_return`, no in-BPF payload injection. What the probe gives you is a reliable signal: a ringbuf event saying "copy-up is happening now, for this dentry, via this entry point." The effect comes from a userspace racer that consumes those events and opens the upper file before overlayfs finishes wiring it in.
 
 Observed timings on the test VM: the window between the first kprobe and the container read is 50–140 µs. A `SCHED_FIFO` + CPU-pinned racer wins ~30% of the time on cold caches, higher when the container process yields.
 
 ## Mechanism
 
-### BPF side ; three kprobes, one ringbuf
+### BPF side; three kprobes, one ringbuf
 
 ```c
 SEC("kprobe/ovl_maybe_copy_up")
@@ -61,15 +61,15 @@ while (ring_buffer__poll(rb, 100) >= 0) {
 }
 ```
 
-The racer runs as a privileged peer to the container. `bpf_probe_write_user` can't reach kernel page cache, and `bpf_probe_write_kernel` does not exist ; so the BPF side is purely a trigger for the userspace write.
+The racer runs as a privileged peer to the container. `bpf_probe_write_user` can't reach kernel page cache, and `bpf_probe_write_kernel` does not exist; so the BPF side is purely a trigger for the userspace write.
 
 I tried to find a kernel-only solution. The helpers the BPF verifier permits all break in the same place: `bpf_probe_write_user` is blocked from kernel addresses by `access_ok()`; there is no `bpf_probe_write_kernel`; `bpf_skb_store_bytes` only applies to packet memory; `bpf_dynptr_*` can only write to pointers that came from somewhere that granted write access, and nothing grants write access to a page cache page. The write has to happen in userspace. Which means we need a signal. Which means ringbuf.
 
 ## Hook points
 
-- `kprobe/ovl_copy_up` ; synchronous promotion path.
-- `kprobe/ovl_maybe_copy_up` ; pre-check before the synchronous path; earliest reliable signal.
-- `kprobe/ovl_copy_up_with_data` ; data-carrying promotion (used when `metacopy` is off).
+- `kprobe/ovl_copy_up`; synchronous promotion path.
+- `kprobe/ovl_maybe_copy_up`; pre-check before the synchronous path; earliest reliable signal.
+- `kprobe/ovl_copy_up_with_data`; data-carrying promotion (used when `metacopy` is off).
 
 All three exist in `/proc/kallsyms` on 6.12 aarch64 linuxkit. On older kernels the set varies; the loader autoloads whichever are present and logs misses.
 
@@ -98,7 +98,7 @@ The `metacopy=on,redirect_dir=on` combination gives the racer a longer first win
 
 ## What I got wrong on the first pass
 
-My first probe attached to `ovl_copy_up_one` ; the function named in the older write-ups I had been reading. It fired on a subset of copy-ups and I spent two days debugging a racer winning less than 5% of the time before I realized the probe was missing most triggers. Switching to `ovl_maybe_copy_up` raised the fire rate by about 4x.
+My first probe attached to `ovl_copy_up_one`; the function named in the older write-ups I had been reading. It fired on a subset of copy-ups and I spent two days debugging a racer winning less than 5% of the time before I realized the probe was missing most triggers. Switching to `ovl_maybe_copy_up` raised the fire rate by about 4x.
 
 My first racer used `O_RDWR`. The `O_RDWR` added a few microseconds to the `open` syscall due to a slightly longer permission check. Switching to `O_WRONLY | O_NOFOLLOW` bumped the win rate by about three percentage points. In a 50 µs race, three percent matters.
 
@@ -118,14 +118,14 @@ Prior art on overlayfs copy-up timing goes back to 2019 lkml discussions about l
 
 ## The LSM variant
 
-There is a parallel POC in `dBPF-pocs/pocs/ch02-overlayfs-lsm/` that attaches a BPF LSM `fmod_ret` program to `lsm/inode_copy_up`. On a kernel with BPF LSM enabled, this can return a non-zero value to block the copy-up entirely for a target path ; a first-class enforcement primitive, not a race. The LSM variant is categorically different from the racer: where the racer depends on a timing window, the LSM variant simply refuses the copy-up. The cost is that it requires BPF LSM and reveals its presence the moment the copy-up fails in an unexpected way. The kprobe racer is the more interesting primitive for a hosted-container scenario where BPF LSM may not be available.
+There is a parallel POC in `dBPF-pocs/pocs/ch02-overlayfs-lsm/` that attaches a BPF LSM `fmod_ret` program to `lsm/inode_copy_up`. On a kernel with BPF LSM enabled, this can return a non-zero value to block the copy-up entirely for a target path; a first-class enforcement primitive, not a race. The LSM variant is categorically different from the racer: where the racer depends on a timing window, the LSM variant simply refuses the copy-up. The cost is that it requires BPF LSM and reveals its presence the moment the copy-up fails in an unexpected way. The kprobe racer is the more interesting primitive for a hosted-container scenario where BPF LSM may not be available.
 
 ## Detection
 
-- `bpftool prog show | grep ovl_copy_up` ; unusual probe targets for most fleets. Falco, Tetragon, and Tracee do not probe overlayfs copy-up internals by default.
+- `bpftool prog show | grep ovl_copy_up`; unusual probe targets for most fleets. Falco, Tetragon, and Tracee do not probe overlayfs copy-up internals by default.
 - Unexpected `open()` activity on `<upperdir>/` from a privileged peer process. Look for non-container UIDs writing into overlay upperdirs.
 - If auditd has a watch on the overlay upperdir (`-w /var/lib/docker/overlay2 -p wa -k overlay_upper`), every racer write appears in the audit log.
-- Mount-time option `-o redirect_dir=on` changes the upper path, which a naive racer misses. Defenders on modern kernels can also move to `-o metacopy=on` which changes the copy-up timing ; though as noted above, this actually widens the first window.
+- Mount-time option `-o redirect_dir=on` changes the upper path, which a naive racer misses. Defenders on modern kernels can also move to `-o metacopy=on` which changes the copy-up timing; though as noted above, this actually widens the first window.
 
 Ultimately `CAP_BPF` on the host gives the attacker everything above. Restrict who holds it and audit `bpf(2)` loads.
 
