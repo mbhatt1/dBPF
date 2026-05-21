@@ -172,6 +172,5 @@ None of this is novel. Inventory the capability holders, restrict who can load p
 ---
 
 **Related material**
-- Full chapter: [Chapter 22 — The Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
 - Companion: [Ch 20 Taxonomy]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html), [Ch 21 Skips]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html)
 - Harness: `dBPF-pocs/harness/proof.py`

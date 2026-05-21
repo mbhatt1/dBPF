@@ -10,7 +10,7 @@ date: 2026-04-17
 
 > **Navigation**: [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html) · [Chapter 24 — The Token Hand-off]({{ site.baseurl }}/book/act-4/chapter-24-the-token-hand-off.html)
 
-> **Proof status**: PROVEN on Ubuntu 6.17.0-29-generic aarch64 (Lima VM, Apple Silicon). BPF kprobe attached to `tpm2_unseal_trusted`. Entry intercept events observed (`kind=entry`). The Lima VM's virtual TPM proxy was not registered with the trusted-key subsystem at boot — `keyctl add trusted` is unavailable — so the full byte-capture path is not exercised here. The kprobe attachment and the entry intercept confirm the primitive is live. Full byte-capture proof requires a host with a boot-registered TPM backend (hardware or `swtpm` passthrough). Marker: `CH23_PROVEN hook=attached kind=kprobe-on-tpm2_unseal_trusted sym-confirmed`.
+> **Proof status**: PROVEN on Ubuntu 6.17.0-29-generic aarch64 (Lima VM, Apple Silicon). BPF kprobe attached to `tpm2_unseal_trusted`. Entry intercept events observed (`kind=entry`). The Lima VM's virtual TPM proxy was not registered with the trusted-key subsystem at boot — `keyctl add trusted` is unavailable — so the full byte-capture path is not exercised here. The kprobe attachment and the entry intercept confirm the primitive is live. Full byte-capture proof requires a host with a boot-registered TPM backend (hardware or `swtpm` passthrough). Marker observed manually: `CH23_PROVEN hook=attached kind=kprobe-on-tpm2_unseal_trusted sym-confirmed`. Note: the harness proof regex requires `CH23_PROVEN key_bytes_captured=\d+` for an automated PROVEN verdict; `hook=attached` was confirmed by manual inspection and does not satisfy the automated-proof criterion.
 
 Chapter 8 reads keys out of the kernel keyring during a permission check. This chapter reads keys out of a `struct trusted_key_payload` during the kernel's own consumption of a TPM-unsealed secret. Same primitive class. Different surface. The surface matters because it is the one most operators have filed under "we're good here."
 
@@ -199,10 +199,10 @@ Poc("ch23", "TPM Unseal Heist (trusted-key plaintext capture)",
     "ch23-tpm-unseal-heist",
     hooks=["tpm2_unseal_trusted"], prefix="[ch23]",
     mode="trigger-runs-loader", timeout=25,
-    proof_marker=r"CH23_PROVEN\s+(key_bytes_captured=\d+|hook=attached)|CH23_SKIP"),
+    proof_marker=r"CH23_PROVEN\s+key_bytes_captured=\d+|CH23_SKIP"),
 ```
 
-`mode="trigger-runs-loader"` because `trigger.sh` is responsible for spawning and tearing down the loader. The proof marker accepts `CH23_PROVEN key_bytes_captured=N` (full unseal path, hardware or swtpm TPM), `CH23_PROVEN hook=attached` (kprobe confirmed live; TPM keyctl path unavailable in environment), and `CH23_SKIP` for kernels where the symbol is absent entirely.
+`mode="trigger-runs-loader"` because `trigger.sh` is responsible for spawning and tearing down the loader. The proof marker accepts `CH23_PROVEN key_bytes_captured=N` (full unseal path, hardware or swtpm TPM) and `CH23_SKIP` for kernels where the symbol is absent entirely. The `hook=attached` output was emitted and observed manually on the Lima VM (where the virtual TPM proxy was not registered with the trusted-key subsystem), confirming kprobe attachment; it is not an accepted automated-proof marker in the harness regex, which requires `key_bytes_captured=\d+` for a `PROVEN` verdict.
 
 ---
 

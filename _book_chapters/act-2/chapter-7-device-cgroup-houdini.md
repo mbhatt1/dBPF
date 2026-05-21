@@ -69,9 +69,13 @@ One program, same kernel, same user. Only the stage changes. The fmod_ret mechan
 
 ## On kernels where the device cgroup does enforce
 
-The primitive shape lands naturally on real container-restricted hosts. Modern runtimes attach a `BPF_PROG_TYPE_CGROUP_DEVICE` program at the cgroup's `BPF_CGROUP_DEVICE` slot. An attacker-owned BPF LSM fmod_ret above that cgroup BPF program can, in principle, flip individual process access to device mknod.
+Modern runtimes implement device cgroup restrictions using a `BPF_PROG_TYPE_CGROUP_DEVICE` program at the cgroup's `BPF_CGROUP_DEVICE` slot. runc's default `allowedDevices` list gets compiled into one of these; it allows `/dev/null`, `/dev/zero`, `/dev/urandom`, and denies everything else. When a container process attempts `mknod /dev/mem c 1 1`, the kernel invokes the cgroup program in `devcgroup_check_permission()`, which is called from `vfs_mknod` via `devcgroup_inode_mknod()`.
 
-The catch: `devcgroup_inode_mknod()` is a direct call inside `vfs_mknod`, before `security_inode_mknod`. So even here, the mknod path's cgroup device check runs before the LSM chain fires. The attack has better leverage on the `file_open` path, where the cgroup device check and the LSM check are wired differently.
+The attack shape for `mknod` doesn't land. The cgroup device check is a direct call inside `vfs_mknod`, after `capable(CAP_MKNOD)` but before `security_inode_mknod`. The sequence the kernel actually runs: capability check → cgroup device check → LSM chain. A BPF LSM fmod_ret on `inode_mknod` runs after both pre-LSM gates. If the cgroup program denies, `devcgroup_inode_mknod()` returns early, `vfs_mknod` returns `-EPERM`, and `security_inode_mknod` is never called. The BPF LSM program never runs.
+
+The `file_open` path is wired differently. `security_file_open` is a real LSM hook, and the cgroup device check for open (`devcgroup_inode_permission`) runs through the VFS `inode_permission` path, not as a pre-LSM short-circuit inside `vfs_mknod`. A BPF LSM fmod_ret on `file_open` can see device file opens from container processes — that path is reachable from the LSM chain. The attack surface for the real bypass is opening a pre-existing device node, not creating one.
+
+The attacker privilege model here is specific: a process on the host (or in a container with `CAP_BPF` in the init user namespace) that wants to escape device-cgroup restrictions set by the orchestrator on some other container. That's a narrow threat model, but a plausible one in compromised-orchestrator scenarios or multi-tenant kernels where one tenant holds `CAP_BPF`. At that privilege level, the attacker doesn't need this primitive for most goals — but device access that the cgroup table forbids is the specific thing it buys.
 
 ## Detection
 
@@ -83,4 +87,4 @@ The catch: `devcgroup_inode_mknod()` is a direct call inside `vfs_mknod`, before
 
 Class I primitive (return-value override at an LSM hook). Real and weaponizable where the device cgroup is actually restrictive. Synthetic on the linuxkit test kernel because `capable(CAP_MKNOD)` short-circuits inside `vfs_mknod` before the LSM slot is consulted. The proof marker is `CH07_CONCEPT_PROVEN` — the concept word is load-bearing.
 
-> **See also**: [POC source — ch07-devcgroup-houdini-lsm](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch07-devcgroup-houdini-lsm) · Harness entry: `Poc("ch07w", ...)` in `dBPF-pocs/harness/proof.py`
+> **See also**: [POC source — ch07-devcgroup-houdini-lsm](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch07-devcgroup-houdini-lsm) · Harness entry: `Poc("ch07", ...)` in `dBPF-pocs/harness/proof.py`

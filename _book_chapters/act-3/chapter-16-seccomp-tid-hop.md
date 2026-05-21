@@ -8,6 +8,8 @@ date: 2025-04-20
 
 > **See also**: [Blog post]({{ site.baseurl }}/seccomp-tid-hop.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch16-seccomp-tid-hop) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
+> **Proof status**: **PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM), 2026-05-20. Observer only — `__secure_computing` is not in `/sys/kernel/debug/error_injection/list` on this kernel, so `bpf_override_return` cannot be used. Proof marker: `SECCOMP_SIDECHANNEL_PROVEN`.
+
 The framing matters before anything else. Seccomp's threat model is the filtered process itself — the one wearing the restrictive filter. The model has never included "a privileged peer on the same host holding `CAP_BPF`." When that peer can attach kprobes to `__secure_computing`, the filter has already been bypassed in the threat-model sense: an attacker at that level does not need to break seccomp, they can observe it, enumerate it, and (on an error-injectable kernel) override it. What's in this POC is not a seccomp bug. It is seccomp behaving exactly as specified, observed from the side.
 
 ## Mechanism
@@ -57,34 +59,7 @@ char LICENSE[] SEC("license") = "GPL";
 - `SEC("kretprobe/__secure_computing")` — captures the final return value (`0` = allow, non-zero = filtered).
 - Maps: `events` (ringbuf), `target_tgids` (hash, wildcard via key 0), `inflight` (hash keyed by `pid_tgid`).
 
-**Category: REAL (observer only).** `__secure_computing` is NOT in `/sys/kernel/debug/error_injection/list` on Ubuntu 6.17 aarch64, so `bpf_override_return` cannot be used — the shipped program is strictly an observer. It does not and cannot mutate seccomp decisions on stock kernels.
-
-## Targeting
-
-The loader takes the same flag shape as ch14:
-
-| Flag | Meaning | Tradeoff |
-|------|---------|----------|
-| `--tgid <pid>` (repeatable, max 64) | Mark just this tgid as targeted | Surgical; events from other tasks still stream but with `target=0`. |
-| `--all` | Insert wildcard key 0 | Loud; every seccomp check system-wide gets `target=1`. Use when you want to fingerprint every filter eval on the host. |
-| (no flag) | Pure observation | Every event streams; `target=0` throughout. |
-
-## Build
-
-```
-docker run --rm -v "$PWD":/work -w /work dbpf-base \
-  bash -c 'cd pocs/ch16-seccomp-tid-hop && make'
-```
-
-## Run
-
-```
-docker run --rm --privileged --pid=host \
-  -v "$PWD":/work -w /work \
-  -v /sys/kernel/debug:/sys/kernel/debug \
-  -v /sys/fs/bpf:/sys/fs/bpf \
-  dbpf-base bash pocs/ch16-seccomp-tid-hop/trigger.sh
-```
+The loader accepts `--tgid <pid>` (repeatable, max 64) to mark specific processes as targeted, or `--all` to insert wildcard key 0 and catch every seccomp check system-wide. With no flag, events stream with `target=0` throughout. The `--all` mode is the useful red-team path: one command gives you a live feed of every seccomp policy decision on the host, filter mode, allowed or denied, which comm, which tgid.
 
 ## Detection
 
@@ -95,7 +70,6 @@ docker run --rm --privileged --pid=host \
 ## Limitations
 
 - Ubuntu 6.17.0-29-generic aarch64 (Lima VM): `__secure_computing` is not in `/sys/kernel/debug/error_injection/list`, so the override path is dormant — observation only. The `override_attempted` flag records intent.
-- `task->seccomp.filter` chain is itself a BPF program, not data — there is no in-place mutation primitive even on x86.
-- Reading the syscall number from `__secure_computing` is arch-specific (arm64 stashes `nr` in `pt_regs->regs[8]`); the shipped program returns `-1` for `syscall_nr` on entry and uses the kretprobe's return value as the meaningful field. Userspace can correlate via `comm` + `ts_ns` if a precise `nr` is needed.
+- Reading the syscall number from `__secure_computing` is arch-specific (arm64 stashes `nr` in `pt_regs->regs[8]`); the shipped program returns `-1` for `syscall_nr` on entry and uses the kretprobe's return value as the meaningful field.
 
-> **Proof status**: **PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM), 2026-05-20. Proof marker: `SECCOMP_SIDECHANNEL_PROVEN`.
+> **See also**: [POC source — ch16-seccomp-tid-hop](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch16-seccomp-tid-hop) · Harness entry: `Poc("ch16", ...)` in `dBPF-pocs/harness/proof.py`

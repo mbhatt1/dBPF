@@ -6,7 +6,7 @@ date: 2026-04-17
 
 # Chapter 24: The Token Hand-off
 
-> **See also**: [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch24-bpf-token-delegation) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py) · related: [Chapter 18](../act-3/chapter-18-ebpf-token-bypass.html)
+> **See also**: [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch24-bpf-token-delegation) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py) · related: [Chapter 18]({{ site.baseurl }}/book/act-3/chapter-18-ebpf-token-bypass.html)
 
 > **Proof status**: SKIP — `CONFIG_BPF_TOKEN=n` on all available kernels. BPF token delegation (`BPF_TOKEN_CREATE`, command 36) requires kernel 6.9+ compiled with `CONFIG_BPF_TOKEN=y`. Neither Ubuntu 6.17.0-29-generic aarch64 nor Fedora 6.17 had this option enabled. The syscall returns `ENOSYS` — the command does not exist in the `bpf()` dispatch table. The C code is production-reviewed and correct. The skip is a build-configuration gap, not a code issue. Any kernel built with `CONFIG_BPF_TOKEN=y` will demonstrate the primitive. Marker: `CH24_SKIP reason="CONFIG_BPF_TOKEN=n on all available kernels"`.
 
@@ -117,8 +117,8 @@ One final caveat from seven iterations on real test kernels: the primitive is re
 
 ```python
 Poc("ch24", "BPF Token Delegation", "ch24-bpf-token-delegation",
-    hooks=["tp/syscalls/sys_enter_getuid"], prefix="[ch24]",
-    mode="default", loader_args=["--server"],
+    hooks=["tp:syscalls/sys_enter_getuid"], prefix="[ch24]",
+    mode="trigger-runs-loader", loader_args=["--server"],
     proof_marker=r"CH24_PROVEN uid_events=\d+ token_delegated=yes capeff=0x0",
     skip_marker=r"CH24_SKIP",
     category="threat-model-subversion"),

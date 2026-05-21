@@ -10,9 +10,9 @@ date: 2026-01-10
 
 > **Navigation**: [Chapter 20 — Taxonomy]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21 — Skip Accounting]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 22 — Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
 
-Every primitive in this book reduces to one of three motions: change the API return, rewrite the userspace buffer, copy the decision out of band. That is the result after twenty-five POCs and twenty-four `PROVEN` markers across three kernels. XDP looks different at first, but it is a specialization of the first motion — the API is the netdev rx path and the return is `XDP_DROP` or `XDP_TX`. Ringbuf-as-trigger looks different too, but it is a specialization of the third — the decision copied out of band is a kernel event, and a userspace racer converts that event into action. Once you see the three motions, the five classes fall out cleanly.
+Every primitive in this book reduces to one of three motions: change the API return, rewrite the userspace buffer, copy the decision out of band. That is the result after twenty-three POCs and twenty-two `PROVEN` markers across three kernels. XDP looks different at first, but it is a specialization of the first motion — the API is the netdev rx path and the return is `XDP_DROP` or `XDP_TX`. Ringbuf-as-trigger looks different too, but it is a specialization of the third — the decision copied out of band is a kernel event, and a userspace racer converts that event into action. Once you see the three motions, the five classes fall out cleanly.
 
-**Final tally: 24 PROVEN across all environments, 1 SKIP (ch24 — `CONFIG_BPF_TOKEN=n` on all available kernels), 0 failures.** The harness runs 23 POCs on the primary test environment (linuxkit 6.12.54 aarch64). 18 produce `_PROVEN` markers there; 2 (ch06 LSM, ch12 LSM) skip on linuxkit and fire on the Fedora 42 aarch64 QEMU VM secondary; 2 (ch23 TPM unseal, ch25 IMDS via XDP) are PROVEN on the Ubuntu 6.17.0-29-generic aarch64 Lima VM. Chapter 21 accounts for every skip. This chapter walks the proven cases and organizes them.
+**Final tally: 22 PROVEN across all environments, 1 SKIP (ch24 — `CONFIG_BPF_TOKEN=n` on all available kernels), 0 failures.** The harness runs 23 POCs on the primary test environment (linuxkit 6.12.54 aarch64). 17 produce `_PROVEN` markers there; 3 (ch06 LSM, ch06o kprobe observer, ch12 LSM) skip on linuxkit and fire on the Fedora 42 aarch64 QEMU VM secondary; 2 (ch23 TPM unseal, ch25 IMDS via XDP) are PROVEN on the Ubuntu 6.17.0-29-generic aarch64 Lima VM. Chapter 21 accounts for every skip. This chapter walks the proven cases and organizes them.
 
 Act 4 extended the scope along two axes without changing the taxonomy. The on-host primitives of Chapters 1–18 all manipulate state inside the running kernel's address space. Act 4 tested hardware-rooted key material that transits the kernel during TPM-backed trusted-key operations (ch23), off-host cloud-metadata credentials (ch25), and the delegated-capability boundary between a privileged process and an unprivileged client holding its token (ch24). All three fit the existing five classes: ch23 is Class III (ringbuf exfil, now of hardware-rooted bytes), ch25 is Class IV (packet-path interception, now at a cross-boundary address), ch24 is a threat-model subversion using Class III mechanics. No new class was needed.
 
@@ -68,7 +68,7 @@ Detection patterns are cleaner when built against the class, not the chapter.
 
 A Class I signature is "syscall return disagrees with state readable via `/proc/self/status` or a follow-up check against `current->cred`" — the same signature catches ch01, ch06, ch07, ch14, and ch18. A Class II signature is "bpf_probe_write_user loaded" — one dmesg grep catches ch05 and ch10 with one rule. A Class III signature is ringbuf drain accompanied by a load event against a kernel-internal symbol. Class IV wants link-layer captures taken from the XDP peer, not from above the driver. Class V wants ringbuf correlation with a userspace racer process doing writes on a shared inode.
 
-Five signatures cover the twenty-four proven chapters. That is the payoff of writing the taxonomy down. Build rules against the patterns, not the instances.
+Five signatures cover the twenty-two proven chapters. That is the payoff of writing the taxonomy down. Build rules against the patterns, not the instances.
 
 ## The four-category system
 
@@ -112,8 +112,8 @@ All 23 registered POCs, mapped to category, primitive class, and effect. Status 
 | ch25 | real | IV | `CH25_PROVEN access_key_captures=1 token_captures=1 role=demo-role` | **PROVEN** on Ubuntu 6.17 Lima VM via XDP mock IMDSv2 on `lo`; skips on linuxkit |
 
 **Category counts**: real=16, observer=4, illusion=3, analog=0.
-**Status counts**: 18 on linuxkit; 2 (ch06, ch12) on Fedora 42 QEMU; 2 (ch23, ch25) on Ubuntu 6.17 Lima VM; 1 SKIP (ch24); 0 failures.
-**Across-environment total: 24 PROVEN, 1 SKIP.**
+**Status counts**: 17 on linuxkit; 3 (ch06, ch06o, ch12) on Fedora 42 QEMU; 2 (ch23, ch25) on Ubuntu 6.17 Lima VM; 1 SKIP (ch24); 0 failures.
+**Across-environment total: 22 PROVEN, 1 SKIP.**
 
 ---
 

@@ -8,9 +8,9 @@ date: 2025-12-31
 
 > **See also**: [Blog post]({{ site.baseurl }}/epilogue-the-new-reality.html) · [Harness](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
-Twenty-five POCs, three kernels (Docker Desktop linuxkit 6.12 aarch64 primary; Fedora 42 aarch64 QEMU 6.14 secondary; Ubuntu 6.17.0-29-generic aarch64 Lima VM for final verification), one harness. This chapter draws a line under what was actually shown and what was not.
+Twenty-three POCs, three kernels (Docker Desktop linuxkit 6.12 aarch64 primary; Fedora 42 aarch64 QEMU 6.14 secondary; Ubuntu 6.17.0-29-generic aarch64 Lima VM for final verification), one harness. This chapter draws a line under what was actually shown and what was not.
 
-**Final tally across all environments: 24 PROVEN, 1 SKIP.** The skip is ch24 — `CONFIG_BPF_TOKEN=n` on all available kernels. That is a build-configuration gap, not a code failure. Every other primitive fired in at least one environment.
+**Final tally across all environments: 22 PROVEN, 1 SKIP.** The skip is ch24 — `CONFIG_BPF_TOKEN=n` on all available kernels. That is a build-configuration gap, not a code failure. Every other primitive fired in at least one environment.
 
 ## What was demonstrated
 
