@@ -94,7 +94,7 @@ The slow 10% of races where the window stretched past 200 µs were all cases whe
 
 `redirect_dir=on` changes where the upper file lands, encoded in the `trusted.overlay.redirect` xattr on the upper directory. The racer must resolve the xattr-adjusted upper path at startup by parsing `/proc/mounts` and honoring redirects when walking the upper tree. Getting the `trusted.overlay.*` xattr requires `CAP_SYS_ADMIN` in the init user namespace, which is consistent with the threat model but rules out unprivileged container processes.
 
-The `metacopy=on,redirect_dir=on` combination gives the racer a longer first window but a more complex path resolution. On balance it is better for the attacker: the metadata-only phase measured at 80–200 µs on linuxkit with that combination.
+The `metacopy=on,redirect_dir=on` combination gives the racer a longer first window but a more complex path resolution. Whether the metacopy variant offers a net advantage was not tested by the shipped POC; the metadata-only phase measured at 80–200 µs on linuxkit with that combination, but end-to-end win-rate comparison against the baseline was not performed.
 
 ## What I got wrong on the first pass
 
@@ -131,7 +131,7 @@ Ultimately `CAP_BPF` on the host gives the attacker everything above. Restrict w
 
 ## Scope
 
-This is a Class V primitive from chapter 20: kernel event + userspace racer. The race is real but not deterministic. For a high-confidence attack, pair with CPU-pinning and realtime priority; expect 30–70% hit rate on a loaded host.
+This is a Class V primitive from chapter 20: kernel event + userspace racer. The race is real but not deterministic. This is a probabilistic attack even with CPU-pinning and realtime priority; expect 30–70% hit rate on a loaded host.
 
 ---
 

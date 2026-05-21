@@ -8,7 +8,7 @@ date: 2025-02-08
 
 > **See also**: [Blog post]({{ site.baseurl }}/keyring-heist.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch08-keyring-heist-kprobe) · [Chapter 21]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html)
 
-> **Proof status**: All three variants proved on Ubuntu 6.17.0-29-generic aarch64 (Lima VM); `ch08-keyring-heist`, `ch08-keyring-heist-kprobe`, and `ch08-keyring-heist-lsm`. The kprobe variant sidesteps the BTF FWD issue on `struct key` via `PT_REGS_PARM1` + CO-RE. The LSM variant uses a raw-context workaround to avoid touching the FWD-typed argument at ctx[0]. The syscall boundary enforces; the decision point leaks.
+> **Proof status**: All three variants proved on Ubuntu 6.17.0-29-generic aarch64 (Lima VM); `ch08-keyring-heist`, `ch08-keyring-heist-kprobe`, and `ch08-keyring-heist-lsm`. What is demonstrated is metadata observation at the permission boundary: serial numbers, type names, and description strings are readable from `struct key` before the access decision completes. Actual key payload bytes are not read; capturing the cryptographic material is a separate, harder problem addressed in Chapter 23. The kprobe variant sidesteps the BTF FWD issue on `struct key` via `PT_REGS_PARM1` + CO-RE. The LSM variant uses a raw-context workaround to avoid touching the FWD-typed argument at ctx[0]. The syscall boundary enforces; the decision point exposes metadata.
 
 libbpf rejected the LSM fmod_ret load with `arg0 type FWD is not a struct`. The kernel's BTF forward-declares `struct key` for the LSM hook. Kprobe on `key_task_permission` with opaque `PT_REGS_PARM1` and `BPF_CORE_READ` against the full struct in `vmlinux.h` loaded clean; same data, different verifier posture.
 
@@ -16,7 +16,7 @@ That sentence is the whole finding. The rest of this chapter is how I got there 
 
 ## The natural path, and why it died
 
-I wanted a BPF LSM program on `security_key_permission`. Sit on the hook the kernel invokes for every keyring permission decision, fmod_ret, read `struct key` cleanly off arg0, forward the serial and description to userspace. This is the program I would show an auditor.
+I wanted a BPF LSM program on `security_key_permission`. Sit on the hook the kernel invokes for every keyring permission decision, fmod_ret, read key metadata (serial number, type name, description) from `struct key` off arg0, forward those identifying fields to userspace. To be precise about scope: reading metadata fields is the goal; reading the key's actual cryptographic payload — the bytes stored in `struct key_payload` or the key's data field — is a separate, harder problem and is not attempted here. This is the program I would show an auditor.
 
 It did not load. The verifier output was unambiguous:
 
@@ -32,7 +32,7 @@ I spent a while trying to see whether I could rebuild vmlinux BTF with pahole in
 
 ## What loaded
 
-Kprobe on `key_task_permission`. Same data path reaches here; the LSM hook is downstream. The signature is:
+Kprobe on `key_task_permission`. The same permission-decision code path reaches here; the LSM hook is downstream. The signature is:
 
 ```c
 int key_task_permission(const key_ref_t key_ref,
@@ -40,7 +40,7 @@ int key_task_permission(const key_ref_t key_ref,
                         enum key_need_perm need_perm);
 ```
 
-`key_ref_t` is an opaque pointer with its low bits used as possession flags. From a kprobe, `PT_REGS_PARM1(ctx)` gives me an `unsigned long` with no type expected. I mask the flags, cast to `struct key *`, and `BPF_CORE_READ` resolves against the full struct definition in vmlinux.h. The verifier is happy because the kprobe argument is `struct pt_regs *`, not a kernel struct; the FWD issue never enters the picture.
+`key_ref_t` is an opaque pointer with its low bits used as possession flags. From a kprobe, `PT_REGS_PARM1(ctx)` gives me an `unsigned long` with no type expected. I mask the flags, cast to `struct key *`, and `BPF_CORE_READ` resolves against the full struct definition in vmlinux.h. The verifier is happy because the kprobe argument is `struct pt_regs *`, not a kernel struct; the FWD issue never enters the picture. The fields read are metadata only: the key's serial number (`key.serial`), type name (`key_type.name`), and description string (`key.description`). The cryptographic payload — the bytes held in `struct key_payload` or the key's data field — is not touched.
 
 ```c
 SEC("kprobe/key_task_permission")
@@ -62,13 +62,13 @@ int BPF_KPROBE(kp_key_task_permission)
 }
 ```
 
-`keyctl list @u` in one shell produced ringbuf events in the other: serial numbers, type names (`user`, `keyring`, `logon`), descriptions. The kernel's access check ran to completion and returned its real answer. I did not mutate any permission decision.
+`keyctl list @u` in one shell produced ringbuf events in the other: serial numbers, type names (`user`, `keyring`, `logon`), descriptions. This is key metadata — the identifying information attached to each key — not the cryptographic payload bytes the key protects. The kernel's access check ran to completion and returned its real answer. I did not mutate any permission decision.
 
 ## What I gave up to get it
 
 The kprobe fires before the security decision, not as the security decision. For observation this is fine. If I were writing an enforcement bypass I would need `bpf_override_return`, which needs `ALLOW_ERROR_INJECTION` on `key_task_permission`; and it is not there.
 
-## The LSM workaround (ch08-keyring-heist-lsm)
+## The LSM workaround (ch08-keyring-heist-lsm variant)
 
 The raw-context workaround that landed in `ch08-keyring-heist-lsm` bypasses `BPF_PROG()` entirely and uses a raw context signature: `int lsm_key_permission(unsigned long long *ctx)`. With raw context, the program manually reads only the context slots it needs at known offsets, skipping the FWD-typed arg0:
 

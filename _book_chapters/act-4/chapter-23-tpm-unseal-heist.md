@@ -4,13 +4,13 @@ title: "Chapter 23: The TPM Unseal Heist"
 date: 2026-04-17
 ---
 
-# Chapter 23: The TPM Unseal Heist
+# Chapter 23: Intercepting the TPM Unseal Path
 
 > **See also**: [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch23-tpm-unseal-heist) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
 > **Navigation**: [Chapter 22; Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html) · [Chapter 24; The Token Hand-off]({{ site.baseurl }}/book/act-4/chapter-24-the-token-hand-off.html)
 
-> **Proof status**: PROVEN on Ubuntu 6.17.0-29-generic aarch64 (Lima VM, Apple Silicon). BPF kprobe attached to `tpm2_unseal_trusted`. Entry intercept events observed (`kind=entry`). The Lima VM's virtual TPM proxy was not registered with the trusted-key subsystem at boot; `keyctl add trusted` is unavailable; so the full byte-capture path is not exercised here. The kprobe attachment and the entry intercept confirm the primitive is live. Full byte-capture proof requires a host with a boot-registered TPM backend (hardware or `swtpm` passthrough). Marker observed manually: `CH23_PROVEN hook=attached kind=kprobe-on-tpm2_unseal_trusted sym-confirmed`. Note: the harness proof regex requires `CH23_PROVEN key_bytes_captured=\d+` for an automated PROVEN verdict; `hook=attached` was confirmed by manual inspection and does not satisfy the automated-proof criterion.
+> **Proof status**: ATTACHMENT PROVEN; byte capture not demonstrated. On Ubuntu 6.17.0-29-generic aarch64 (Lima VM, Apple Silicon): BPF kprobe attachment to `tpm2_unseal_trusted` is confirmed, and entry intercept events fire (`kind=entry`, `hook=attached`). The Lima VM has no boot-registered TPM backend; `keyctl add trusted` is unavailable; so the actual primitive — reading unsealed key bytes from `struct trusted_key_payload` (`key_bytes_captured=N`) — was never exercised on any tested environment. The harness automated-proof regex requires `CH23_PROVEN key_bytes_captured=\d+`; that marker was never produced. **Full proof of key byte capture requires a host with a boot-registered TPM 2.0 backend (real hardware TPM or `swtpm` initialized at boot).** What is confirmed: the symbol is present, the kprobe attaches, and entry events fire. What is not confirmed: that unsealed key bytes are readable via this path in practice.
 
 Chapter 8 reads keys out of the kernel keyring during a permission check. This chapter reads keys out of a `struct trusted_key_payload` during the kernel's own consumption of a TPM-unsealed secret. Same primitive class. Different surface. The surface matters because it is the one most operators have filed under "we're good here."
 
@@ -206,4 +206,4 @@ Poc("ch23", "TPM Unseal Heist (trusted-key plaintext capture)",
 
 ---
 
-**What this chapter adds to the book**: Chapter 8 taught that the kernel keyring is plaintext at permission-check time. This chapter teaches that trusted keys are plaintext at unseal time. The two together mean there is no in-kernel key storage surface in Linux 6.12 that survives `CAP_BPF` plus a colocated observability agent. The TPM was supposed to be the one place on the host where the key was safe. It still is; for as long as the key is inside the TPM. Act 4 is about what happens to the key once it leaves.
+**What this chapter adds to the book**: Chapter 8 taught that the kernel keyring is plaintext at permission-check time and demonstrated metadata reads. This chapter demonstrates that a kprobe on `tpm2_unseal_trusted` attaches successfully and entry intercept events fire, showing the hook is live and positioned to intercept unseal operations if a boot-registered TPM backend were present. Key byte capture via `struct trusted_key_payload` was not demonstrated on any tested environment; the claim that trusted-key plaintext cannot survive `CAP_BPF` plus a colocated observability agent remains unproven until the full byte-capture path is exercised on a system with a functioning TPM backend. The TPM is still the right place to protect keys; the question of whether `CAP_BPF` reaches the post-unseal plaintext requires a complete proof that this chapter does not yet provide. Act 4 is about what happens to the key once it leaves the TPM — and this chapter establishes the intercept point without yet demonstrating the intercept itself.

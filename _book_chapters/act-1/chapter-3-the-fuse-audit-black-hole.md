@@ -4,7 +4,7 @@ title: "Chapter 3: The FUSE Audit Black-Hole"
 date: 2025-02-02
 ---
 
-# Chapter 3: The FUSE Audit Black-Hole
+# Chapter 3: The Audit Path — What the FUSE Sinkhole Exposed
 
 > **See also**: [Blog post]({{ site.baseurl }}/the-fuse-audit-black-hole.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch03-fuse-blackhole) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
@@ -76,7 +76,7 @@ There was a patch series in mid-2023 to add `audit_log_start` to the approved se
 
 The original idea: mount a FUSE filesystem at a path `auditd` writes to, then drop writes in the FUSE handler. Two problems. First, `auditd` on a default install writes to `/var/log/audit/audit.log` on the root filesystem; changing that requires modifying `/etc/audit/auditd.conf`, which is itself a root-only edit and an audited event. Second, the kernel audit subsystem writes to netlink, not to a file. `auditd` reads from netlink and writes to a file. Sinking the file output stops `auditd` from persisting records but does not stop the kernel from emitting or queuing them. A second netlink consumer sees every record `auditd` saw.
 
-The FUSE angle does not work for audit silencing. That is where the chapter title came from: the investigation into why a FUSE sinkhole fails leads to the actual primitive, which is observation, not suppression.
+The FUSE angle does not work for audit silencing. The chapter started as an attempt to build a suppression primitive; the investigation into why every suppression path fails is what revealed the actual primitive, which is observation, not suppression.
 
 ## The lsm/syslog fallback
 

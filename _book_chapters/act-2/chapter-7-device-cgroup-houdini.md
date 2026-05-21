@@ -85,6 +85,8 @@ The attacker privilege model here is specific: a process on the host (or in a co
 
 ## Scope
 
-Class I primitive (return-value override at an LSM hook). Real and weaponizable where the device cgroup is actually restrictive. Synthetic on the linuxkit test kernel because `capable(CAP_MKNOD)` short-circuits inside `vfs_mknod` before the LSM slot is consulted. The proof marker is `CH07_CONCEPT_PROVEN`; the concept word is load-bearing.
+Class I primitive (return-value override at an LSM hook). The fmod_ret mechanism is real and demonstrated: a BPF LSM program can see and overwrite the accumulated LSM chain return value. What is not demonstrated — and cannot work via the mknod path — is bypassing an actual device cgroup denial. For mknod, `capable(CAP_MKNOD)` and `devcgroup_inode_mknod()` both fire inside `vfs_mknod` before `security_inode_mknod` is ever called; the LSM chain is never consulted when the pre-LSM gates deny. The POC proves the flip on a self-synthesized denial, not on a real device cgroup denial.
+
+The `file_open` path is structurally different — `security_file_open` is a genuine LSM hook that a BPF fmod_ret program can reach — but that path was not exercised here and the bypass is not demonstrated. The proof marker is `CH07_CONCEPT_PROVEN`; the concept word is load-bearing and accurately scopes what was shown.
 
 > **See also**: [POC source; ch07-devcgroup-houdini-lsm](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch07-devcgroup-houdini-lsm) · Harness entry: `Poc("ch07", ...)` in `dBPF-pocs/harness/proof.py`

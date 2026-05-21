@@ -4,7 +4,7 @@ title: "Chapter 12: eBPF Signed-Driver Swap"
 date: 2025-03-01
 ---
 
-# Chapter 12: Flipping the Kernel's Module-Load Verdict
+# Chapter 12: Forging the Module-Load Verdict
 
 > **See also**: [Blog post]({{ site.baseurl }}/ebpf-signed-driver-swap.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch12-signed-driver-swap-syscall) · [Chapter 21]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html)
 
