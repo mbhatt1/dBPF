@@ -68,16 +68,9 @@ For each of these, an operator who has followed the defender playbook in chapter
 
 The call chain that ends in `tpm2_unseal_trusted` is worth walking because the attack's precision comes from knowing which function sees what.
 
-When a consumer; `cryptsetup`, `systemd-cryptsetup`, IMA, EVM; needs the plaintext from the blob, it calls `tpm2_unseal_trusted(p, options)`. The function:
+When a consumer; `cryptsetup`, `systemd-cryptsetup`, IMA, EVM; needs the plaintext from the blob, it calls `tpm2_unseal_trusted(p, options)`. The function first constructs the `TPM2_CC_Unseal` command and transmits it via `tpm_transmit_cmd`. It then waits on the chip's mutex while the TPM works — from the kernel's perspective, a short synchronous sleep while the hardware computes. When the TPM responds, the function parses the response and extracts the plaintext sensitive data. It copies the plaintext into `p->key[]` and sets `p->key_len`. Then it returns success.
 
-1. Constructs the `TPM2_CC_Unseal` command.
-2. Transmits via `tpm_transmit_cmd`.
-3. Waits on the chip's mutex while the TPM works.
-4. Parses the response and extracts the plaintext sensitive data.
-5. Copies the plaintext into `p->key[]` and sets `p->key_len`.
-6. Returns success.
-
-Step 5 is the target. The kretprobe fires after step 5 completes, sees a `struct trusted_key_payload *` that now contains the plaintext, reads the bytes, and hands them to userspace via ringbuf.
+That copy is the target. The kretprobe fires after the copy completes, sees a `struct trusted_key_payload *` that now contains the plaintext, reads the bytes, and hands them to userspace via ringbuf. The TPM's role ended one step earlier, having done exactly what it was asked.
 
 ## The BPF program
 
@@ -158,7 +151,7 @@ The hex-print of captured bytes is intentional. The chapter-8 keyring-heist PoC 
 
 ## Detection; what a defender sees
 
-A kretprobe on a named kernel symbol leaves three artifacts.
+A kretprobe on a named kernel symbol leaves three artifacts, and all three are stable enough to baseline.
 
 **`bpftool prog list`** enumerates every loaded BPF program. The program shows up with `type tracing`, `name kret_tpm2_unseal`, and an attach target of `tpm2_unseal_trusted`. Baseline diff against the BPF programs the operator expects. No legitimate observability tool probes the trusted-key unseal path.
 
@@ -166,7 +159,7 @@ A kretprobe on a named kernel symbol leaves three artifacts.
 
 **`bpf(2)` audit records** show the `BPF_PROG_LOAD` call. With `auditctl -a always,exit -F arch=aarch64 -S bpf -F a0=5 -k bpf_prog_load` the record includes the loader's PID, UID, comm, and the loaded program's fd.
 
-The capture itself; the read of `p->key[]` via `bpf_probe_read_kernel`; leaves no audit trace. The defender cannot see the exfiltration after the fact; they can only see the program that enables it. Detection lives at the program-load layer, not the program-run layer. The `tracefs` entry for the kretprobe lives at `/sys/kernel/debug/tracing/events/kprobes/r_tpm2_unseal_trusted_<tag>/` and persists as long as the probe is attached.
+The capture itself; the read of `p->key[]` via `bpf_probe_read_kernel`; leaves no audit trace. The defender cannot see the exfiltration after the fact; they can only see the program that enables it. Detection lives at the program-load layer, not the program-run layer. This asymmetry is important for mitigation planning: the time to catch this primitive is at load, not after the first unseal. The `tracefs` entry for the kretprobe lives at `/sys/kernel/debug/tracing/events/kprobes/r_tpm2_unseal_trusted_<tag>/` and persists as long as the probe is attached.
 
 ## Mitigation
 
@@ -190,7 +183,7 @@ It does not extract keys that the TPM protects for in-hardware use. Keys loaded 
 
 It does not work on kernels without `CONFIG_TRUSTED_KEYS=y` or without the TPM2 backend compiled in. linuxkit 6.12 aarch64 has neither; the primary harness environment always skips this PoC.
 
-What it does: reads the plaintext bytes the TPM just produced, during the window they live in kernel memory, from an authorized caller's context. The word *heist* is accurate because the bytes are taken, not because a safe was broken.
+What it does: reads the plaintext bytes the TPM just produced, during the window they live in kernel memory, from an authorized caller's context. The word *heist* is accurate because the bytes are taken, not because a safe was broken. Act 4 is about what happens to the key once it leaves the TPM — and this chapter establishes the intercept point. The intercept itself awaits a test environment with a functioning TPM backend; the kprobe is positioned and confirmed; the proof of byte capture remains open.
 
 ## Harness entry
 
@@ -203,7 +196,3 @@ Poc("ch23", "TPM Unseal Heist (trusted-key plaintext capture)",
 ```
 
 `mode="trigger-runs-loader"` because `trigger.sh` is responsible for spawning and tearing down the loader. The proof marker accepts `CH23_PROVEN key_bytes_captured=N` (full unseal path, hardware or swtpm TPM) and `CH23_SKIP` for kernels where the symbol is absent entirely. The `hook=attached` output was emitted and observed manually on the Lima VM (where the virtual TPM proxy was not registered with the trusted-key subsystem), confirming kprobe attachment; it is not an accepted automated-proof marker in the harness regex, which requires `key_bytes_captured=\d+` for a `PROVEN` verdict.
-
----
-
-**What this chapter adds to the book**: Chapter 8 taught that the kernel keyring is plaintext at permission-check time and demonstrated metadata reads. This chapter demonstrates that a kprobe on `tpm2_unseal_trusted` attaches successfully and entry intercept events fire, showing the hook is live and positioned to intercept unseal operations if a boot-registered TPM backend were present. Key byte capture via `struct trusted_key_payload` was not demonstrated on any tested environment; the claim that trusted-key plaintext cannot survive `CAP_BPF` plus a colocated observability agent remains unproven until the full byte-capture path is exercised on a system with a functioning TPM backend. The TPM is still the right place to protect keys; the question of whether `CAP_BPF` reaches the post-unseal plaintext requires a complete proof that this chapter does not yet provide. Act 4 is about what happens to the key once it leaves the TPM — and this chapter establishes the intercept point without yet demonstrating the intercept itself.

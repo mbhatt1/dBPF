@@ -16,19 +16,19 @@ That's a real and honest negative result on this kernel. The primary PoC checks 
 
 ## Where it actually fires
 
-The kernel where the primary PoC fires is a Fedora 42 aarch64 QEMU VM driven by `dBPF-pocs/run-qemu-tests.sh`. That script boots a SELinux-enforcing image, creates a file labeled `shadow_t` in a tmpfs:
+The kernel where the primary PoC fires is a Fedora 42 aarch64 QEMU VM driven by `dBPF-pocs/run-qemu-tests.sh`. To produce a genuine AVC denial to flip, that script boots a SELinux-enforcing image and creates a file labeled `shadow_t` in a tmpfs:
 
 ```bash
 chcon system_u:object_r:shadow_t:s0 "$SECRET"
 ```
 
-Then it runs `runcon user_u:user_r:user_t:s0 cat "$SECRET"` to provoke a genuine AVC denial; `user_t` doesn't have read permission on `shadow_t`. Starts the loader. Re-runs the access. The three `lsm/` programs flip the would-be deny to an allow. The `cat` succeeds and outputs the file contents.
+Then it runs `runcon user_u:user_r:user_t:s0 cat "$SECRET"` to provoke the denial — `user_t` doesn't have read permission on `shadow_t`. Starts the loader. Re-runs the access. The three `lsm/` programs flip the would-be deny to an allow. The `cat` succeeds and outputs the file contents.
 
 That last point matters: SELinux's policy evaluation runs before the BPF program. The AVC denial is logged regardless. The user-visible behavior says the access succeeded; the audit log says SELinux denied it. The inconsistency is the detection signal, and it's also why audit log suppression (ch03) pairs naturally with this primitive.
 
 ## Mechanism
 
-The primary variant's hook set is three non-sleepable programs on `lsm/file_permission`, `lsm/inode_permission`, and `lsm/bprm_check_security`. Three hooks because SELinux routes different access paths through different LSM entry points: `file_permission` covers already-open descriptors, `inode_permission` covers open-time path walks, `bprm_check_security` covers `execve`. A flipper that only covers one path leaves the others exposed.
+The primary variant covers three access paths because SELinux routes different operations through different LSM entry points: `file_permission` covers already-open descriptors, `inode_permission` covers open-time path walks, and `bprm_check_security` covers `execve`. A flipper that only covers one path leaves the others exposed. The BPF program that handles path-based decisions looks like this:
 
 ```c
 SEC("lsm.s/file_open")
@@ -53,15 +53,15 @@ The `fmod_ret` semantic is what makes the override real. BPF LSM programs run af
 
 ## The observer variant
 
-`ch06-silence-selinux` attaches kprobes to `avc_denied` and `avc_audit`; the functions inside the AVC (Access Vector Cache) that run when SELinux reaches a denial decision. It doesn't flip anything. It reads `struct av_decision` CO-RE fields and emits the target class, requested permissions, and whether the decision came from cache or policy lookup. On the Fedora VM, every AVC miss streams through this observer before the primary flipper's return-value override takes effect. The two variants run cleanly alongside each other; the observer is a reconnaissance tool, the LSM variant is the weapon.
+`ch06-silence-selinux` attaches kprobes to `avc_denied` and `avc_audit` — the functions inside the AVC (Access Vector Cache) that run when SELinux reaches a denial decision. It doesn't flip anything. It reads `struct av_decision` CO-RE fields and emits the target class, requested permissions, and whether the decision came from cache or policy lookup. On the Fedora VM, every AVC miss streams through this observer before the primary flipper's return-value override takes effect. The two variants run cleanly alongside each other; the observer is a reconnaissance tool, the LSM variant is the weapon.
 
 ## The synthetic variant
 
-`ch06-silence-selinux-lsm-synthetic` exists because some kernels have `selinux` compiled in and its symbols present in `/proc/kallsyms`, but `selinux_loaded()` returns 0; no policy is active. The standard trigger catches this and emits `CH06_SKIP`.
+`ch06-silence-selinux-lsm-synthetic` exists because some kernels have `selinux` compiled in and its symbols present in `/proc/kallsyms`, but `selinux_loaded()` returns 0 — no policy is active. The standard trigger catches this and emits `CH06_SKIP`.
 
 The synthetic variant eliminates the `selinux_loaded()` gate. Instead it loads a single LSM program driven by a control map with three stages: `STAGE_OFF` (no-op), `STAGE_DENY` (returns `-EACCES` for a sentinel path), and `STAGE_FLIP` (returns `0` for the same path). SIGUSR1/SIGUSR2/SIGHUP toggle the stage at runtime.
 
-The test sequence: set stage=DENY, have an unprivileged user `cat` the sentinel file, observe rc=1 and `EACCES`. Set stage=FLIP, have the same user `cat` the same file, observe rc=0 and the file contents. Same program, same kernel, same user, same file; only the stage changed. That proves the fmod_ret flip works, using a synthetic denial because the test kernel has no real one.
+The test sequence: set stage=DENY, have an unprivileged user `cat` the sentinel file, observe rc=1 and `EACCES`. Set stage=FLIP, have the same user `cat` the same file, observe rc=0 and the file contents. Same program, same kernel, same user, same file — only the stage changed. That proves the fmod_ret flip works, using a synthetic denial because the test kernel has no real one.
 
 This is not a change in the primary primitive; the fmod_ret override path still requires both `bpf` and `selinux` in the active LSM list. The synthetic variant proves the flip mechanism on kernels where no live policy enforcement context exists. It emits `CH06_SYNTH_PROVEN` when at least one flip event is captured.
 
@@ -74,6 +74,13 @@ This is not a change in the primary primitive; the fmod_ret override path still 
 
 ## Scope
 
-Class I primitive from Chapter 20 (return-value override at the API boundary). The primitive is real and lands cleanly on SELinux-active kernels. On linuxkit the synthetic variant proves the flip mechanism; the real attack is waiting for a kernel with policy loaded.
+This is a Class I primitive from Chapter 20 (return-value override at the API boundary). The primitive is real and lands cleanly on SELinux-active kernels. On linuxkit the synthetic variant proves the flip mechanism; the real attack is waiting for a kernel with policy loaded.
 
-This is the first Class I primitive in the book. Chapters 1 and 3 were Class III because their targets (`cap_capable`, `audit_log_start`) are not in `ALLOW_ERROR_INJECTION`. BPF LSM was explicitly designed to allow runtime verdict modification for a specific allowlist of hooks, and `file_permission`, `inode_permission`, and `bprm_check_security` are all on it. The design intent and the attack primitive align exactly.
+This is also the first Class I primitive in the book that makes the design intent explicit. Chapters 1 and 3 hit dead ends because their targets (`cap_capable`, `audit_log_start`) are not in `ALLOW_ERROR_INJECTION` and not in the `security_` namespace. BPF LSM was explicitly designed to allow runtime verdict modification for a specific allowlist of hooks, and `file_permission`, `inode_permission`, and `bprm_check_security` are all on it. The mechanism in this chapter is not a gap or a trick — it is the documented behavior of BPF LSM, applied to SELinux. That alignment between design intent and attack primitive is what makes the capability grant consequential on any production system where SELinux is the enforcement layer.
+
+---
+
+**Related material**
+
+- POC source: [dBPF-pocs/pocs/ch06-silence-selinux-lsm/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch06-silence-selinux-lsm)
+- Harness entry: search for `Poc("ch06", ...)` in `dBPF-pocs/harness/proof.py`

@@ -8,11 +8,13 @@ date: 2025-04-15
 
 > **See also**: [Blog post]({{ site.baseurl }}/netns-vlan-ghost.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch15-netns-vlan-ghost) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
-My first attempt at this chapter was a kprobe on `__netif_receive_skb_core` that rewrote the namespace metadata on an incoming `skb` and let the kernel re-receive it on the other side. The verifier rejected it. Writes to `sk_buff` from kprobe context are not permitted, and `__netif_receive_skb_core` is not in the error-injection list, so there is no legal way to intercept-and-divert from that attach point on 6.12.
+My first attempt at this chapter was a kprobe on `__netif_receive_skb_core` that rewrote the namespace metadata on an incoming `skb` and let the kernel re-receive it on the other side. The verifier rejected it. Writes to `sk_buff` from kprobe context are not permitted, and `__netif_receive_skb_core` is not in the error-injection list, so there is no legal way to intercept-and-divert from that attach point on 6.12. The dead end was instructive; it forced a clearer answer to the question of where, exactly, in the kernel a VLAN tag is authoritative.
 
 The working form of the same primitive is XDP plus `bpf_redirect_map` into a DEVMAP slot whose target ifindex lives in a different network namespace. None of this is novel: Cilium has been using exactly this pattern since around 2019 for legitimate cross-namespace forwarding in its service-mesh datapath. The only contribution here is pointing it in a hostile direction. VLAN-based segmentation was never designed to resist host-level XDP; an XDP program is a peer to the netdev, not above it.
 
 ## Mechanism
+
+The insight is timing. XDP runs at the netdev edge, on the first packet receive hook, before the kernel's bridge, before netfilter, before any namespace routing logic sees the frame. A VLAN-enforcing bridge can only enforce rules on frames that reach it. XDP intercepts the frame first.
 
 The XDP program attached to the host side of a veth pair runs on every ingress frame:
 
@@ -54,7 +56,7 @@ Calling this a "VLAN escape" is overselling it. The correct framing: **if an att
 - `BPF_MAP_TYPE_DEVMAP tx_port`; slot 0 holds the egress ifindex for `bpf_redirect_map`.
 - `BPF_MAP_TYPE_ARRAY cfg`; slot 0 is the mode flag, slot 1 an audit copy of the egress ifindex.
 
-The dead-end sketch; the kprobe on `__netif_receive_skb_core` that the original outline called for; is documented here because the dead end is instructive. The "rewrite skb namespace metadata" intuition is natural and wrong for two independent reasons: the verifier rejects skb writes from kprobe context, and the symbol is not error-injectable. XDP is the correct landing site.
+It is worth showing the kprobe sketch that did not work, because the "rewrite skb namespace metadata" intuition is natural and wrong for two independent reasons: the verifier rejects skb writes from kprobe context, and the symbol is not error-injectable. XDP is the correct landing site, and understanding why the first intuition fails makes it clear why XDP is not just a workaround but the only honest attach point for this primitive.
 
 ```c
 SEC("kprobe/__netif_receive_skb_core")
@@ -115,5 +117,7 @@ docker run --rm --privileged --pid=host --net=host \
 - `bpf_redirect_map` to a device in another netns requires the egress device to also have an XDP program loaded on many kernels; the loader attaches the same program there.
 - The verifier rejects `skb` writes from kprobe context, so the chapter's original `__netif_receive_skb_core` mutation cannot be done directly. XDP at the NIC edge is the equivalent primitive.
 - `arping` and `ping` will not generate the covert frames reliably; the trigger uses an embedded AF_PACKET sender for deterministic VLAN-4242 emission with inner ethertype `0x88b5`.
+
+The broader point this chapter leaves with: VLAN segmentation is an enforcement mechanism that lives above XDP in the packet-processing hierarchy. Defenses at that layer inherit that limitation. Anything that reads the wire before the bridge cannot be stopped by the bridge.
 
 > **Proof status**: **PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM), 2026-05-20. Proof marker: `VLAN_GHOST_CROSSNS_PROVEN redirect_count=3`.

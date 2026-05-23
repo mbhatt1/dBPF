@@ -12,18 +12,20 @@ This book is a catalog of what `CAP_BPF` plus `CAP_PERFMON` (or `CAP_SYS_ADMIN`)
 
 Each chapter ships with a reproducible POC, a scripted trigger that prints observable BEFORE and AFTER state, and a machine-grep-able proof marker. Failures are documented honestly in [chapter 21]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html). The harness is `dBPF-pocs/harness/proof.py`, driven from a privileged Docker container.
 
-The reason I wrote it is that the gap between "CAP_BPF is a privileged capability" and "here is what a process holding CAP_BPF can actually do" keeps producing surprised operators. Modern observability agents routinely request the capability at install time. The consequences of granting it are more direct than the docs spell out.
+The reason I wrote it is simple: the gap between "CAP_BPF is a privileged capability" and "here is what a process holding CAP_BPF can actually do" keeps producing surprised operators. Modern observability agents routinely request the capability at install time. The consequences of granting it are more direct than the docs spell out.
 
 ## Intended reader
 
-Operators deciding whether to grant `CAP_BPF` to a workload, and what to configure when they do. Security engineers auditing observability stacks that quietly ask for the capability at install time. Defenders looking for concrete hardening recipes. Researchers looking for a reproducible taxonomy of what the eBPF surface can be shaped into.
+There are four audiences I had in mind while writing this.
+
+The first is the operator deciding whether to grant `CAP_BPF` to a workload and what to configure when they do. The second is the security engineer auditing observability stacks that quietly ask for the capability at install time. The third is the defender looking for concrete hardening recipes. The fourth is the researcher looking for a reproducible taxonomy of what the eBPF surface can be shaped into. If you are any of these people, read on. Chapter 0 alone should still be useful even if you go no further.
 
 ## What this book is not
 
 - Not a zero-day catalog. Nothing here is a CVE.
 - Not a "the kernel is broken" argument. Every program in the book was accepted by a BPF verifier doing its job correctly.
 - Not a privilege-escalation guide. CAP_BPF is a prerequisite, not an output.
-- Not novel research. Prior art exists for most individual primitives (`d_reclen` rewrite for readdir hiding goes back to 2016 in rootkit PoCs; XDP covert channels were discussed in research from ~2019 onward; PID-ns side channels via `sched_process_fork` appear in earlier academic work). The contribution is a reproducible harness, honest scope, and a durable taxonomy.
+- Not novel research. Prior art exists for most individual primitives (`d_reclen` rewrite for readdir hiding goes back to 2016 in rootkit PoCs; XDP covert channels were discussed in research from ~2019 onward; PID-namespace side channels via `sched_process_fork` appear in earlier academic work). The contribution is a reproducible harness, honest scope, and a durable taxonomy.
 
 ## The taxonomy
 
@@ -33,13 +35,13 @@ Every primitive in the book is one of three motions:
 - **Rewrite the userspace buffer** (Class II; `bpf_probe_write_user` during `sys_exit`). Kernel state unchanged; userspace reads are corrupted post-return.
 - **Copy the decision out of band** (Class III; ringbuf from a tracepoint or kprobe). Kernel state and decisions are untouched; confidentiality is lost.
 
-Two additional classes specialize these; **Class IV** (XDP packet-path interception) is a Class I variant at the netdev layer; **Class V** (ringbuf + userspace racer) is Class III used as a trigger signal. Full taxonomy is in [chapter 20]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html).
+Two additional classes specialize these: **Class IV** (XDP packet-path interception) is a Class I variant at the netdev layer; **Class V** (ringbuf + userspace racer) is Class III used as a trigger signal. Full taxonomy is in [chapter 20]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html).
 
 ## A brief history of CAP_BPF
 
-Before kernel 5.8, loading a BPF program meant holding `CAP_SYS_ADMIN`. Commit `2c78ee898d8f` in 5.8 split the BPF surface out into its own capability. `CAP_BPF` covered most program and map types; `CAP_PERFMON` covered tracing. The split was motivated by least-privilege: observability tooling did not need the full `CAP_SYS_ADMIN` surface.
+Before kernel 5.8, loading a BPF program meant holding `CAP_SYS_ADMIN`. Commit `2c78ee898d8f` in 5.8 split the BPF surface out into its own capability. `CAP_BPF` covered most program and map types; `CAP_PERFMON` covered tracing. The motivation was least-privilege: observability tooling did not need the full `CAP_SYS_ADMIN` surface, so a narrower capability was carved out for it.
 
-The lwn.net coverage at the time noted the counterargument: if the new capability lets a program call `bpf_probe_read_kernel`, granting it to an observability agent is not meaningfully different from granting root. Alexei Starovoitov's position was that the verifier's constraints; type-safety, memory-safety, bounded loops, helper allowlisting; are the actual safety boundary. This book is designed to stress-test that position. The answer turns out to be a lot more than most operators expect when they check the "grant CAP_BPF" box in their DaemonSet manifest.
+The lwn.net coverage at the time noted the counterargument: if the new capability lets a program call `bpf_probe_read_kernel`, granting it to an observability agent is not meaningfully different from granting root. Alexei Starovoitov's position was that the verifier's constraints — type-safety, memory-safety, bounded loops, helper allowlisting — are the actual safety boundary. This book is designed to stress-test that position. The answer turns out to be a lot more than most operators expect when they check the "grant CAP_BPF" box in their DaemonSet manifest.
 
 The distribution-wide `unprivileged_bpf_disabled` flip to `2` in 2021 set the cultural baseline that BPF load is a privileged operation. Granting `CAP_BPF` is, in practice, the re-enabling of that privilege for a specific workload.
 
@@ -85,7 +87,9 @@ The workflow before writing a POC: check `/sys/kernel/debug/error_injection/list
 
 ## The operational lesson
 
-CAP_BPF grants every motion in the taxonomy above. Granting it to a workload means granting that workload the ability to read arbitrary kernel memory, override the return of any function on the error-injection list, rewrite userspace memory in certain syscall windows, and take over netdev ingress via XDP. That is the capability operating as documented. Surprise is proportional to how much of modern observability silently depends on it.
+CAP_BPF grants every motion in the taxonomy above. Granting it to a workload means granting that workload the ability to read arbitrary kernel memory, override the return of any function on the error-injection list, rewrite userspace memory in certain syscall windows, and take over netdev ingress via XDP.
+
+That is the capability operating as documented. Surprise is proportional to how much of modern observability silently depends on it — and how rarely that dependency surfaces in the conversation about whether to grant it.
 
 ## The target environment
 
@@ -105,7 +109,7 @@ The harness at `dBPF-pocs/harness/proof.py` orchestrates the test matrix. For ea
 
 - **Not novel research.** `d_reclen` hiding goes back to 2016. XDP as a covert channel has prior art from ~2019. PID-namespace side channels appear in earlier academic work. The contribution is a reproducible harness on current kernels, an honest taxonomy, and explicit scope.
 - **Not an escalation path.** Remove `CAP_BPF` from the threat model and every chapter stops working.
-- **Not a verifier bug catalog.** Every program that attached was accepted by the verifier doing its job. Where the verifier refused a program, the chapter records the refusal and moves on.
+- **Not a verifier bug catalog.** Every program that attached was accepted by the verifier doing its job. Where the verifier refused a program, the chapter records the refusal.
 - **Not a zero-day drop.** Everything uses documented helpers, documented attach points, and documented program types.
 
 ## How to read this book
@@ -118,7 +122,7 @@ Start with the chapter you are worried about. The taxonomy in Chapter 20 is the 
 
 **If you are on a red team**: pick the chapter whose primitive matches your goal, check Chapter 21 to see if that primitive's failure mode applies to your target kernel, then read the chapter.
 
-The honest form of this book's claim is narrower than "CAP_BPF grants enormous power." The honest form is: CAP_BPF grants the exact power listed in the taxonomy, subject to the failure modes listed in Chapter 21. Some techniques that sound powerful are silently no-ops. Some techniques that sound restricted are fully operational. The distinction is why the harness exists.
+The honest form of this book's claim is narrower than "CAP_BPF grants enormous power." The honest form is: CAP_BPF grants the exact power listed in the taxonomy, subject to the failure modes listed in Chapter 21. Some techniques that sound powerful are silently no-ops. Some techniques that sound restricted are fully operational. That distinction is why the harness exists — and it is what I hope makes each chapter that follows more useful than a simple list of capabilities ever could be.
 
 ---
 

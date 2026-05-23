@@ -14,6 +14,8 @@ Twenty-three POCs, three kernels (Docker Desktop linuxkit 6.12 aarch64 primary; 
 
 ## What was demonstrated
 
+It is worth being precise about what "demonstrated" means before listing the results. Each POC in this book emits a proof marker — a line printed to stdout before the loader tears down — that encodes quantitative evidence. No marker means the primitive did not fire. No special interpretation required.
+
 Eighteen POCs produce `_PROVEN` proof markers on linuxkit. Two more (ch06 LSM, ch12 LSM) skip on linuxkit at runtime because linuxkit does not run SELinux enforcing and is not built with `CONFIG_MODULE_SIG_FORCE`; both fire on the Fedora 42 aarch64 QEMU VM secondary. Two Act 4 PoCs (ch23, ch25) are PROVEN on the Ubuntu 6.17 aarch64 Lima VM; ch23 via kprobe attachment with entry intercept events, ch25 via XDP mock IMDSv2 on `lo`. One (ch24) skips in all environments.
 
 The proof-marker format is deliberately boring. Every proven run emits a line of the form `CHxx_*_PROVEN <key>=<value> ...` on stdout before the loader is torn down. A sample:
@@ -32,6 +34,8 @@ The keys inside each marker are quantitative. `before_count=4 after_count=2 hidd
 Chapter 20 walks the proven cases and organizes them into five primitive classes. Chapter 21 accounts for every skip. If you read nothing else after this, read those two.
 
 ## What was not demonstrated
+
+Just as important as what fired is what did not — and why.
 
 - **No DAC, LSM, or capability check was defeated without `CAP_BPF`.** Drop the capability and every chapter stops working. Literally none of the primitives are reachable from an unprivileged process. Run them without `CAP_BPF` and every loader fails at `bpf(BPF_PROG_LOAD)` with `EPERM`.
 - **No kernel bug was found.** No CVEs were reported off the back of this work because there were none to report. Every override that landed did so because the target function was in the kernel maintainers' `ALLOW_ERROR_INJECTION` list. Every `bpf_probe_write_user` wrote to a user page that was writable, in a window the kernel deliberately leaves open.
@@ -56,16 +60,16 @@ Every chapter in the book is a demonstration that granting `CAP_BPF` grants acce
 
 ## Six recommendations for operators
 
-Expanded in chapter 22:
+These six recommendations map directly to the primitives in this book. Each closes a meaningful fraction of the attack surface. The combination closes almost all of it. Chapter 22 expands every one of them with working commands.
 
-- Inventory `CAP_BPF` holders across the fleet. Know who is asking.
-- Pin loaded BPF programs at boot and diff the set against the boot baseline on a timer.
-- Use BPF LSM policies to gate program load by attach type and caller credential.
-- Audit `/sys/kernel/debug/error_injection/list` on production kernels; restrict debugfs visibility where feasible.
-- Audit the `bpf(2)` syscall to a tamper-evident sink that itself does not run with `CAP_BPF`.
-- Do not trust userspace syscall return values for security-critical decisions. Consult `current->cred` at the kernel enforcement point. Chapter 18's `uid=0 gid=1001` tell is the canonical example of why.
+- **Inventory `CAP_BPF` holders across the fleet.** Know who is asking. Every chapter in this book starts with a process that already holds the capability; the list of those processes is the threat model.
+- **Pin loaded BPF programs at boot and diff the set against the boot baseline on a timer.** Late-loaded programs are the signature of post-compromise activity. A new attachment that wasn't there at boot is a finding.
+- **Use BPF LSM policies to gate program load by attach type and caller credential.** BPF LSM sits at the exact entry point every primitive in this book passed through; it is the highest-leverage control available.
+- **Audit `/sys/kernel/debug/error_injection/list` on production kernels; restrict debugfs visibility where feasible.** Class I primitives depend on this list. Knowing which symbols are on it for your kernel is a prerequisite for understanding your exposure.
+- **Audit the `bpf(2)` syscall to a tamper-evident sink that itself does not run with `CAP_BPF`.** An audit pipeline running on the same host as the attacker's ringbuf reader is part of the attack surface, not outside it.
+- **Do not trust userspace syscall returns for security-critical decisions. Consult `current->cred` at the kernel enforcement point.** Chapter 18's `uid=0 gid=1001` tell is the canonical example of why.
 
-Each one closes a meaningful fraction of the primitives in this book. The combination closes almost all of them. None is novel; all are under-deployed in practice. That gap is where the primitives live.
+None of these controls is novel. All are under-deployed in practice. That gap is where the primitives live.
 
 ## The durable artifact
 

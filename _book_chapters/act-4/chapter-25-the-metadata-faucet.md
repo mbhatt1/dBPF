@@ -171,7 +171,7 @@ Both modes exercise the same BPF program and the same userspace parser. The only
 
 ## Detection
 
-XDP programs attached to a network interface are visible in three places.
+XDP programs attached to a network interface are visible in three places, and any of them is sufficient to confirm an attached program.
 
 **`ip -d link show <ifname>`** annotates the interface with `xdp`, `xdpgeneric`, or `xdpoffload`. An interface that suddenly grows an `xdpgeneric` line without a corresponding load event is a finding.
 
@@ -179,9 +179,11 @@ XDP programs attached to a network interface are visible in three places.
 
 **`bpftool prog list type xdp -j`** enumerates all XDP programs across the host. On a box where only observability agents legitimately load XDP, any program not on the allowlist is a finding.
 
-The IMDS-specific detection surface is the IAM side. AWS GuardDuty's `UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration` detector flags STS credentials used from an IP outside the instance's VPC. GCP Audit Logs and Azure Defender do the same for their respective platforms. All three must be explicitly enabled.
+The IMDS-specific detection surface extends to the IAM side as well. AWS GuardDuty's `UnauthorizedAccess:IAMUser/InstanceCredentialExfiltration` detector flags STS credentials used from an IP outside the instance's VPC. GCP Audit Logs and Azure Defender do the same for their respective platforms. All three must be explicitly enabled, and they only fire after exfiltration has occurred; they are a lagging indicator, not prevention. The XDP visibility tools are the early warning.
 
 ## Mitigation
+
+The defenses here fall into two categories: those that prevent capture, and those that limit what a captured credential can do. XDP makes direct prevention difficult; the right response is mostly in the second category.
 
 **`aws:SourceVpc` / `aws:SourceIp` IAM conditions on the instance role.** Credentials can only be used from the VPC or IP range they were minted in. An attacker capturing the triple and replaying from outside the VPC fails. Caveat: intra-VPC hops bypass this.
 
@@ -207,6 +209,4 @@ The captured credentials are ephemeral. The SDK refreshes automatically, and the
 
 The scope of the compromise is the role's IAM policy. Chapter 22's inventory step should be paired with an IAM-policy audit on every `CAP_BPF`-adjacent workload. That is the only defense that works when this primitive lands.
 
----
-
-**What this chapter adds to the book**: The ch05b Ghost NIC POC and Chapter 15 showed XDP can drop packets and redirect them cross-namespace. This chapter shows XDP can also read packets; the tap case rather than the drop or redirect case. Same primitive class, aimed at a different purpose: not packet manipulation but content exfiltration across a boundary operators thought was on a separate plane. Act 4's three chapters together: a persistent key-theft primitive against the hardest host key store (Chapter 23), a threat-model subversion that changes who needs `CAP_BPF` to run any of this (Chapter 24), and a cross-boundary cloud credential capture (this chapter). The defender's response is to scope the grant; the same answer the book has given since Chapter 22; but now with a clearer picture of what is at stake when the grant is not scoped.
+Act 4's three chapters together describe a progression: a persistent key-theft primitive against the hardest host key store (Chapter 23), a threat-model subversion that changes who needs `CAP_BPF` to run any of this (Chapter 24), and a cross-boundary cloud credential capture here. In each case the same answer applies — scope the grant — but this chapter makes clear what is at stake when the grant is not scoped. The attacker with `CAP_BPF` and access to a running EC2 instance does not need to touch the credential store, compromise the metadata service, or break any cryptography. They need to read the wire on a host that is already making the calls.

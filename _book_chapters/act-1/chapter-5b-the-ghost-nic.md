@@ -12,9 +12,11 @@ date: 2025-02-04
 
 XDP runs before the packet reaches the IP stack. That single fact is the whole primitive: an XDP program attached to a netdev sees every ingress frame before netfilter, before raw sockets, before `tcpdump`'s AF_PACKET tap, and can return `XDP_DROP` to make the packet vanish from everyone above it.
 
-My first attempt was `cls_bpf` on ingress tc. On the same interface, AF_PACKET still saw the frames; tc ingress runs after the `ptype_all` walk in `__netif_receive_skb_core`, and that is where `tcpdump`'s tap lives. Moved to XDP; the frames stopped appearing on tcpdump. This isn't a bypass of a security control; it's XDP doing exactly what the architecture documents.
+My first attempt was `cls_bpf` on ingress tc. On the same interface, AF_PACKET still saw the frames; tc ingress runs after the `ptype_all` walk in `__netif_receive_skb_core`, and that is where `tcpdump`'s tap lives. Moved to XDP; the frames stopped appearing on tcpdump. This isn't a bypass of a security control; it's XDP doing exactly what the architecture documents. The security consequence follows from where in the stack XDP sits.
 
 ## Mechanism
+
+The program filters on IP/UDP/port/magic-prefix — four nested bounds checks that the verifier mandates before it will let the program touch any packet field. Each check is mandatory: remove any one of them and the load fails at the corresponding dereference. Here is the full program:
 
 ```c
 SEC("xdp")
@@ -51,11 +53,9 @@ int xdp_ghost(struct xdp_md *ctx) {
 }
 ```
 
-Every bounds check is verifier-mandated. Remove any one of them and the load fails with `invalid access to packet` at the corresponding dereference. The checks are not style; they are the proof the verifier requires before it will let the program touch packet memory.
+The bounds checks are not style; they are the proof the verifier requires before it will let the program touch packet memory. The `iph->ihl * 4` computation is the one that catches people: the verifier needs to prove the resulting pointer is within `[data, data_end]` before it allows `(void *)iph + ihl` in pointer arithmetic. The explicit `ihl < sizeof(*ip)` check (minimum 20) gives it the lower bound. Without it: `math between pkt pointer and register with unbounded min value is not allowed`.
 
-The `iph->ihl * 4` computation is the one that catches people. The verifier needs to prove the resulting pointer is within `[data, data_end]` before it allows `(void *)iph + ihl` in pointer arithmetic. The explicit `ihl < sizeof(*ip)` check (minimum 20) gives it the lower bound. Without it: `math between pkt pointer and register with unbounded min value is not allowed`.
-
-`bpf_xdp_adjust_head` and `bpf_redirect_map` are available for the cross-namespace variant (see [chapter 15]({{ site.baseurl }}/book/act-3/chapter-15-netns-vlan-ghost.html)).
+Matching packets are copied into the ringbuf for the userspace loader to read, then dropped. Everything else passes through. `bpf_xdp_adjust_head` and `bpf_redirect_map` are available for the cross-namespace variant (see [chapter 15]({{ site.baseurl }}/book/act-3/chapter-15-netns-vlan-ghost.html)).
 
 ## Hook point
 
@@ -63,9 +63,7 @@ The `iph->ihl * 4` computation is the one that catches people. The verifier need
 
 The loader tries `XDP_FLAGS_DRV_MODE` first and falls back to `XDP_FLAGS_SKB_MODE`. On veth between kernel 4.19 and 5.2, native XDP on veth without the peer also attached would silently allow frames through; `XDP_DROP` returned but the frame continued. That bug was fixed in 5.2. The trigger script forces skb-mode with `-S` to stay deterministic across kernels.
 
-Both modes are upstream of AF_PACKET. Both produce `XDP_DROP` semantics that defeat tcpdump. The difference is performance (native avoids sk_buff allocation), not the invisibility property.
-
-Loader attaches via `bpf_xdp_attach(ifindex, prog_fd, flags, NULL)`. Visible in `bpftool net show` and `ip link show <if>` with `xdp prog_id`.
+Both modes are upstream of AF_PACKET. Both produce `XDP_DROP` semantics that defeat tcpdump. The difference is performance (native avoids sk_buff allocation), not the invisibility property. The loader attaches via `bpf_xdp_attach(ifindex, prog_fd, flags, NULL)`, visible in `bpftool net show` and `ip link show <if>` with `xdp prog_id`.
 
 ## Reproduction
 
@@ -90,6 +88,14 @@ The trigger creates its own veth pair and network namespace. `veth_g0` lives in 
 
 ## Scope
 
-Class IV primitive from chapter 20. This isn't a netfilter bypass in the sense of evading a rule; it's an architectural layer below netfilter, by design. Defenders who rely on `tcpdump`, nftables, or raw sockets for host-level visibility into covert channels need a second signal: XDP program inventory, CAP_BPF audit, and off-host network telemetry.
+This is a Class IV primitive from chapter 20. The architectural point is worth stating clearly: XDP is not below netfilter because of an oversight in the design; it is below netfilter by design, to enable high-performance packet processing before the kernel's normal network stack runs. The same property that makes it useful for DDoS mitigation and load balancing is what makes it useful here.
 
-The `rx_dropped` counter on the interface does increment. A defender baselining drop counters catches the primitive even without direct XDP introspection.
+The `rx_dropped` counter on the interface does increment. A defender baselining drop counters catches the primitive even without direct XDP introspection. More broadly, defenders who rely on `tcpdump`, nftables, or raw sockets for host-level network visibility need to supplement with XDP program inventory, `CAP_BPF` audit, and off-host network telemetry — because at the XDP layer, local observation tools are simply not in the path.
+
+---
+
+**Related material**
+
+- Blog post: [The Ghost NIC]({{ site.baseurl }}/the-ghost-nic.html)
+- POC source: [dBPF-pocs/pocs/ch05b-ghost-nic/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch05b-ghost-nic)
+- Harness entry: search for `Poc("ch05b", ...)` in `dBPF-pocs/harness/proof.py`

@@ -12,13 +12,15 @@ date: 2025-02-01
 
 I started on this one after noticing, on a linuxkit 6.12 test VM, how much work `ovl_copy_up_one` actually does between allocating the upper inode and the merged dentry becoming visible. The interesting question was whether a userspace process with the ringbuf could win the race against the container process whose write triggered the copy-up.
 
-Up front: the BPF side of this chapter is an observation channel. The shipped POC attaches kprobes to three entry points into the copy-up path and does nothing else; no `bpf_override_return`, no in-BPF payload injection. What the probe gives you is a reliable signal: a ringbuf event saying "copy-up is happening now, for this dentry, via this entry point." The effect comes from a userspace racer that consumes those events and opens the upper file before overlayfs finishes wiring it in.
+Up front: the BPF side of this chapter is an observation channel. The shipped POC attaches kprobes to three entry points into the copy-up path and does nothing else — no `bpf_override_return`, no in-BPF payload injection. What the probe gives you is a reliable signal: a ringbuf event saying "copy-up is happening now, for this dentry, via this entry point." The effect comes from a userspace racer that consumes those events and opens the upper file before overlayfs finishes wiring it in.
 
 Observed timings on the test VM: the window between the first kprobe and the container read is 50–140 µs. A `SCHED_FIFO` + CPU-pinned racer wins ~30% of the time on cold caches, higher when the container process yields.
 
 ## Mechanism
 
 ### BPF side; three kprobes, one ringbuf
+
+The BPF program needs to answer one question for the racer: when does a copy-up begin, and for which dentry? Three overlapping hooks answer it more reliably than one. Here is the kernel side:
 
 ```c
 SEC("kprobe/ovl_maybe_copy_up")
@@ -46,6 +48,8 @@ The earlier drafts imagined a single `kprobe/ovl_copy_up_one` hook with `bpf_ove
 
 ### Userspace racer
 
+The BPF side does not touch any data. All it does is wake the racer. When the ringbuf event arrives, the racer opens the upper file directly and writes before overlayfs finishes:
+
 ```c
 while (ring_buffer__poll(rb, 100) >= 0) {
     struct evt *e = ...;
@@ -67,15 +71,11 @@ I tried to find a kernel-only solution. The helpers the BPF verifier permits all
 
 ## Hook points
 
-- `kprobe/ovl_copy_up`; synchronous promotion path.
-- `kprobe/ovl_maybe_copy_up`; pre-check before the synchronous path; earliest reliable signal.
-- `kprobe/ovl_copy_up_with_data`; data-carrying promotion (used when `metacopy` is off).
-
-All three exist in `/proc/kallsyms` on 6.12 aarch64 linuxkit. On older kernels the set varies; the loader autoloads whichever are present and logs misses.
+Three hooks were used: `kprobe/ovl_copy_up` (synchronous promotion path), `kprobe/ovl_maybe_copy_up` (pre-check before the synchronous path; earliest reliable signal), and `kprobe/ovl_copy_up_with_data` (data-carrying promotion, used when `metacopy` is off). All three exist in `/proc/kallsyms` on 6.12 aarch64 linuxkit. On older kernels the set varies; the loader autoloads whichever are present and logs misses.
 
 ## The race, measured
 
-Timing on linuxkit 6.12 with bpftrace entry/return probes on `ovl_copy_up_one` and `ovl_do_copy_up`:
+The timing picture on linuxkit 6.12 with bpftrace entry/return probes on `ovl_copy_up_one` and `ovl_do_copy_up`:
 
 - Entry: t=0.
 - `ovl_copy_up_data` return: t ≈ 40–120 µs for a 4 KiB file.
@@ -88,6 +88,14 @@ Loss mode: the racer loses when `ovl_do_copy_up` completes before the `open` ret
 
 The slow 10% of races where the window stretched past 200 µs were all cases where the upper filesystem was ext4 on a loopback-mounted sparse file. The loopback layer adds real latency to `ovl_copy_up_data`, and on those runs the racer won closer to 70% of the time.
 
+## What I got wrong on the first pass
+
+My first probe attached to `ovl_copy_up_one` — the function named in the older write-ups I had been reading. It fired on a subset of copy-ups and I spent two days debugging a racer winning less than 5% of the time before I realized the probe was missing most triggers. Switching to `ovl_maybe_copy_up` raised the fire rate by about 4x.
+
+My first racer used `O_RDWR`. The `O_RDWR` added a few microseconds to the `open` syscall due to a slightly longer permission check. Switching to `O_WRONLY | O_NOFOLLOW` bumped the win rate by about three percentage points. In a 50 µs race, three percent matters.
+
+I also wrote the first racer in Python. Python's `open` goes through `io.BufferedWriter`, each wrapper adding microseconds. I measured 40 µs from poll-wake to write-return versus 8 µs for the C version. In a 50–140 µs window, 32 extra microseconds is the difference between winning and rarely winning.
+
 ## metacopy and redirect_dir edge cases
 
 `metacopy=on` splits the copy-up into two phases: metadata first, data on the next write. From the racer's perspective this doubles the number of signal events per file lifecycle and widens the first window. Metadata-only copy-up takes under 20 µs; data copy-up takes the full 50–140 µs. The attacker gets two shots instead of one. Docker ships `metacopy=on` by default on versions 24+.
@@ -95,14 +103,6 @@ The slow 10% of races where the window stretched past 200 µs were all cases whe
 `redirect_dir=on` changes where the upper file lands, encoded in the `trusted.overlay.redirect` xattr on the upper directory. The racer must resolve the xattr-adjusted upper path at startup by parsing `/proc/mounts` and honoring redirects when walking the upper tree. Getting the `trusted.overlay.*` xattr requires `CAP_SYS_ADMIN` in the init user namespace, which is consistent with the threat model but rules out unprivileged container processes.
 
 The `metacopy=on,redirect_dir=on` combination gives the racer a longer first window but a more complex path resolution. Whether the metacopy variant offers a net advantage was not tested by the shipped POC; the metadata-only phase measured at 80–200 µs on linuxkit with that combination, but end-to-end win-rate comparison against the baseline was not performed.
-
-## What I got wrong on the first pass
-
-My first probe attached to `ovl_copy_up_one`; the function named in the older write-ups I had been reading. It fired on a subset of copy-ups and I spent two days debugging a racer winning less than 5% of the time before I realized the probe was missing most triggers. Switching to `ovl_maybe_copy_up` raised the fire rate by about 4x.
-
-My first racer used `O_RDWR`. The `O_RDWR` added a few microseconds to the `open` syscall due to a slightly longer permission check. Switching to `O_WRONLY | O_NOFOLLOW` bumped the win rate by about three percentage points. In a 50 µs race, three percent matters.
-
-I also wrote the first racer in Python. Python's `open` goes through `io.BufferedWriter`, each wrapper adding microseconds. I measured 40 µs from poll-wake to write-return versus 8 µs for the C version. In a 50–140 µs window, 32 extra microseconds is the difference between winning and rarely winning.
 
 ## Reproduction
 
@@ -131,7 +131,7 @@ Ultimately `CAP_BPF` on the host gives the attacker everything above. Restrict w
 
 ## Scope
 
-This is a Class V primitive from chapter 20: kernel event + userspace racer. The race is real but not deterministic. This is a probabilistic attack even with CPU-pinning and realtime priority; expect 30–70% hit rate on a loaded host.
+This is a Class V primitive from chapter 20: kernel event + userspace racer. The race is real but not deterministic. This is a probabilistic attack even with CPU-pinning and realtime priority; expect 30–70% hit rate on a loaded host. Chapters 1 and 3 demonstrate cleaner, more reliable primitives; this one is included because the pattern — BPF as a trigger for a privileged userspace action — recurs throughout the taxonomy and is worth understanding in its messiest form first.
 
 ---
 

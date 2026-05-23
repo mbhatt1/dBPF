@@ -18,6 +18,8 @@ What the POC does instead is an observation channel: kprobes on `audit_log_start
 
 ## Mechanism
 
+Three kprobes cover the full lifecycle of a kernel audit record — construction, formatting, and finalization. Together they let the observer reconstruct the complete record stream:
+
 ```c
 SEC("kprobe/audit_log_start")
 int BPF_KPROBE(kp_start, struct audit_context *ctx, gfp_t gfp, int type) {
@@ -40,9 +42,9 @@ int BPF_KPROBE(kp_end, struct audit_buffer *ab) {
 
 Records stream as `[audit] hook=audit_log_start pid=... comm=... type=1300(AUDIT_SYSCALL) ctx=1`. The trigger installs an audit rule (`auditctl -a always,exit -F arch=aarch64 -S execve`) to ensure the subsystem has something to emit, then counts records the loader captured.
 
-On the test kernel, the harness pulled 139 records in a short trigger window; every execve, every config change, whatever the kernel decided to log. None of those records would have been readable by the unprivileged test user via the regular audit netlink API (it requires `CAP_AUDIT_READ`); with `CAP_BPF`, they all come out.
+On the test kernel, the harness pulled 139 records in a short trigger window — every execve, every config change, whatever the kernel decided to log. None of those records would have been readable by the unprivileged test user via the regular audit netlink API (it requires `CAP_AUDIT_READ`); with `CAP_BPF`, they all come out.
 
-That is a real capability escalation for a BPF-loaded sidecar. An attacker in the Tetragon-shaped sidecar position; BPF-loading, with some mount-namespace visibility, but not otherwise privileged; can reconstruct the audit stream in parallel with auditd. The reconstruction is invisible to auditd: nothing in the kernel tells the audit subsystem that a BPF program has attached to its internal functions.
+That is a real capability escalation for a BPF-loaded sidecar. An attacker in the Tetragon-shaped sidecar position — BPF-loading, with some mount-namespace visibility, but not otherwise privileged — can reconstruct the audit stream in parallel with auditd. The reconstruction is invisible to auditd: nothing in the kernel tells the audit subsystem that a BPF program has attached to its internal functions.
 
 ## Hook points
 
@@ -54,6 +56,8 @@ All three exist in `/proc/kallsyms` on the test kernel; all attach; none are in 
 
 ## The dead ends, documented
 
+Each approach below failed for a different reason. I'm documenting them in sequence because the failure modes reveal the kernel's actual defense architecture, which is more interesting than the failures themselves.
+
 ### kprobe override
 
 The plan was `bpf_override_return(ctx, 0)` in a kretprobe on `audit_log_start`. If `audit_log_start` returns `NULL`, every downstream caller bails early and no record is emitted. The program compiles. The verifier accepts it. The kretprobe attaches. Audit records keep flowing. `dmesg` has nothing unusual. `bpftool prog show` confirms the kprobe ran. The override is inert because `audit_log_start` is not in `ALLOW_ERROR_INJECTION`. Same failure mode as `cap_capable` in Chapter 1.
@@ -62,9 +66,9 @@ I wasted two days reproducing prior write-ups that glossed over this constraint.
 
 ### fentry/fmod_ret
 
-After the kprobe override failed, I tried `fmod_ret/audit_log_start`. The program compiles. The verifier accepts it. The attach succeeds. The program never fires. The reason is `check_attach_modify_return` in `kernel/bpf/verifier.c`: on 6.12 that function allows `fmod_ret` on exactly two classes of targets; functions in `ALLOW_ERROR_INJECTION`, and functions whose name starts with `security_`. `audit_log_start` is in neither class.
+After the kprobe override failed, I tried `fmod_ret/audit_log_start`. The program compiles. The verifier accepts it. The attach succeeds. The program never fires. The reason is `check_attach_modify_return` in `kernel/bpf/verifier.c`: on 6.12 that function allows `fmod_ret` on exactly two classes of targets — functions in `ALLOW_ERROR_INJECTION`, and functions whose name starts with `security_`. `audit_log_start` is in neither class.
 
-On closer inspection, the verifier rejects `fmod_ret` programs for targets outside the allowed set at load time with the message `"<func>() is not modifiable"`. The POC in `ch03-fuse-blackhole-fentry` avoids triggering this by checking at runtime; via BTF introspection and a `lsm=` boot cmdline check; whether to autoload the fmod_ret program at all. On any LSM-capable kernel the loader calls `bpf_program__set_autoload(..., false)` on the fmod_ret program before `__load()` is invoked. The fmod_ret variant is skipped; the fallback runs instead.
+On closer inspection, the verifier rejects `fmod_ret` programs for targets outside the allowed set at load time with the message `"<func>() is not modifiable"`. The POC in `ch03-fuse-blackhole-fentry` avoids triggering this by checking at runtime — via BTF introspection and a `lsm=` boot cmdline check — whether to autoload the fmod_ret program at all. On any LSM-capable kernel the loader calls `bpf_program__set_autoload(..., false)` on the fmod_ret program before `__load()` is invoked. The fmod_ret variant is skipped; the fallback runs instead.
 
 There was a patch series in mid-2023 to add `audit_log_start` to the approved set. The audit maintainer (Paul Moore) rejected it: audit is a tamper-evident log, and letting a BPF program drop records silently breaks the tamper-evidence. As of 6.12 the override path is still not available. I agree with the decision.
 
@@ -80,7 +84,7 @@ The FUSE angle does not work for audit silencing. The chapter started as an atte
 
 ## The lsm/syslog fallback
 
-The fentry POC ships a second program that actually runs on the linuxkit image:
+The fentry POC ships a second program that actually runs on the linuxkit image. It narrows the target: instead of audit records, it denies the dmesg channel to responders reading `/dev/kmsg` or `/proc/kmsg`:
 
 ```c
 SEC("lsm/syslog")
@@ -96,20 +100,9 @@ int BPF_PROG(lsm_syslog, int type, int ret) {
 
 The fallback is narrower than the primary path: it denies the dmesg / kmsg read channel, not `/var/log/audit/audit.log`. For an incident responder running `dmesg | grep` looking for kernel-level tells, the fallback is enough. For a responder running `ausearch`, it is not. The POC's loader makes this tradeoff explicit.
 
-## Reproduction
-
-```bash
-cd dBPF-pocs/pocs/ch03-fuse-blackhole
-make
-sudo bash trigger.sh
-# expect: === CH03_PROVEN variant=B before=0 after=<N> ===
-```
-
-Prior art: Dileo DEF CON 27 (2019) on subverting audit via BPF; Willcox / Hogan 2020–2022 exploration of the same class; a short-lived lkml patch series to expose `audit_log_start` via fmod_ret was rejected in 2023.
-
 ## Observation as exfil
 
-With override dead, the primitive that remains is observation. On the first read that sounds like a consolation prize. On closer inspection it is the more interesting result.
+With override dead, the primitive that remains is observation. On first read that sounds like a consolation prize. On closer inspection it is the more interesting result.
 
 `CAP_AUDIT_READ` plus `NETLINK_AUDIT` multicast membership is what normally grants access to audit records. A sidecar with `CAP_BPF` alone cannot join the audit multicast group. But with `SEC("fentry/audit_log_end")`, that same sidecar reads every record the kernel produces. An unprivileged peer with `CAP_BPF` sees what only `CAP_AUDIT_READ` normally sees.
 
@@ -126,9 +119,20 @@ The most interesting use is audit observation as a timing oracle. If auditd just
 - If you require suppression-proof audit, route records off-host via the netlink multicast group before they hit any userland consumer a BPF program could watch. Once the records are in a remote sink in a separate security domain, the local kernel's state doesn't matter.
 - `auditd` with `-a always,exit -F arch=b64 -S bpf -k bpf_load` makes every BPF load a logged event. A defender who sees a `bpf_load` event followed by a gap in other audit activity for a specific PID has a strong signal.
 
+## Reproduction
+
+```bash
+cd dBPF-pocs/pocs/ch03-fuse-blackhole
+make
+sudo bash trigger.sh
+# expect: === CH03_PROVEN variant=B before=0 after=<N> ===
+```
+
+Prior art: Dileo DEF CON 27 (2019) on subverting audit via BPF; Willcox / Hogan 2020–2022 exploration of the same class; a short-lived lkml patch series to expose `audit_log_start` via fmod_ret was rejected in 2023.
+
 ## Scope
 
-This is a Class III primitive from chapter 20 (ringbuf exfil). The kernel's audit integrity is untouched; what's broken is the assumption that audit records are confidential to readers with `CAP_AUDIT_READ`. With `CAP_BPF` on the host, the peer observer reads freely. If you are a defender, ship records off-host. If you are an attacker, hope they didn't.
+This is a Class III primitive from chapter 20 (ringbuf exfil). The kernel's audit integrity is untouched; what's broken is the assumption that audit records are confidential to readers with `CAP_AUDIT_READ`. With `CAP_BPF` on the host, the peer observer reads freely. The chapter's suppression attempts all fail, and that failure is itself load-bearing: it means the kernel audit path has meaningful defense depth against BPF tampering. The observation path has none. If you are a defender, ship records off-host. If you are an attacker, hope they didn't.
 
 ---
 

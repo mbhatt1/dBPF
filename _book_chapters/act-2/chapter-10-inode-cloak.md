@@ -29,6 +29,8 @@ What `bpf_probe_write_user` can and can't do here is worth being explicit about.
 
 Edge case: if the hit is the first entry in the buffer, there is no predecessor to extend. The POC falls back to zeroing `d_ino` so naive readers that treat `ino=0` as "skip" drop it on the floor. That's strictly weaker than the swallow trick. Both paths emit a ringbuf event so the two cases are distinguishable in evidence.
 
+The exit handler is where all the work happens. It retrieves the stashed `dirp` pointer, walks the dirent stream entry by entry, and rewrites `d_reclen` in-place for any match it finds:
+
 ```c
 SEC("tp/syscalls/sys_exit_getdents64")
 int handle_exit(struct trace_event_raw_sys_exit *ctx)
@@ -120,5 +122,7 @@ The honest limits of the cloak:
 `bpftool prog show` lists both tracepoint programs. The loudest tell is `bpftool map dump name hidden`, which prints the cloaked filename set in cleartext; the attacker has to keep the map populated for the cloak to fire. Cross-referencing `ls` output with `find -inum` exposes the discrepancy immediately. Every FIM tool I tested is blind to this cloak because every FIM tool trusts `readdir`.
 
 `bpf_probe_write_user` emits a rate-limited dmesg warning on use: `BPF: <program_name> is writing to user space memory.` Note that on 6.12 the helper does not set the `TAINT_USER` kernel taint bit; the detection signal is purely in dmesg.
+
+The cloak is a sharp demonstration of the gap between what the filesystem knows and what userspace sees. The inode is intact, the data is on disk, and `stat` returns honest answers. Only `readdir` is lying, and only because we are rewriting the buffer after the kernel has already filled it. Any security tool that skips the syscall layer and reads the filesystem directly is immune. Any tool that doesn't — which is most of them — is not.
 
 > **See also**: [POC source; ch10-inode-cloak](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch10-inode-cloak) · Harness entry: `Poc("ch10", ...)` in `dBPF-pocs/harness/proof.py`

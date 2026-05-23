@@ -32,7 +32,7 @@ I spent a while trying to see whether I could rebuild vmlinux BTF with pahole in
 
 ## What loaded
 
-Kprobe on `key_task_permission`. The same permission-decision code path reaches here; the LSM hook is downstream. The signature is:
+The detour led to kprobe on `key_task_permission`. The same permission-decision code path reaches here; the LSM hook is downstream. The signature is:
 
 ```c
 int key_task_permission(const key_ref_t key_ref,
@@ -91,5 +91,7 @@ This loads successfully because the verifier never sees a typed access to the FW
 Kprobe attachment on `key_task_permission` is itself the signal. `bpftool prog show type kprobe` lists the attached program. `/sys/kernel/tracing/kprobe_events` shows the registered probe by name. `bpf()` syscall auditing with `BPF_PROG_LOAD` records the load.
 
 There is no runtime signal from the reads themselves. `BPF_CORE_READ` is a kernel-memory copy into BPF map space and leaves no audit trace. The primitive's footprint is entirely at attach.
+
+The broader lesson from this chapter is about verifier posture. The LSM path was clean in intent but dead because of a BTF FWD in the kernel image; a detail entirely outside my control. The kprobe path was noisier in principle but let the same data through, because kprobes accept opaque register arguments and let the program cast at will. When one attach point refuses to cooperate with the type system, the adjacent one with weaker typing invariants often will. That trade-off — precision versus permissiveness — shows up again in chapters that follow.
 
 > **See also**: [POC source; ch08-keyring-heist-kprobe](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch08-keyring-heist-kprobe) · Harness entry: `Poc("ch08k", ...)` in `dBPF-pocs/harness/proof.py`

@@ -8,7 +8,9 @@ date: 2025-03-15
 
 > **See also**: [Blog post]({{ site.baseurl }}/sched-fifo-impersonator.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch14-sched-fifo) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
-This is a userspace-illusion bypass. The kernel's scheduler state is not touched. What changes is the value libc gets back from the syscall; any caller that gates behaviour on "did `sched_setscheduler` return 0" is fooled; anything that reaches back into the kernel to verify sees the real, unchanged policy.
+Picture an attacker running `chrt -f 50 $$` as an unprivileged user. The shell prints nothing alarming; `chrt` exits zero, no complaint. From the caller's perspective, the process is now running at SCHED_FIFO priority 50. From the kernel's perspective, nothing changed at all.
+
+That divergence is this chapter. The primitive is a userspace-illusion bypass: the kernel's scheduler state is never touched. What changes is the single integer that libc hands back from the syscall. Any caller that gates behaviour on "did `sched_setscheduler` return 0" is fooled; anything that reaches back into the kernel to verify sees the real, unchanged policy.
 
 The target is `__arm64_sys_sched_setscheduler`. It sits in `/sys/kernel/debug/error_injection/list` on the linuxkit 6.12 aarch64 kernel I was testing against, which is the precondition for `bpf_override_return` to actually land; the helper silently no-ops against functions that are not on that list. Most syscall entrypoints are on the list; most internal kernel functions are not, which is why the hook is on the syscall boundary and not on `__sched_setscheduler` deeper in.
 
@@ -18,7 +20,7 @@ The same pattern appears in chapter 18 against `__arm64_sys_getuid` and `__arm64
 
 A kprobe/kretprobe pair on the syscall entrypoint. The kprobe records the caller's tgid and the requested policy into an inflight hash map. The kretprobe looks up the tgid, decides whether this call is in scope, and if it is calls `bpf_override_return(ctx, 0)`. Every call produces a ringbuf event with `orig_ret` and a `flipped` flag so the loader logs both the natural return and the forged one.
 
-Baseline and forge, running `chrt -f 50 $$` as an unprivileged user:
+Running `chrt -f 50 $$` as an unprivileged user, first without the BPF program and then with it:
 
 ```
 === baseline: t14 runs chrt -f 50 $$ (no BPF) ===
@@ -33,7 +35,7 @@ override_ret=0
 
 `orig_ret=-1 flipped=1` is the smoking gun. The kernel returned `-EPERM` because the caller has no `CAP_SYS_NICE`; the kretprobe rewrote the return to `0`; `chrt` reported success because its exit status comes straight from the syscall return.
 
-## What is not happening
+## The Tell: What Exposes the Illusion
 
 `task_struct->policy` is unchanged. Runqueue placement is unchanged. The task is still on whatever policy it was on before the call. Any of the following will show the real policy:
 
@@ -113,5 +115,7 @@ docker run --rm -v "$PWD":/work -w /work dbpf-base \
 - `bpf_override_return` requires `CONFIG_BPF_KPROBE_OVERRIDE=y` AND the target symbol to be in `/sys/kernel/debug/error_injection/list`. Most internal kernel functions are not on the list; which is why we hook the syscall entrypoint rather than the deeper `__sched_setscheduler` core.
 - The override does not change actual scheduler state; only what userspace observes on that one syscall return.
 - On stock cloud kernels with hardened lockdown or SELinux, `bpf_override_return` may be denied even with `CAP_SYS_ADMIN`.
+
+The lesson worth keeping from this chapter is not about scheduling at all. It is about the gap between what the kernel enforces and what userspace observes. That gap exists at every syscall return — and `bpf_override_return` can sit inside it, invisible, until something looks twice.
 
 > **Proof status**: **PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM), 2026-05-20. Proof marker: `SCHED_WEAPON_PROVEN flips=1`.

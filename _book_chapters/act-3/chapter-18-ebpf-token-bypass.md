@@ -8,7 +8,9 @@ date: 2025-05-09
 
 > **See also**: [Blog post]({{ site.baseurl }}/ebpf-token-bypass.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch18-token-bypass) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
-This is the canonical wrong-enforcement-point bug, reimplemented with a kretprobe. The pattern is decades old: a program consults `getuid()` to decide whether the caller is root and trusts the return value rather than consulting the actual `current->cred` at the point of enforcement. Sendmail shipped this bug. Several SUID binaries shipped it through the 2000s. A long tail of misconfigured services still ship it. The fix, every time, was the same: do the capability check at the kernel enforcement point, not via a userspace query. The eBPF version just makes it mechanical.
+This is the canonical wrong-enforcement-point bug, reimplemented with a kretprobe. The pattern is decades old: a program consults `getuid()` to decide whether the caller is root and trusts the return value rather than consulting the actual `current->cred` at the point of enforcement. Sendmail shipped this bug. Several SUID binaries shipped it through the 2000s. A long tail of misconfigured services still ship it. The fix, every time, was the same: do the capability check at the kernel enforcement point, not via a userspace query.
+
+What makes this version interesting is not novelty — it is simplicity. The eBPF primitive makes a decades-old attack class mechanical and repeatable. Two kretprobes, two overrides, and any program that asks the kernel "who am I?" gets back a lie. The bug class did not disappear when Sendmail was patched; it migrated. Scripts that check `$(id -u) -eq 0`, automation that calls `getuid()` before deciding whether to run privileged code, monitoring agents that correlate user identity via syscall return — they all share the same assumption. This chapter is about what happens when that assumption is wrong.
 
 ## Mechanism
 
@@ -35,15 +37,17 @@ root
 [token] FORGE pid=19483 comm=whoami getuid:  1000 -> 0 (root)
 ```
 
+The probe logs both the original return and the forged one, which makes the divergence plain: the kernel said 1000, the caller heard 0.
+
 ## The tell
 
-Run `id` with the probe attached:
+The forge is visible to anything that correlates more than one credential field. Run `id` with the probe attached:
 
 ```
 uid=0(root) gid=1001 groups=1001
 ```
 
-Only `uid` was forged. `getgid()` was not hooked, so `gid=1001` passed through untouched. A real root process has `gid=0`. Any tool that correlates `uid` and `gid`; or that reads `/proc/self/status`, which sources `Uid:` and `Gid:` straight from `task_struct->cred`; sees the divergence.
+Only `uid` was forged. `getgid()` was not hooked, so `gid=1001` passed through untouched. A real root process has `gid=0`. Any tool that correlates `uid` and `gid`; or that reads `/proc/self/status`, which sources `Uid:` and `Gid:` straight from `task_struct->cred`; sees the divergence immediately.
 
 The attack works against `id`/`whoami`/any script that just checks `$(id -u) -eq 0`. It does not work against anything that actually cares.
 
@@ -121,5 +125,7 @@ In another shell, run `sudo bash trigger.sh`. Send `SIGINT` to detach cleanly.
 - `bpf_override_return` only succeeds on functions present in `/sys/kernel/debug/error_injection/list`. Both targets happen to be on the linuxkit 6.12 list. On a hardened kernel without those entries, the kretprobe attaches but the override silently no-ops; the loader still emits events, but `flipped=0` and the userspace illusion does not occur.
 - Userspace illusion only. No kernel access check is bypassed. This is intentional; the POC demonstrates the class of bug, which is identical in shape to the historical "trust-the-query, not-the-cred" CVEs.
 - Requires `CAP_BPF` + `CAP_PERFMON` (or root). Inside Docker, run with `--privileged --pid=host`.
+
+The reason to spend a chapter on a decades-old bug class is that the class survives. Sendmail is gone. The scripts that run as root checks remain; in CI pipelines, in startup scripts, in monitoring agents that decide whether to escalate an alert. The eBPF version does not introduce new vulnerability surface; it introduces a new and invisible way to exploit the old one.
 
 > **Proof status**: **PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM), 2026-05-20. Proof marker: `TOKEN_FORGE_PROVEN`.

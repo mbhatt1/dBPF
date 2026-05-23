@@ -14,7 +14,7 @@ Every primitive in this book required `CAP_BPF`, and most additionally required 
 
 ## Inventory `CAP_BPF`
 
-Find the holders before you do anything else. Running processes, systemd unit bounding sets, and file capabilities baked into binaries are three separate views; you need all three.
+The inventory step comes first because nothing else works without it. You cannot restrict what you have not found, cannot baseline what you do not know is running, and cannot audit syscalls from processes whose existence surprised you. Find the holders before you do anything else. Running processes, systemd unit bounding sets, and file capabilities baked into binaries are three separate views; you need all three.
 
 ```bash
 # Running processes
@@ -35,7 +35,7 @@ Treat the inventory as a living artifact. Every CI config that passes `--privile
 
 ## Restrict with BPF LSM
 
-BPF LSM is the single highest-leverage control, because it sits on the entry point every primitive in this book had to pass through. Confirm it's active:
+Once you know who holds the capability, BPF LSM is how you constrain what they can do with it. It is the single highest-leverage control in this chapter, because it sits at the exact entry point every primitive in this book had to pass through: `BPF_PROG_LOAD`. Confirm it's active:
 
 ```bash
 cat /sys/kernel/security/lsm   # expect: ...,bpf,...
@@ -65,7 +65,7 @@ Non-root workloads may load tracepoint programs only; everything else (kprobe, k
 
 ## Pin and baseline
 
-At boot, capture the set of loaded programs and pin it:
+Restriction at load time is necessary but not sufficient on its own — programs loaded before your policy was deployed, or by processes running as root, will not be caught there. The baseline step closes that gap. At boot, capture the set of loaded programs and pin it:
 
 ```bash
 bpftool prog show -j \
@@ -91,7 +91,7 @@ A new entry in `kprobe_events` targeting `__arm64_sys_getuid`, `tpm2_unseal_trus
 
 ## Audit `bpf(2)`
 
-Kernel auditing of the syscall gives you one record per `BPF_PROG_LOAD`, `BPF_MAP_CREATE`, and `BPF_PROG_ATTACH`, tagged with the caller's `comm`, `pid`, and effective credentials.
+The baseline catches what is loaded. The audit catches the moment of loading — which process, which credentials, which command. Kernel auditing of the syscall gives you one record per `BPF_PROG_LOAD`, `BPF_MAP_CREATE`, and `BPF_PROG_ATTACH`, tagged with the caller's `comm`, `pid`, and effective credentials.
 
 ```bash
 # aarch64

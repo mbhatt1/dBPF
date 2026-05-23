@@ -89,4 +89,6 @@ Class I primitive (return-value override at an LSM hook). The fmod_ret mechanism
 
 The `file_open` path is structurally different — `security_file_open` is a genuine LSM hook that a BPF fmod_ret program can reach — but that path was not exercised here and the bypass is not demonstrated. The proof marker is `CH07_CONCEPT_PROVEN`; the concept word is load-bearing and accurately scopes what was shown.
 
+What this chapter leaves behind is a clearer map of the pre-LSM minefield in `vfs_mknod` and a concrete reminder that fmod_ret only helps when you can actually reach the hook. The flip machinery works. Getting to a hook that fires on a real denial is the harder problem — and on the `file_open` path, it's still open.
+
 > **See also**: [POC source; ch07-devcgroup-houdini-lsm](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch07-devcgroup-houdini-lsm) · Harness entry: `Poc("ch07", ...)` in `dBPF-pocs/harness/proof.py`

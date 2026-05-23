@@ -52,7 +52,7 @@ Before the probe attaches, `insmod` on a non-ELF file returns rc=1 with `ENOEXEC
 
 ## The userspace-illusion framing, made explicit
 
-This is a userspace-illusion bypass and nothing more.
+This is a userspace-illusion bypass and nothing more — and it's worth sitting with that for a moment before moving on to the real LSM variant.
 
 The module does not load. The kernel still rejects the bytes at ELF validation. Kernel memory is unchanged. `lsmod` does not show the module. `/sys/module/<name>/` does not exist. `dmesg` still logs the original rejection reason. The only thing the attack changes is the integer the syscall returns to userspace.
 
@@ -62,7 +62,7 @@ This is the same shape as ch14 (sched_setscheduler return forgery) and ch18 (get
 
 ## The real flip: BPF LSM fmod_ret on enforcing kernels
 
-The real primitive lives in `ch12-signed-driver-swap-lsm`. On a kernel with `CONFIG_MODULE_SIG_FORCE=y` and BPF LSM active in the `lsm=` boot string, three fmod_ret programs on `lsm/kernel_read_file`, `lsm/kernel_load_data`, and `lsm/locked_down` can flip the integrity gate. When signature enforcement is on and BPF LSM is in the chain, flipping the return of `kernel_read_file` from a denial to zero lets an unsigned blob through. The module bytes get read in and the loader continues toward actually inserting the module.
+The real primitive lives in `ch12-signed-driver-swap-lsm`, and it's a different story entirely. On a kernel with `CONFIG_MODULE_SIG_FORCE=y` and BPF LSM active in the `lsm=` boot string, three fmod_ret programs on `lsm/kernel_read_file`, `lsm/kernel_load_data`, and `lsm/locked_down` can flip the integrity gate. When signature enforcement is on and BPF LSM is in the chain, flipping the return of `kernel_read_file` from a denial to zero lets an unsigned blob through. The module bytes get read in and the loader continues toward actually inserting the module.
 
 Fedora 42 aarch64 (booted with BPF LSM active by default and `module.sig_enforce` set) produces:
 
@@ -81,5 +81,7 @@ Discrepancies from the syscall illusion are visible to anyone who checks kernel 
 At the BPF layer, `bpftool prog show type kprobe` lists the retprobe attachments on `__arm64_sys_finit_module`/`__arm64_sys_init_module`. `/sys/kernel/tracing/kprobe_events` shows the registered probes. The defender's actual question is "which code path in my orchestration treats a syscall rc as authoritative." That's the surface this primitive attacks.
 
 For the real LSM variant: `bpftool prog list type lsm` shows attached fmod_ret programs on `kernel_read_file`. Legitimate observability tools do not fmod_ret on module-load hooks. An fmod_ret attach from an unexpected loader on those hooks is high-signal. `dmesg` on an enforcing kernel still records the pre-flip integrity decision regardless of whether the LSM chain was subsequently overridden.
+
+The honest accounting here is that the syscall-illusion variant and the LSM-flip variant prove different things at different privilege levels on different kernel configurations. The illusion is cheap and widely applicable; it works anywhere the syscall entry point is on the error-injection list. The LSM flip is the real thing, but it requires an enforcing kernel and BPF LSM in the boot string — conditions that linuxkit doesn't meet. Both paths are documented because together they map the full shape of what is and isn't possible when you go looking for a module-load bypass.
 
 > **See also**: [POC source; ch12-signed-driver-swap-syscall](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch12-signed-driver-swap-syscall) · Harness entry: `Poc("ch12s", ...)` in `dBPF-pocs/harness/proof.py`

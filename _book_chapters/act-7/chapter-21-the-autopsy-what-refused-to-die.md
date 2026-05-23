@@ -18,7 +18,7 @@ This is not a consolation section. Everything below has working code. The setup 
 
 ## The Fedora exercises (ch06, ch06o, ch12)
 
-All three needed SELinux in enforcing mode with `bpf` active in the LSM chain. linuxkit runs neither. Fedora 42 aarch64 runs both by default.
+All three primitives in this group needed SELinux in enforcing mode with `bpf` active in the LSM chain. linuxkit runs neither. That constraint is not a criticism of linuxkit — it is the right minimal environment for most of this book — but these three primitives are specifically about what happens when policy enforcement is live, which means they need a kernel that has live policy. Fedora 42 aarch64 runs both by default, making it the natural secondary environment.
 
 Boot a Fedora 42 aarch64 VM or use `dBPF-pocs/run-qemu-tests.sh` to drive one. The script handles image download and boot. Once the VM is running with SELinux enforcing:
 
@@ -31,6 +31,8 @@ What to verify: the fmod_ret override is real, the audit log still records the p
 What to verify: the signature gate is the last blocker between you and arbitrary code in the kernel on an enforcing system. After this flip, only ELF validation stands between an unsigned blob and `init_module`. Can you craft a valid ELF that passes ELF validation but has no meaningful module body? What does the kernel accept? I did not finish this thread. The harness proves the gate flip; the question of what comes after the gate is left open.
 
 ## The Ubuntu exercises (ch23, ch25)
+
+These two primitives target boundaries that linuxkit simply does not have: a TPM-backed trusted-key subsystem and outbound cloud-metadata traffic. Neither is a linuxkit limitation in any meaningful sense — linuxkit is a container runtime environment, not a cloud instance. For ch23 and ch25, the right test environment is a VM that is actually playing the role the primitive targets.
 
 These ran on Ubuntu 6.17 aarch64 (Lima VM) and proved on that kernel. If you are running them from linuxkit; the linuxkit harness path; they will skip because the symbols are absent. Set up a Lima VM (`limactl start --name=dbpf`), build from source inside it, and run the harness there.
 
@@ -53,6 +55,8 @@ The exercise: build a kernel from source with `CONFIG_BPF_TOKEN=y`. The relevant
 The security question is whether the token is scoped tightly enough. The specification says a token can be bound to a pinned BPF filesystem path and constrained to specific `cmd` types. In practice: can you create a token that allows `BPF_PROG_LOAD` with `BPF_PROG_TYPE_LSM`? If so, an unprivileged container with a delegated token could attach LSM programs. That is the threat model. I do not know if the current implementation allows it or whether the cmd-type constraint blocks it. That is the exercise.
 
 ## What the skips actually say
+
+The skips are not gaps in the argument. They are information.
 
 Every skip says something true about the primitive. Ch06, ch06o, and ch12 skip on linuxkit because they need policy enforcement to flip, and linuxkit has none; which means the primitive is useless in zero-enforcement environments and dangerous in high-enforcement ones. The skip is also the environment fingerprint: a primitive that skips on linuxkit and fires on Fedora is a primitive that separates development environments (minimal policy) from production ones (enforcing policy). That separation is itself a detection signal for defenders.
 

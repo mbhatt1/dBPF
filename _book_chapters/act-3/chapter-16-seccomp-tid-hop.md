@@ -25,14 +25,13 @@ A kprobe/kretprobe pair on `__secure_computing`, the function the kernel calls o
 [seccomp] ts=145204018501 pid=812 tgid=812 comm=python3      mode=FILTER target=1 nr/ret=-1 allow=0  # getpriority denied
 ```
 
-Two records per syscall: the kprobe entry (`nr/ret=-1`, `allow=0`) and the kretprobe tail carrying the real return value. The last line's `allow=0` on the tail is `SECCOMP_RET_ERRNO`; a `getpriority()` the filter rejected. That is a complete pre/post trace of every filter decision system-wide. For a defender this is useful. For a red-team it is a credentials-free enumeration of every seccomp policy running on the host, which filters are strict, which are permissive, and which syscalls each workload actually makes.
+Two records per syscall: the kprobe entry (`nr/ret=-1`, `allow=0`) and the kretprobe tail carrying the real return value. The last line's `allow=0` on the tail is `SECCOMP_RET_ERRNO`; a `getpriority()` the filter rejected. That is a complete pre/post trace of every filter decision system-wide. For a defender this is useful. For a red-team it is a credentials-free enumeration of every seccomp policy running on the host: which filters are strict, which are permissive, and which syscalls each workload actually makes.
 
 ## Why the "TID hop" is aspirational here
 
-The original plan was to swap the current thread's TID for a permitted sibling's TID, let the filter evaluate against the borrowed identity, and swap back. I could not implement that on the test kernel. Two independent blockers:
+The original plan was more ambitious: swap the current thread's TID for a permitted sibling's TID, let the filter evaluate against the borrowed identity, and swap back. I spent time on this. I could not implement it on the test kernel, and the reasons are worth being explicit about.
 
-1. `task->seccomp.mode` and `task->seccomp.filter` cannot be mutated from eBPF. The verifier rejects writes to `task_struct`. And the filter chain itself is a BPF program, not data; there is no in-place mutation primitive even on x86.
-2. `__secure_computing` is not in `/sys/kernel/debug/error_injection/list` on 6.12.54-linuxkit. `bpf_override_return` against it refuses to attach.
+Two independent blockers stopped it cold. First, `task->seccomp.mode` and `task->seccomp.filter` cannot be mutated from eBPF. The verifier rejects writes to `task_struct`. And the filter chain itself is a BPF program, not data; there is no in-place mutation primitive even on x86. Second, `__secure_computing` is not in `/sys/kernel/debug/error_injection/list` on 6.12.54-linuxkit. `bpf_override_return` against it refuses to attach; the helper returns `-EINVAL` and the load fails.
 
 So the override path is documented as dormant. The loader still records `override_attempted` on every evaluation, so on a kernel where `__secure_computing` is annotated with `ALLOW_ERROR_INJECTION`, swapping the kretprobe body to `bpf_override_return(ctx, 0)` turns this observer into an actual bypass. On this kernel it is not one. Calling what shipped a seccomp "bypass" would be a lie; it is a seccomp mapper.
 
@@ -71,5 +70,7 @@ The loader accepts `--tgid <pid>` (repeatable, max 64) to mark specific processe
 
 - Ubuntu 6.17.0-29-generic aarch64 (Lima VM): `__secure_computing` is not in `/sys/kernel/debug/error_injection/list`, so the override path is dormant; observation only. The `override_attempted` flag records intent.
 - Reading the syscall number from `__secure_computing` is arch-specific (arm64 stashes `nr` in `pt_regs->regs[8]`); the shipped program returns `-1` for `syscall_nr` on entry and uses the kretprobe's return value as the meaningful field.
+
+The title says "TID hop" but what shipped is closer to "TID watch." That gap between aspiration and implementation is its own lesson: the same capability envelope that makes the observer possible does not automatically make the bypass possible. Error-injection list membership is a real constraint, not a formality, and the kernel's refusal to grant it to `__secure_computing` is one of the places where the security model holds.
 
 > **See also**: [POC source; ch16-seccomp-tid-hop](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch16-seccomp-tid-hop) · Harness entry: `Poc("ch16", ...)` in `dBPF-pocs/harness/proof.py`

@@ -12,11 +12,13 @@ date: 2025-02-03
 
 I was trying to see how far a tail-called BPF program could walk `task_struct` from a tracepoint on `sys_enter_write` before the verifier got unhappy. The idea was simple: a regular `write()` syscall carrying a magic prefix fires the tracepoint, which tail-calls a second stage that reads kernel-internal credential fields and exfils them via ringbuf. One syscall, three kernel-private values out.
 
-What surprised me was how little the verifier pushed back. Reading `task->cred->uid`, `task->cred->euid`, `task->real_parent->comm` through `BPF_CORE_READ`; all accepted. What it rejected: writes to `task_struct` (e.g., attempting to swap `cred` pointers). So the pattern is exfil, not privilege escalation. That matches how BPF was designed: observation of kernel state is permitted; mutation of core task state is not.
+What surprised me was how little the verifier pushed back. Reading `task->cred->uid`, `task->cred->euid`, `task->real_parent->comm` through `BPF_CORE_READ` — all accepted. What it rejected: writes to `task_struct` (e.g., attempting to swap `cred` pointers). So the pattern is exfil, not privilege escalation. That matches how BPF was designed: observation of kernel state is permitted; mutation of core task state is not.
 
 The threat model target is the mundane end of the syscall allowlist. `write()` is in every seccomp profile. A filter that blocks `write()` breaks the process. A monitor that alerts on `write()` drowns in noise. A seccomp filter also cannot inspect the buffer contents; `seccomp_data` does not carry the user buffer pointer's dereferenced bytes. So a `write()` with a magic prefix in the buffer is an allowed syscall whose payload the filter never sees.
 
 ## Mechanism
+
+The design splits across two stages to stay within the verifier's stack budget — a constraint I hit painfully on the first attempt, as described below. Stage 1 handles the cheap work of detecting the magic prefix and dispatching; stage 2 handles the expensive work of walking `task_struct` and emitting the event.
 
 ### Stage 1; syscall tracepoint detects magic prefix
 
@@ -75,13 +77,15 @@ Stage 1 and stage 2 must have the same section type. My first attempt declared s
 
 ## Verifier friction during development
 
-Three things caused the most grief.
+Three things caused the most grief during development, each for a different reason.
 
 **Stack budget.** The first version put both stages in one handler. The verifier returned `-E2BIG` with `processed stack usage: 528`. The budget is 512. The staged design with per-CPU scratch solves this: the event struct lives in the map across the tail call, and neither stage has it on its stack.
 
 **Unbounded reads.** The first payload copy was `bpf_probe_read_user(&e->payload, len - 8, buf + 8)`. The verifier rejected with `R3 unbounded memory access` because `len - 8` is not proven bounded. The clamp `if (plen > sizeof(e->payload) - 1) plen = sizeof(e->payload) - 1` fixes it.
 
 **PTR_TO_BTF_ID_OR_NULL.** An early draft wrote `s->uid = t->cred->uid.val` directly. The verifier rejected with `R2 type=ptr_or_null_ expected=ptr_`. `BPF_CORE_READ` expands to `bpf_probe_read_kernel` calls that the verifier accepts without a NULL check.
+
+Each of these is a case where the verifier is enforcing real safety properties, not being unnecessarily difficult. The stack budget prevents unbounded stack growth across tail calls. The bounded-access requirement prevents out-of-bounds reads from user memory. The NULL check requirement prevents kernel crashes on NULL dereference. The friction is the verifier doing its job.
 
 ## Reproduction
 
@@ -108,6 +112,6 @@ The unprivileged process issues exactly one `write()`. From its own userspace pe
 
 ## Scope
 
-Class III primitive from chapter 20 (ringbuf exfil). Nothing in the kernel changes; three kernel-private fields are copied out. Seccomp that allows `write()` sees one syscall; that was the threat model of seccomp, and it still holds exactly as designed; this primitive just sits in the explicit gap.
+This is a Class III primitive from chapter 20 (ringbuf exfil). Nothing in the kernel changes; three kernel-private fields are copied out. Seccomp that allows `write()` sees one syscall — that was the threat model of seccomp, and it still holds exactly as designed; this primitive just sits in the explicit gap.
 
-The cooperative-attacker note: the triggering process must know the magic prefix. This is not a passive exfiltration from an uncooperating process. It is a covert channel between two processes that agreed on the protocol. The `write()` syscall itself completes normally; the tracepoint side-effect is invisible to the caller.
+The cooperative-attacker note: the triggering process must know the magic prefix. This is not a passive exfiltration from an uncooperating process. It is a covert channel between two processes that agreed on the protocol. The `write()` syscall itself completes normally; the tracepoint side-effect is invisible to the caller. The value of this primitive is not in its raw power — Chapter 1's LSM flipper is a stronger tool — but in its shape: it is completely invisible to any syscall-level filter and produces no kernel-side anomaly that a responder would notice without direct BPF program introspection.

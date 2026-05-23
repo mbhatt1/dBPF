@@ -20,7 +20,7 @@ Prior art on `cpu.stat` spoofing via BPF goes back to ~2021. The contribution he
 
 ## Mechanism
 
-Two syscall tracepoints do the work: `sys_enter_read` identifies reads of a file named `cpu.stat` (via `current->files->fdt->fd[fd]->f_path.dentry->d_name.name`) and stashes the user buffer pointer in a per-pid map; `sys_exit_read` checks the flag, and if the read succeeded, uses `bpf_probe_write_user` to overwrite the returned bytes with three lines of zeros.
+Two syscall tracepoints do the work. The `sys_enter_read` tracepoint identifies reads of a file named `cpu.stat` and stashes the user buffer pointer. The `sys_exit_read` tracepoint uses that stashed pointer to overwrite the returned bytes after the kernel has successfully completed the read. The critical window — between kernel finishing the copy and userspace regaining control — is where `bpf_probe_write_user` operates.
 
 ```c
 SEC("tracepoint/syscalls/sys_enter_read")
@@ -66,9 +66,7 @@ out:
 }
 ```
 
-Verifier notes from the investigation: unbounded string compare against `"cpu.stat"` is rejected; you have to `#pragma unroll` a bounded loop or use `streq_bounded` with a constant length.
-
-The five-hop struct walk; `task → files_struct → fdtable → file* array → file → path → dentry → qstr → name bytes`; requires CO-RE for portability. `struct files_struct`, `fdtable`, `file`, and `dentry` have minor layout shifts across kernel versions; CO-RE adjusts at load time. Without it you would hardcode offsets and get silent data corruption on any kernel where the layout differs.
+Two verifier constraints shaped the implementation significantly. First, unbounded string comparison against `"cpu.stat"` is rejected; you have to `#pragma unroll` a bounded loop or use `streq_bounded` with a constant length. Second, the five-hop struct walk — `task → files_struct → fdtable → file* array → file → path → dentry → qstr → name bytes` — requires CO-RE for portability. `struct files_struct`, `fdtable`, `file`, and `dentry` have minor layout shifts across kernel versions; CO-RE adjusts at load time. Without it you would hardcode offsets and get silent data corruption on any kernel where the layout differs.
 
 The filename comparison is basename-only. There is no check on the directory, filesystem type, or superblock magic. A file named `cpu.stat` anywhere on the system triggers the rewrite. A production version would add `f_path.mnt->mnt_sb->s_magic == CGROUP2_SUPER_MAGIC` (0x63677270) to eliminate false positives on non-cgroup filesystems. The POC omits this; false positives would be detectable noise in a real deployment.
 
@@ -92,13 +90,15 @@ cat /sys/fs/cgroup/cpu.stat          # zeros
 
 ## Detection
 
-- `bpf_probe_write_user` invocation triggers a `pr_warn_ratelimited` in dmesg at program load time: `<loader>[<pid>] is installing a program with bpf_probe_write_user helper that may corrupt user memory!`; one per loader process, not per invocation, not suppressible short of patching the kernel.
+- `bpf_probe_write_user` invocation triggers a `pr_warn_ratelimited` in dmesg at program load time: `<loader>[<pid>] is installing a program with bpf_probe_write_user helper that may corrupt user memory!` — one per loader process, not per invocation, not suppressible short of patching the kernel.
 - On kernels older than ~5.13, loading this helper also set `TAINT_USER` (bit 6, value 64) in `/proc/sys/kernel/tainted`. That taint call was removed in later kernels. On 6.12 the taint word is not set; dmesg is the primary signal.
 - `bpftool prog show | grep tracepoint`; a tracepoint on `sys_exit_read` with `bpf_probe_write_user` calls is an unusual fingerprint.
 - Out-of-band cross-check: compute per-cgroup CPU usage from `/proc/schedstat` and per-task `/proc/[pid]/stat`, compare against `cpu.stat`. Any drift larger than a few hundred microseconds per second of wall time is suspicious.
 
 ## Scope
 
-Class II primitive from chapter 20 (userspace buffer rewrite). Anything gated on `cpu.stat` for metrics (Prometheus node-exporter, Datadog, Netdata, k8s metrics-server, Sysdig, systemd's own `systemctl status`) is affected. Anything consulting the scheduler directly is not. The same shape trivially extends to `memory.current`, `io.stat`, and `cpu.pressure`.
+This is a Class II primitive from chapter 20 (userspace buffer rewrite). Anything gated on `cpu.stat` for metrics (Prometheus node-exporter, Datadog, Netdata, k8s metrics-server, Sysdig, systemd's own `systemctl status`) is affected. Anything consulting the scheduler directly is not. The same shape trivially extends to `memory.current`, `io.stat`, and `cpu.pressure`.
 
-systemd deserves a specific note. When `CPUAccounting=yes` is set in a unit file, `systemctl status` opens `cpu.stat` fresh on each invocation and would receive the zeroed buffer — that path was confirmed by the POC. However, systemd's internal `CPUQuota=` enforcement accounting uses a private file descriptor opened at service start; whether that fd path is intercepted by the same tracepoint hook was not tested. The claim that systemd's policy decisions misfire silently is therefore not demonstrated. What the POC shows is that any caller that opens `cpu.stat` fresh (such as `systemctl status`) sees zeroes; systemd's internal enforcement path requires separate verification. This attack surface is underappreciated in the public literature, which tends to focus on external monitoring agents.
+systemd deserves a specific note. When `CPUAccounting=yes` is set in a unit file, `systemctl status` opens `cpu.stat` fresh on each invocation and would receive the zeroed buffer — that path was confirmed by the POC. However, systemd's internal `CPUQuota=` enforcement accounting uses a private file descriptor opened at service start; whether that fd path is intercepted by the same tracepoint hook was not tested. The claim that systemd's policy decisions misfire silently is therefore not demonstrated. What the POC shows is that any caller that opens `cpu.stat` fresh (such as `systemctl status`) sees zeroes; systemd's internal enforcement path requires separate verification.
+
+What makes this primitive worth understanding alongside Chapters 1 and 3 is what it reveals about defense posture. Chapter 1 breaks access control enforcement. Chapter 3 breaks audit confidentiality. This chapter breaks neither — it only breaks the monitoring layer, the tooling that operators use to observe whether their enforcement is working. That is a different kind of damage, and arguably a quieter one.

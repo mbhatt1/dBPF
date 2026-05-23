@@ -18,7 +18,9 @@ Act 4 extended the scope along two axes without changing the taxonomy. The on-ho
 
 ## Class I; Return-value override
 
-The kernel's computation happened; the caller sees a different answer. Three implementations share this shape: `kretprobe + bpf_override_return` against a function on `/sys/kernel/debug/error_injection/list`, BPF LSM `fmod_ret` against an active security hook, and `XDP_DROP` at the driver rx path.
+The kernel did the work; the caller got lied to about the result. That is the cleanest summary of Class I, and it is also what makes the primitives in this class feel counterintuitive at first. Nothing went wrong inside the kernel. The kernel's data structures are correct. The security checks ran normally. The caller just received a different return value than the computation produced.
+
+Three implementations share this shape: `kretprobe + bpf_override_return` against a function on `/sys/kernel/debug/error_injection/list`, BPF LSM `fmod_ret` against an active security hook, and `XDP_DROP` at the driver rx path.
 
 Ch01 is the canonical Class I target; the POC attaches kprobe+kretprobe to `cap_capable`. On linuxkit, `cap_capable` is not on the error-injection allowlist, so `bpf_override_return` is a silent no-op — no capability flip occurs. What fires on linuxkit is signal delivery: `bpf_send_signal(SIGUSR1)` from the kretprobe when the observed deny lands on a targeted tgid. Marker: `CH01_WEAPON_PROVEN flips=0 signals=N`. The real capability flip requires the LSM `fmod_ret` variant, which skips on linuxkit (no active LSM hooks). Ch01 is therefore `observer` on linuxkit. Ch14 forges `sched_setscheduler` to pretend a `SCHED_FIFO` promotion succeeded; `SCHED_WEAPON_PROVEN flips=N`. Ch18 forges the `getuid`/`geteuid` syscall return to bypass the token check; `TOKEN_FORGE_PROVEN uid_forges=N`; with the `gid=1001` tell still visible. Ch12 (LSM `fmod_ret` on `kernel_read_file`) fires only on Fedora 42 QEMU where module signature enforcement is live. Ch06 (LSM `fmod_ret` on SELinux hooks) also fires only on Fedora QEMU where SELinux is enforcing.
 
@@ -26,7 +28,7 @@ The framing matters: this class is an illusion against userspace consumers of th
 
 ## Class II; Userspace buffer rewrite
 
-The kernel writes a correct result into a userspace buffer, and a BPF program mutates the buffer in the narrow window between kernel write and userspace read, using `bpf_probe_write_user` from a return probe.
+If Class I lies about the return value, Class II lies about the data itself. The kernel writes a correct result into a userspace buffer, and a BPF program mutates the buffer in the narrow window between kernel write and userspace read, using `bpf_probe_write_user` from a return probe. The caller gets back memory it believes the kernel filled in accurately.
 
 Ch05 zeroes the `memory.current` readout for a cgroup so accounting looks clean after real allocation; `CH05_PROVEN before_usage=X after_usage=0 zeroed=yes`. Ch10 reproduces the 2016-era `d_reclen` swallow against `getdents64` on a modern CO-RE kernel; `CLOAK_PROVEN before_count=4 after_count=2 hidden=2 stat_still_works=yes`. The `stat_still_works=yes` field is the honesty field: the file is still on disk; only readdir is blind.
 
@@ -36,13 +38,13 @@ When a BPF program using `bpf_probe_write_user` loads, the kernel emits a `pr_wa
 
 ## Class III; Ringbuf exfiltration
 
-Observation, not modification. A BPF program reads a kernel-internal structure that userspace could not otherwise see and copies it out-of-band through a ringbuf that the privileged loader drains. The victim syscall returns whatever it would have returned; the fact of the read is the primitive.
+Class III is the quiet one. No return values are touched. No buffers are rewritten. The kernel's access-control invariants hold perfectly. What Class III primitives do is read kernel-internal state — state that userspace could not otherwise see — and copy it out through a ringbuf that a privileged loader drains. The victim syscall returns whatever it would have returned. The only trace is a BPF program in the program table and a userspace process reading a ringbuf fd.
 
 Ch03 exfiltrates FUSE request metadata via fentry, bypassing the audit black hole. Ch04 leaks phantom-syscall fields. Ch08/ch08k copy keyring descriptions during `key_task_permission`. Ch09 cross-maps PID namespaces and confirms a host-PID kill. Ch11 builds a per-IRQ timing sidechannel with unique-event evidence. Ch16 reads a seccomp decision for a sibling TID; labeled `SIDECHANNEL` not `BYPASS` because seccomp's threat model explicitly excludes a privileged `CAP_BPF` sibling.
 
 Ch23 (Act 4) targets hardware-rooted key material: a kretprobe on `tpm2_unseal_trusted` is intended to copy plaintext key bytes out of the kernel's TPM unseal path to ringbuf. What was demonstrated on Ubuntu 6.17 aarch64 is kprobe attachment and entry-intercept events; `CH23_PROVEN hook=attached kind=kprobe-on-tpm2_unseal_trusted sym-confirmed`. No key bytes were present in the ringbuf — byte capture requires a host with a boot-registered TPM backend that actually exercises the unseal path.
 
-Class III's unifying property: the kernel's access-control invariants hold perfectly. What leaks is confidentiality of kernel state to a peer process holding `CAP_BPF`. There is no mitigation at runtime once the program has loaded; mitigation must be at the load boundary.
+Class III's unifying property: there is no mitigation at runtime once the program has loaded; mitigation must be at the load boundary.
 
 Detection is genuinely hard. The difference between a Datadog agent attaching to a tracepoint to count syscalls and a malicious agent attaching to the same tracepoint to exfiltrate credentials is not visible in `bpftool` output. The true defense is at the next layer up: who is running the privileged ringbuf drainer, and what do they do with what they drain?
 
@@ -64,7 +66,7 @@ Ch02 is the representative: ringbuf fires on `ovl_copy_up_one`, the racer writes
 
 ## Why the taxonomy matters for defenders
 
-Detection patterns are cleaner when built against the class, not the chapter.
+After twenty-two proven chapters, the taxonomy is not just an organizational convenience — it is the reason five detection signatures can cover everything in the book.
 
 A Class I signature is "syscall return disagrees with state readable via `/proc/self/status` or a follow-up check against `current->cred`"; the same signature catches ch06, ch14, and ch18 (real flips or forged returns); ch01 and ch07 require adjusted framing — ch01 delivers a signal rather than a flip on linuxkit, ch07 is synthetic. A Class II signature is "bpf_probe_write_user loaded"; one dmesg grep catches ch05 and ch10 with one rule. A Class III signature is ringbuf drain accompanied by a load event against a kernel-internal symbol. Class IV wants link-layer captures taken from the XDP peer, not from above the driver. Class V wants ringbuf correlation with a userspace racer process doing writes on a shared inode.
 
