@@ -21,19 +21,39 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
-from rich.console import Console
-from rich.layout import Layout
-from rich.live import Live
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
+# rich powers the live TUI, which is the default run. The --check and
+# --write-stats modes are stdlib-only so they run on a bare Python (e.g. CI),
+# so this import is optional; its absence only disables the live TUI.
+try:
+    from rich.console import Console
+    from rich.layout import Layout
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+
+    HAVE_RICH = True
+except ImportError:  # pragma: no cover - only hit where rich isn't installed
+    HAVE_RICH = False
 
 ROOT = pathlib.Path("/w")
 POCS_DIR = ROOT / "pocs"
 BTF = pathlib.Path("/sys/kernel/btf/vmlinux")
 KALLSYMS = pathlib.Path("/proc/kallsyms")
 
-console = Console()
+if HAVE_RICH:
+    console = Console()
+else:
+    class _PlainConsole:
+        """Stand-in used when rich is absent (--check / --write-stats paths).
+        Strips rich markup and prints; the live TUI is unavailable."""
+
+        _tag = re.compile(r"\[/?[a-z0-9 #._-]*\]")
+
+        def print(self, *args, **_kwargs):
+            print(*[self._tag.sub("", str(a)) for a in args])
+
+    console = _PlainConsole()
 
 
 @dataclass
@@ -1026,6 +1046,9 @@ def main():
     if args.check:
         sys.exit(run_check())
 
+    if not HAVE_RICH:
+        sys.exit("the live TUI requires the 'rich' package (pip install rich); "
+                 "use --check or --write-stats, which need no third-party deps")
     _run_live()
 
 
