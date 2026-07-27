@@ -167,7 +167,7 @@ Accept does not mean ignore. It means:
 
 ## Closing
 
-None of this is novel. Inventory the capability holders, restrict who can load programs, baseline what is loaded, audit the syscall to a sink the attacker cannot reach. The techniques have been available for years. The justification for investing in them is what the twenty-four attack chapters provide: a concrete, reproducible demonstration that each step an operator skips is a primitive an attacker already has working.
+None of this is novel. Inventory the capability holders, restrict who can load programs, baseline what is loaded, audit the syscall to a sink the attacker cannot reach. The techniques have been available for years. The justification for investing in them is what the preceding attack chapters provide: a concrete, reproducible demonstration that each step an operator skips is a primitive an attacker already has working.
 
 ---
 

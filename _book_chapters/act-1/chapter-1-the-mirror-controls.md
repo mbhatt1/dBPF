@@ -26,7 +26,7 @@ If any of the three is missing, the loader emits a skip line and exits. There is
 
 ## Mechanism
 
-The kernel-side program is 97 lines. Before diving into the code, a word on what makes this work: the `lsm/` program type is not a passive observer. Unlike a kprobe that fires and returns without affecting execution, an fmod_ret LSM hook has its return value injected back into the LSM chain. That single architectural fact is what the chapter turns on.
+The kernel-side program is 97 lines. The one fact everything else rests on: the `lsm/` program type is not a passive observer. A kprobe fires and returns without touching execution; an fmod_ret LSM hook has its return value injected back into the LSM chain. That difference is the whole chapter.
 
 The load-bearing parts are the SEC string and the return-value convention:
 

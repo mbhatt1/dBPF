@@ -19,7 +19,7 @@ The original plan was canonical: hook `mod_verify_sig` (or `kernel_read_file`) a
 
 First, my linuxkit test kernel doesn't enforce module signatures. `CONFIG_MODULE_SIG_FORCE` is off; the signature hooks are present but advisory. Nothing ever rejects, so there's nothing to flip. Debian's stock cloud-image kernels behave the same way — signatures are verified and logged, not enforced. On these kernels the LSM hook attaches, and silently never fires on a denial path, because no denial path exists.
 
-Second, and more fatal: `insmod` of a non-ELF blob fails at ELF validation inside the module loader, long before any signature code runs. Even on a kernel that *does* fail-close on signatures, the simplest test payload — a file that isn't a valid ELF — never reaches `mod_verify_sig`. I was hooking a check the kernel wasn't performing on the code path I was triggering. Classic "wrong enforcement point" mistake, inverted: I was defending the wrong point, while pretending to attack it.
+Second, and more fatal: `insmod` of a non-ELF blob fails at ELF validation inside the module loader, long before any signature code runs. Even on a kernel that *does* fail-close on signatures, the simplest test payload — a file that isn't a valid ELF — never reaches `mod_verify_sig`. I was hooking a check the kernel wasn't performing on the code path I was triggering — a classic wrong-enforcement-point mistake.
 
 When both of those settled in, I stopped trying to make the LSM variant work and went looking at the error-injection list.
 
@@ -43,9 +43,10 @@ Before the probe attaches, `insmod` on a non-ELF file returns rc=1 with `ENOEXEC
 
 ```
 [ch12s] FORGE pid=<N> comm=insmod syscall=finit_module orig_ret=-8 -> 0
+CH12_CONCEPT_PROVEN syscall_override_landed=yes module_actually_loaded=no
 ```
 
-`-8` is `-ENOEXEC`. The kernel said "that isn't a valid ELF." Userspace saw `0`.
+`-8` is `-ENOEXEC`. The kernel said "that isn't a valid ELF." Userspace saw `0`. The marker keeps the two facts side by side: the override landed, and the module still didn't load.
 
 ## The userspace-illusion framing, made explicit
 
@@ -56,6 +57,8 @@ The module does not load. The kernel still rejects the bytes at ELF validation (
 That's the whole primitive. It fools any orchestrator or shell script that calls `finit_module(2)` and treats rc=0 as proof-of-load without cross-checking kernel state. It defeats `insmod x.ko && echo loaded`. It does not defeat `insmod x.ko && stat /sys/module/x`. Any orchestrator that post-checks `/proc/modules` catches it on the first call.
 
 This is the same shape as ch14 (sched_setscheduler return forgery) and ch18 (getuid/geteuid return forgery). Find a syscall entry on the error-injection allowlist, attach a kretprobe, rewrite the return. The value depends entirely on whether the defender treats the syscall return as load-bearing.
+
+The real integrity flip — the one that actually lets an unsigned module through — is a separate program, the LSM variant, and it needs an enforcing kernel (`CONFIG_MODULE_SIG_FORCE=y`) with BPF LSM in the boot string. The book chapter walks through it; this post is about the cheap illusion that works everywhere the syscall entry is on the error-injection list.
 
 ## Detection
 

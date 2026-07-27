@@ -57,7 +57,7 @@ Ship the records to a tamper-evident sink — remote syslog, a write-only append
 
 ## Per-primitive mitigations
 
-Each class from Chapter 20 has a primary control and a set of audit fallbacks. The table compresses what the book spent eighteen chapters demonstrating:
+Each class from Chapter 20 has a primary control and a set of audit fallbacks. The table compresses what the book's attack chapters demonstrated:
 
 | Class | Representative chapters | Key mitigation |
 |-------|-------------------------|----------------|
@@ -71,7 +71,7 @@ Two observations about this table. First, Class III and Class V share a mitigati
 
 ## Closing
 
-None of this is novel. Inventory the capability holders, restrict who can load programs, baseline what is loaded, audit the syscall to a sink the attacker cannot reach. The techniques have been available for years. The justification for investing in them is what the eighteen attack chapters provide: a concrete, reproducible demonstration that each step an operator skips is a primitive an attacker already has working.
+None of this is novel. Inventory the capability holders, restrict who can load programs, baseline what is loaded, audit the syscall to a sink the attacker cannot reach. The techniques have been available for years. The justification for investing in them is what the preceding attack chapters provide: a concrete, reproducible demonstration that each step an operator skips is a primitive an attacker already has working.
 
 ---
 **Related material**

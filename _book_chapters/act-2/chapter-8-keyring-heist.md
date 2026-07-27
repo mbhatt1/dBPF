@@ -26,9 +26,9 @@ libbpf: prog 'lsm_key_perm': -- BEGIN PROG LOAD LOG --
 arg#0 reference type('FWD key') size cannot be determined: -22
 ```
 
-`struct key` is fully defined in `include/linux/key.h`. It is fully defined in my generated `vmlinux.h`. The verifier does not care about either of those. It cares about the BTF metadata for the LSM hook's parameter, and in the BTF I had, that parameter was a `BTF_KIND_FWD`; a forward declaration with no size. fmod_ret type-matching refuses to bind an argument whose size it cannot determine. That refusal is correct. It is also absolute.
+`struct key` is fully defined in `include/linux/key.h`. It is fully defined in my generated `vmlinux.h`. The verifier does not care about either of those. It cares about the BTF metadata for the LSM hook's parameter, and in the BTF I had, that parameter was a `BTF_KIND_FWD`; a forward declaration with no size. fmod_ret type-matching refuses to bind an argument whose size it cannot determine. That refusal is correct, and there is no flag to override it.
 
-I spent a while trying to see whether I could rebuild vmlinux BTF with pahole in a different order. I did not get there. The hook's argument BTF is baked into the kernel image. The LSM path was dead on this kernel image, full stop.
+I spent a while trying to rebuild vmlinux BTF with pahole in a different order, and didn't get there — the hook's argument BTF is baked into the kernel image. The LSM path was simply dead on this image.
 
 ## What loaded
 
@@ -84,7 +84,7 @@ int lsm_key_permission(unsigned long long *ctx)
 }
 ```
 
-This loads successfully because the verifier never sees a typed access to the FWD `key_ref_t` at ctx[0]. The trade-off: the LSM variant cannot read the key's serial number or type name. Those require dereferencing `key_ref`, which lives at ctx[0]. But the LSM variant can mutate; it can flip deny to allow via fmod_ret. The kprobe variant can observe the full key metadata. Two variants, complementary capabilities.
+This loads successfully because the verifier never sees a typed access to the FWD `key_ref_t` at ctx[0]. The trade-off: the LSM variant cannot read the key's serial number or type name, because those require dereferencing `key_ref`, which lives at ctx[0]. All it can observe are the untyped scalar slots — the requested permission (`need_perm`) and the accumulated chain result (`ret`). Both variants are observers: neither mutates a decision. The LSM program reads the verdict the chain already produced and returns it unchanged; the honest marker records this as `CH08_CONCEPT_PROVEN` with `syscall_rc_unchanged=yes`. The two variants are complementary in what they can see, not in what they can do to the outcome — the kprobe reads full key metadata, the LSM variant only the permission request and result.
 
 ## Detection
 
@@ -92,6 +92,6 @@ Kprobe attachment on `key_task_permission` is itself the signal. `bpftool prog s
 
 There is no runtime signal from the reads themselves. `BPF_CORE_READ` is a kernel-memory copy into BPF map space and leaves no audit trace. The primitive's footprint is entirely at attach.
 
-The broader lesson from this chapter is about verifier posture. The LSM path was clean in intent but dead because of a BTF FWD in the kernel image; a detail entirely outside my control. The kprobe path was noisier in principle but let the same data through, because kprobes accept opaque register arguments and let the program cast at will. When one attach point refuses to cooperate with the type system, the adjacent one with weaker typing invariants often will. That trade-off — precision versus permissiveness — shows up again in chapters that follow.
+The lesson here is about verifier posture. The LSM path was clean in intent but dead on this kernel because of a BTF FWD in the image — a detail entirely outside my control. The kprobe path was noisier in principle, but it let the same metadata through, because kprobes hand you opaque register arguments and let the program cast at will. When one attach point won't cooperate with the type system, an adjacent one with weaker typing often will. That precision-versus-permissiveness trade-off recurs in later chapters.
 
 > **See also**: [POC source; ch08-keyring-heist-kprobe](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch08-keyring-heist-kprobe) · Harness entry: `Poc("ch08k", ...)` in `dBPF-pocs/harness/proof.py`

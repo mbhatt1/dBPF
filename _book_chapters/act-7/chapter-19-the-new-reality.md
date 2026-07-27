@@ -8,15 +8,15 @@ date: 2025-12-31
 
 > **See also**: [Blog post]({{ site.baseurl }}/epilogue-the-new-reality.html) · [Harness](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
-Twenty-three POCs, three kernels (Docker Desktop linuxkit 6.12 aarch64 primary; Fedora 42 aarch64 QEMU 6.14 secondary; Ubuntu 6.17.0-29-generic aarch64 Lima VM for final verification), one harness. This chapter draws a line under what was actually shown and what was not.
+The catalog holds 26 registered PoCs, verified against one reference kernel (Ubuntu 6.17.0-29-generic aarch64, run in a Lima VM) driven by a single reproducible harness. This chapter draws a line under what was actually shown and what was not.
 
-**Final tally across all environments: 22 PROVEN, 1 SKIP.** The skip is ch24; `CONFIG_BPF_TOKEN=n` on all available kernels. That is a build-configuration gap, not a code failure. Every other primitive fired in at least one environment.
+**The honest tally: of the 26 registered PoCs, 25 reproduce in the reference environment and one skips.** The skip is ch24, because `CONFIG_BPF_TOKEN=n` on every kernel I had access to — a build-configuration gap, not a code failure. Everything else fires. (Two earlier drafts, ch13 powercap/RAPL and ch17 ACPI-WMI, were retired rather than carried as x86-only stubs; they are not in the catalog and are not counted here. See the skip accounting in Chapter 21 for why.)
 
 ## What was demonstrated
 
-It is worth being precise about what "demonstrated" means before listing the results. Each POC in this book emits a proof marker — a line printed to stdout before the loader tears down — that encodes quantitative evidence. No marker means the primitive did not fire. No special interpretation required.
+It is worth being precise about what "demonstrated" means. Each PoC emits a proof marker — a line printed to stdout before the loader tears down — that carries quantitative evidence. If the marker prints, the primitive fired; if it doesn't, it didn't. There is nothing to interpret.
 
-Eighteen POCs produce `_PROVEN` proof markers on linuxkit. Two more (ch06 LSM, ch12 LSM) skip on linuxkit at runtime because linuxkit does not run SELinux enforcing and is not built with `CONFIG_MODULE_SIG_FORCE`; both fire on the Fedora 42 aarch64 QEMU VM secondary. Two Act 4 PoCs (ch23, ch25) are PROVEN on the Ubuntu 6.17 aarch64 Lima VM; ch23 via kprobe attachment with entry intercept events, ch25 via XDP mock IMDSv2 on `lo`. One (ch24) skips in all environments.
+Twenty-five of the 26 produce `_PROVEN` markers in the reference environment. Only ch24 skips, and it skips for a reason the marker states plainly (`CH24_SKIP reason=...`): the kernel was not built with `CONFIG_BPF_TOKEN`, so `BPF_TOKEN_CREATE` is not available to test against. A few primitives are worth flagging for how much their reference-environment result depends on the surface being present: ch06 and ch12 only flip a *real* decision where SELinux is enforcing or module-signature enforcement is on, ch23 demonstrates kprobe attachment and entry-intercept events on the TPM unseal path without capturing key bytes (that needs a boot-registered TPM backend), and ch25 runs against a mock IMDSv2 exchange on `lo` rather than a live cloud metadata endpoint. None of those are skips; they reproduce as registered. Chapter 21 accounts for each caveat.
 
 The proof-marker format is deliberately boring. Every proven run emits a line of the form `CHxx_*_PROVEN <key>=<value> ...` on stdout before the loader is torn down. A sample:
 
@@ -29,9 +29,9 @@ ch18:  TOKEN_FORGE_PROVEN uid_forges=1
 ch25:  CH25_PROVEN access_key_captured=yes token_captured=yes role=demo-role
 ```
 
-The keys inside each marker are quantitative. `before_count=4 after_count=2 hidden=2` carries the BEFORE and AFTER state explicitly; the numbers have to tally. `dropped=2 tcpdump=0` is the Class-IV honesty field; two packets vanished while tcpdump saw zero. If the marker prints, the primitive fired. If it does not, it did not.
+The keys inside each marker are quantitative. `before_count=4 after_count=2 hidden=2` carries the BEFORE and AFTER state explicitly, and the numbers have to tally. `dropped=2 tcpdump=0` is the Class IV honesty field: two packets vanished while tcpdump saw zero.
 
-Chapter 20 walks the proven cases and organizes them into five primitive classes. Chapter 21 accounts for every skip. If you read nothing else after this, read those two.
+Chapter 20 walks the reproduced cases and organizes them into five primitive classes. Chapter 21 accounts for the single skip and the environment caveats. If you read nothing else after this, read those two.
 
 ## What was not demonstrated
 
@@ -42,7 +42,7 @@ Just as important as what fired is what did not — and why.
 - **No BPF verifier invariant was bypassed.** Every program that attached was accepted by the verifier doing its job. Where the verifier refused a program, the chapter records the refusal.
 - **No privilege escalation into `CAP_BPF`.** Every chapter assumed the attacker already held `CAP_BPF` and usually `CAP_PERFMON` or `CAP_SYS_ADMIN`. How that capability was obtained is outside the scope of this book.
 
-The story is not "an attacker got root." The story is "an attacker who was already granted a privileged capability used it in ways the capability grants." If your operational concern is "who on my fleet holds that capability"; and it should be; chapter 22 is the playbook.
+The story is not "an attacker got root." The story is "an attacker who already held a privileged capability used it in ways that capability grants." If your operational concern is who on your fleet holds that capability — and it should be — chapter 22 is the playbook.
 
 ## The correct mental model
 
@@ -54,9 +54,9 @@ The story is not "an attacker got root." The story is "an attacker who was alrea
 
 3. **Copy the decision out-of-band.** A BPF program reads kernel-internal state through BTF-assisted pointer walks and ships it to a privileged userspace drainer via ringbuf. The kernel does not know the drain happened. Class III primitives.
 
-XDP and LSM `fmod_ret` are specializations of these three. XDP drops and redirects are a packet-path variant of the override motion (Class IV). Class V; watch a kernel event, race userspace to the outcome; composes all three motions into a pattern rather than a primitive in its own right.
+XDP and LSM `fmod_ret` are specializations of these three. XDP drops and redirects are a packet-path variant of the override motion (Class IV). Class V — watch a kernel event, then race userspace to the outcome — composes all three motions into a pattern rather than being a primitive in its own right.
 
-Every chapter in the book is a demonstration that granting `CAP_BPF` grants access to all three motions across a representative surface of kernel subsystems. Act 4 extends that surface to hardware-rooted key material and off-host cloud-metadata boundaries. The taxonomy is what chapter 20 formalizes. Reread it if you forgot.
+Every chapter is a demonstration that granting `CAP_BPF` grants all three motions across a representative sample of kernel subsystems. Act 4 extends that surface to hardware-rooted key material and off-host cloud-metadata boundaries. Chapter 20 formalizes the taxonomy.
 
 ## Six recommendations for operators
 
@@ -73,21 +73,21 @@ None of these controls is novel. All are under-deployed in practice. That gap is
 
 ## The durable artifact
 
-Individual primitives in this book will age as kernels move. Error-injection lists will gain or lose symbols. BTF will land on more platforms. LSM policies will become more common. The thing that should outlive the POCs is the five-class taxonomy in chapter 20:
+Individual primitives will age as kernels move. Error-injection lists will gain or lose symbols. BTF will land on more platforms. LSM policies will become more common. The thing that should outlive the PoCs is the five-class taxonomy in chapter 20:
 
-- Class I; return-value override at the API boundary.
-- Class II; userspace buffer rewrite.
-- Class III; ringbuf exfiltration of kernel-internal state.
-- Class IV; packet-path interception.
-- Class V; kernel-event-triggered userspace racer.
+- Class I — return-value override at the API boundary.
+- Class II — userspace buffer rewrite.
+- Class III — ringbuf exfiltration of kernel-internal state.
+- Class IV — packet-path interception.
+- Class V — kernel-event-triggered userspace racer.
 
-Three motions run through all five: override the API return, rewrite the user buffer, copy the decision out-of-band. If you read only one chapter, read 20.
+Three motions run through all five: override the API return, rewrite the user buffer, copy the decision out of band. If you read only one chapter, read 20.
 
 ## Prior art
 
 Most primitives here have prior art in rootkit POCs, conference talks, and tools like `bcc/capable.py`. The contribution is a reproducible harness, an honest taxonomy, and explicit scope; not novelty. Ch15's cross-namespace XDP redirect is a hostile reuse of a pattern Cilium has shipped since ~2019. Ch18's `getuid` forgery is the eBPF restatement of a bug class older than eBPF.
 
-The harness is a Python driver (`dBPF-pocs/harness/proof.py`) that runs all POCs sequentially in a sealed container, regenerating `vmlinux.h` from the running kernel's BTF for each. One Dockerfile, one command, one exit status. Setting up a reproducible BPF harness on aarch64 linuxkit took a week; running it once it works takes minutes. That repeatability is the artifact.
+The harness is a Python driver (`dBPF-pocs/harness/proof.py`) that runs all PoCs sequentially in a sealed container, regenerating `vmlinux.h` from the running kernel's BTF for each. One Dockerfile, one command, one exit status. Getting a reproducible BPF harness working on aarch64 took a week; running it once it works takes minutes. That repeatability is the artifact.
 
 ---
 

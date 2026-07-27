@@ -21,7 +21,7 @@ A factual correction from the earlier draft: the hooks are not at `iterate_dir` 
 
 Two syscall tracepoints plus a HASH map of filenames to hide:
 
-- **`tp/syscalls/sys_enter_getdents64`** — stash the userspace `dirp` pointer and bytes-so-far in a per-`pid_tgid` hash map.
+- **`tp/syscalls/sys_enter_getdents64`** — stash the userspace `dirp` pointer in a per-`pid_tgid` hash map (`active_calls`).
 - **`tp/syscalls/sys_exit_getdents64`** — walk the returned stream, match each `d_name` against the `hidden` map, and on a hit rewrite the predecessor's `d_reclen` to swallow the matched entry.
 
 What `bpf_probe_write_user` can and can't do here is worth being explicit about. It can write to the current task's userspace pages because on syscall exit the buffer is still resident and owned by the caller. It can't re-scan indefinitely because the verifier caps loops — the POC bounds the dirent walk to 64 entries per call, which is the ceiling I could convince the verifier to accept with the linear probe pattern. Directories with more than 64 entries per `getdents64` return can leak names past the bound. A large directory split across multiple syscalls is fine because each call gets its own bounded walk.
@@ -33,10 +33,10 @@ SEC("tp/syscalls/sys_exit_getdents64")
 int handle_exit(struct trace_event_raw_sys_exit *ctx)
 {
     u64 id = bpf_get_current_pid_tgid();
-    struct dctx *d = bpf_map_lookup_elem(&active, &id);
+    struct dctx *d = bpf_map_lookup_elem(&active_calls, &id);
     if (!d) return 0;
     long ret = ctx->ret;
-    if (ret <= 0) { bpf_map_delete_elem(&active, &id); return 0; }
+    if (ret <= 0) { bpf_map_delete_elem(&active_calls, &id); return 0; }
 
     u64 dirp = d->dirp;
     long bpos = 0;
@@ -71,7 +71,7 @@ int handle_exit(struct trace_event_raw_sys_exit *ctx)
         }
         bpos += rlen;
     }
-    bpf_map_delete_elem(&active, &id);
+    bpf_map_delete_elem(&active_calls, &id);
     return 0;
 }
 ```
@@ -121,6 +121,6 @@ The honest limits of the cloak:
 ---
 
 **Related material**
-- Full chapter with investigation notes: [Chapter 11 — Inode Cloak]({{ site.baseurl }}/book/act-2/chapter-10-inode-cloak.html)
+- Full chapter with investigation notes: [Chapter 10 — Inode Cloak]({{ site.baseurl }}/book/act-2/chapter-10-inode-cloak.html)
 - POC source: [dBPF-pocs/pocs/ch10-inode-cloak/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch10-inode-cloak)
 - Harness entry in `proof.py`: `Poc("ch10", ...)`

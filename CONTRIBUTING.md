@@ -72,6 +72,12 @@ The harness's `proof_marker` regex in `dBPF-pocs/harness/proof.py` must
 accept both forms. A PoC that cannot fire on a given kernel must emit
 `CHNN_SKIP` with a specific reason; silent failure is not acceptable.
 
+The marker token must be a **specific** `CHxx_..._PROVEN` token — the
+chapter id, optionally with a variant suffix (for example `CH25_PROVEN`, or
+`CH06_SYNTH_PROVEN` for the ch06 synthetic-scaffold variant). Never match on
+a bare `_PROVEN` substring: the regex has to be anchored on the chapter's own
+token so one PoC's marker can never be counted for another.
+
 **Harness registration** — every PoC needs a `Poc(...)` entry in
 `dBPF-pocs/harness/proof.py`:
 

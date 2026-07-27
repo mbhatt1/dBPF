@@ -126,6 +126,6 @@ In another shell, run `sudo bash trigger.sh`. Send `SIGINT` to detach cleanly.
 - Userspace illusion only. No kernel access check is bypassed. This is intentional; the POC demonstrates the class of bug, which is identical in shape to the historical "trust-the-query, not-the-cred" CVEs.
 - Requires `CAP_BPF` + `CAP_PERFMON` (or root). Inside Docker, run with `--privileged --pid=host`.
 
-The reason to spend a chapter on a decades-old bug class is that the class survives. Sendmail is gone. The scripts that run as root checks remain; in CI pipelines, in startup scripts, in monitoring agents that decide whether to escalate an alert. The eBPF version does not introduce new vulnerability surface; it introduces a new and invisible way to exploit the old one.
+The reason to spend a chapter on a decades-old bug class is that the class survives. Sendmail is gone; the root-checks-by-query pattern is not — it's still in CI pipelines, startup scripts, and monitoring agents deciding whether to escalate an alert. The eBPF version adds no new vulnerability surface. It adds an invisible way to exploit the old one.
 
 > **Proof status**: **PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM), 2026-05-20. Proof marker: `TOKEN_FORGE_PROVEN`.

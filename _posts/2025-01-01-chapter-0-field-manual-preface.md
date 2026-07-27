@@ -35,7 +35,7 @@ Two additional classes specialize these — **Class IV** (XDP packet-path interc
 
 ## The operational lesson
 
-CAP_BPF grants every motion above. Granting it to a workload means granting that workload the ability to read arbitrary kernel memory, override the return of any function on `/sys/kernel/debug/error_injection/list`, rewrite userspace memory in certain syscall windows, and take over netdev ingress via XDP. That is the capability operating as documented. Surprise is proportional to how much of modern observability silently depends on it.
+CAP_BPF grants every motion above. Granting it to a workload means granting that workload the ability to read arbitrary kernel memory, override the return of any function on `/sys/kernel/debug/error_injection/list`, rewrite userspace memory in certain syscall windows, and take over netdev ingress via XDP. That is the capability operating exactly as documented. The gap is not in the kernel; it is in how routinely observability tooling asks for the grant, and how rarely that ask gets weighed against what it confers.
 
 ---
 

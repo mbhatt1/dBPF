@@ -56,6 +56,10 @@ int BPF_PROG(rt_fork, struct task_struct *parent, struct task_struct *child)
 }
 ```
 
+## Acting on the mapping
+
+Observation is useful on its own, but the POC also shows the mapping can be acted on from inside the kernel. Gated by a one-entry `cfg` control map, the program can call `bpf_send_signal(SIGUSR1)` the moment a task crosses a PID-namespace boundary, in addition to emitting the event. From `sched_process_fork` the raw tracepoint's `current` is the *parent*, so that path signals the parent; from `kprobe/copy_namespaces` the `current` task is the one being copied into the new namespace, so the same helper hits the child directly. The `struct evt`'s `signal_sent` field lets the loader tell "armed and delivered" from "observer only," and the harness accepts `SIGUSR1_SENT` alongside `CH09_PROVEN` / `PID_NS_ESCAPE_PROVEN` as proof.
+
 ## Reproduction
 
 The bundled `trigger.sh` drives a BEFORE/AFTER:
@@ -91,6 +95,6 @@ Prior art worth citing: bpftrace ships `pidnss.bt` and similar scripts that do e
 ---
 
 **Related material**
-- Full chapter with investigation notes: [Chapter 10 — PID Namespace Doppelgänger]({{ site.baseurl }}/book/act-2/chapter-9-pid-namespace-doppelg-nger.html)
+- Full chapter with investigation notes: [Chapter 9 — PID Namespace Doppelgänger]({{ site.baseurl }}/book/act-2/chapter-9-pid-namespace-doppelg-nger.html)
 - POC source: [dBPF-pocs/pocs/ch09-pid-doppel/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch09-pid-doppel)
 - Harness entry in `proof.py`: `Poc("ch09", ...)`

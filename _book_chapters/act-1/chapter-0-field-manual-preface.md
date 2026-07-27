@@ -47,7 +47,7 @@ The distribution-wide `unprivileged_bpf_disabled` flip to `2` in 2021 set the cu
 
 ## The capability grant, in practice
 
-`CAP_BPF + CAP_PERFMON` is the standard grant pattern. Cilium's docs recommend it. Pixie's helm chart sets it. Tetragon asks for it on default install. It is also the exact grant required for every technique in chapters 1 through 18 that does not explicitly call out a need for `CAP_SYS_ADMIN`.
+`CAP_BPF + CAP_PERFMON` is the standard grant pattern. Cilium's docs recommend it. Pixie's helm chart sets it. Tetragon asks for it on default install. It is also the exact grant required for every technique in this book that does not explicitly call out a need for `CAP_SYS_ADMIN`.
 
 ```bash
 # Typical observability DaemonSet
@@ -81,7 +81,7 @@ cat /sys/kernel/debug/error_injection/list | head
 # do_renameat2 EI_ETYPE_NULL
 ```
 
-The annotated set is notably skewed toward syscall entries and filesystem operations. `cap_capable` is not annotated. `security_file_permission` is not annotated. Every security-decision function is deliberately excluded. This was the original failure mode I hit in Chapter 1; until I found a different primitive at the same hook point.
+The annotated set is heavily skewed toward syscall entries and filesystem operations. `cap_capable` is not annotated. `security_file_permission` is not annotated. Every security-decision function is deliberately excluded. That is the wall I hit first in Chapter 1, before I found a different primitive at the same hook point.
 
 The workflow before writing a POC: check `/sys/kernel/debug/error_injection/list`. If the target is not there, rewrite the technique around observation rather than override.
 
@@ -89,7 +89,7 @@ The workflow before writing a POC: check `/sys/kernel/debug/error_injection/list
 
 CAP_BPF grants every motion in the taxonomy above. Granting it to a workload means granting that workload the ability to read arbitrary kernel memory, override the return of any function on the error-injection list, rewrite userspace memory in certain syscall windows, and take over netdev ingress via XDP.
 
-That is the capability operating as documented. Surprise is proportional to how much of modern observability silently depends on it — and how rarely that dependency surfaces in the conversation about whether to grant it.
+That is the capability operating exactly as documented. The gap is not in the kernel; it is in how routinely observability tooling asks for the grant, and how rarely that ask gets weighed against what it actually confers.
 
 ## The target environment
 
@@ -116,13 +116,13 @@ The harness at `dBPF-pocs/harness/proof.py` orchestrates the test matrix. For ea
 
 Start with the chapter you are worried about. The taxonomy in Chapter 20 is the navigation aid. Chapter 21 is the honest-failures list.
 
-**If you are an operator** deciding whether to grant `CAP_BPF`: read this chapter, skip to Chapter 22 for the defender playbook, then walk Chapters 1 through 18.
+**If you are an operator** deciding whether to grant `CAP_BPF`: read this chapter, skip to Chapter 22 for the defender playbook, then work through the technique chapters.
 
-**If you are a researcher** extending the taxonomy: read Chapter 0, then Chapter 20 for the seven-class framing, then the failure catalog in Chapter 21.
+**If you are a researcher** extending the taxonomy: read Chapter 0, then Chapter 20 for the full class framing, then the failure catalog in Chapter 21.
 
 **If you are on a red team**: pick the chapter whose primitive matches your goal, check Chapter 21 to see if that primitive's failure mode applies to your target kernel, then read the chapter.
 
-The honest form of this book's claim is narrower than "CAP_BPF grants enormous power." The honest form is: CAP_BPF grants the exact power listed in the taxonomy, subject to the failure modes listed in Chapter 21. Some techniques that sound powerful are silently no-ops. Some techniques that sound restricted are fully operational. That distinction is why the harness exists — and it is what I hope makes each chapter that follows more useful than a simple list of capabilities ever could be.
+The honest form of this book's claim is narrower than "CAP_BPF grants enormous power." It is this: CAP_BPF grants exactly the power listed in the taxonomy, subject to the failure modes listed in Chapter 21. Some techniques that sound powerful turn out to be silent no-ops. Some that sound restricted are fully operational. Telling those two apart is the whole point of the harness, and it is why the chapters that follow are worth more than a bare list of capabilities.
 
 ---
 

@@ -12,17 +12,17 @@ date: 2026-04-17
 
 > **Proof status**: ATTACHMENT PROVEN; byte capture not demonstrated. On Ubuntu 6.17.0-29-generic aarch64 (Lima VM, Apple Silicon): BPF kprobe attachment to `tpm2_unseal_trusted` is confirmed, and entry intercept events fire (`kind=entry`, `hook=attached`). The Lima VM has no boot-registered TPM backend; `keyctl add trusted` is unavailable; so the actual primitive — reading unsealed key bytes from `struct trusted_key_payload` (`key_bytes_captured=N`) — was never exercised on any tested environment. The harness automated-proof regex requires `CH23_PROVEN key_bytes_captured=\d+`; that marker was never produced. **Full proof of key byte capture requires a host with a boot-registered TPM 2.0 backend (real hardware TPM or `swtpm` initialized at boot).** What is confirmed: the symbol is present, the kprobe attaches, and entry events fire. What is not confirmed: that unsealed key bytes are readable via this path in practice.
 
-Chapter 8 reads keys out of the kernel keyring during a permission check. This chapter reads keys out of a `struct trusted_key_payload` during the kernel's own consumption of a TPM-unsealed secret. Same primitive class. Different surface. The surface matters because it is the one most operators have filed under "we're good here."
+Chapter 8 read keys out of the kernel keyring during a permission check. This chapter reads them out of a `struct trusted_key_payload` while the kernel consumes a TPM-unsealed secret. It is the same class of primitive at a different surface, and the surface is the interesting part: it is the one most operators have already filed under "we're good here."
 
 The ops literature says: seal your keys to the TPM. Full-disk encryption with a TPM-sealed master key, systemd credentials unsealed at boot, IMA-EVM HMAC keys tied to platform state, SSH host keys wrapped in a `trusted` key type; all of these rest on the claim that the sealing key does not leave the TPM. That claim is true. What is also true is that the sealed blob gets unsealed whenever the legitimate consumer needs the plaintext, and the plaintext then sits in kernel memory while the consumer uses it. The window between unseal and use is what this chapter attacks.
 
-The TPM did what it was supposed to do. The kernel did what it was supposed to do. The primitive reads memory the kernel itself holds. The title *Unseal Heist* is deliberate: it is not a TPM bypass. It is a read of bytes that the TPM, correctly, handed to the kernel when the kernel asked for them.
+None of this is a TPM bypass. The TPM behaved correctly, the kernel behaved correctly, and the primitive simply reads memory the kernel already holds. The title *Unseal Heist* is meant literally: the bytes are taken after the TPM correctly handed them to the kernel that asked for them, not because a seal was broken.
 
 ## What the primitive produces
 
 The BPF program attaches a `kretprobe` to `tpm2_unseal_trusted` in `security/keys/trusted-keys/trusted_tpm2.c`. The kretprobe fires immediately after the function has populated the `struct trusted_key_payload` with the plaintext bytes returned from `TPM2_CC_Unseal`. It reads `payload->key[0..payload->key_len]` via `bpf_probe_read_kernel` into a ringbuf event. Userspace drains the ringbuf and prints the captured bytes.
 
-Nineteen lines of BPF. The primitive is a retargeting of the Chapter 8 keyring-heist pattern at a different attach point that sees a different kind of payload-bearing struct. The structural simplicity is the point.
+It is about nineteen lines of BPF: the Chapter 8 keyring-heist pattern pointed at a different attach point, one that happens to see a different payload-bearing struct. There is nothing elaborate about it, which is exactly why it is worth taking seriously.
 
 On a kernel with a fully registered TPM backend, the loader produces:
 
@@ -62,7 +62,7 @@ Three dominant consumers on a real fleet:
 
 **systemd credentials (`systemd-creds encrypt --with-key=tpm2`).** Database passwords, API tokens, TLS private keys, Kerberos service credentials; anything that used to live in a protected file increasingly lives in a sealed credential, unsealed at service startup.
 
-For each of these, an operator who has followed the defender playbook in chapter 22; `CAP_BPF` restricted to observability agents, TPM-sealed keys for everything sensitive, full audit on `bpf(2)`; still has an observability agent on the box that holds `CAP_BPF`, and `CAP_BPF` reaches this primitive.
+For each of these, take an operator who has followed the defender playbook in Chapter 22 to the letter: `CAP_BPF` restricted to observability agents, TPM-sealed keys for everything sensitive, full audit on `bpf(2)`. That operator still has an observability agent on the box holding `CAP_BPF`, and `CAP_BPF` reaches this primitive.
 
 ## How the kernel ends up with the plaintext
 
@@ -183,7 +183,7 @@ It does not extract keys that the TPM protects for in-hardware use. Keys loaded 
 
 It does not work on kernels without `CONFIG_TRUSTED_KEYS=y` or without the TPM2 backend compiled in. linuxkit 6.12 aarch64 has neither; the primary harness environment always skips this PoC.
 
-What it does: reads the plaintext bytes the TPM just produced, during the window they live in kernel memory, from an authorized caller's context. The word *heist* is accurate because the bytes are taken, not because a safe was broken. Act 4 is about what happens to the key once it leaves the TPM — and this chapter establishes the intercept point. The intercept itself awaits a test environment with a functioning TPM backend; the kprobe is positioned and confirmed; the proof of byte capture remains open.
+What it does do: read the plaintext bytes the TPM just produced, during the window they live in kernel memory, from an authorized caller's context. Act 4 is about what happens to the key once it leaves the TPM, and this chapter establishes the intercept point. The intercept still awaits a test environment with a working TPM backend: the kprobe is positioned and its attachment confirmed; proof of byte capture remains open.
 
 ## Harness entry
 

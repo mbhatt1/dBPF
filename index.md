@@ -31,14 +31,12 @@ This book is a catalogue of what `CAP_BPF` plus `CAP_PERFMON` (or `CAP_SYS_ADMIN
 10. [Chapter 10: Inode Cloak]({{ site.baseurl }}/book/act-2/chapter-10-inode-cloak.html) — the `d_reclen` swallow trick for hiding directory entries.
 11. [Chapter 11: IRQ Affinity Chaos]({{ site.baseurl }}/book/act-2/chapter-11-irq-affinity-chaos.html) — steering interrupts away from the cores that would notice.
 12. [Chapter 12: eBPF Signed-Driver Swap]({{ site.baseurl }}/book/act-2/chapter-12-ebpf-signed-driver-swap.html) — substituting driver behaviour without touching the signed module.
-13. [Chapter 13: Powercap Override]({{ site.baseurl }}/book/act-2/chapter-13-powercap-override.html) — rewriting the energy ceiling the firmware thought it owned.
 
 ## Act III — Total Control
 
 14. [Chapter 14: SCHED_FIFO Impersonator]({{ site.baseurl }}/book/act-3/chapter-14-sched-fifo-impersonator.html) — claiming realtime priority without the paperwork.
 15. [Chapter 15: NetNS VLAN Ghost]({{ site.baseurl }}/book/act-3/chapter-15-netns-vlan-ghost.html) — VLAN-tagged exfil across network namespaces.
 16. [Chapter 16: Seccomp TID Hop]({{ site.baseurl }}/book/act-3/chapter-16-seccomp-tid-hop.html) — escaping a seccomp filter by hopping threads.
-17. [Chapter 17: ACPI WSMI Ping]({{ site.baseurl }}/book/act-3/chapter-17-acpi-wsmi-ping.html) — talking to firmware through a path the LSM never learned to watch.
 18. [Chapter 18: eBPF Token Bypass]({{ site.baseurl }}/book/act-3/chapter-18-ebpf-token-bypass.html) — what the token model actually gates and what it does not.
 19. [Chapter 19: What This Book Actually Demonstrated]({{ site.baseurl }}/book/act-7/chapter-19-the-new-reality.html) — the closing argument before the autopsy.
 

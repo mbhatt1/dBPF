@@ -1,11 +1,14 @@
 # dBPF-pocs — Defensive eBPF POCs
 
-Twenty-five self-contained eBPF proof-of-concept programs covering every
-chapter of the dBPF research notebook. Each POC is built libbpf-skeleton
-+ CO-RE style and is verified on Ubuntu 6.17.0-29-generic aarch64 (Lima VM,
-Apple Silicon): 24 proven, 1 skip (ch24 — CONFIG_BPF_TOKEN=n), 0 failures.
-Earlier results on Docker Desktop's linuxkit 6.12 aarch64 and Fedora 42
-aarch64 QEMU VM are preserved in CHANGELOG.md. Each POC lives in
+Self-contained eBPF proof-of-concept programs, one or more per chapter of
+the dBPF field manual, each built libbpf-skeleton + CO-RE style. The
+harness registers **26 PoC entries** — primaries plus hook variants; the
+machine-generated breakdown is in
+[`harness/REGISTRY_STATS.md`](harness/REGISTRY_STATS.md). On the reference
+environment — Ubuntu 6.17.0-29-generic aarch64 (Lima VM, Apple Silicon) —
+25 reproduce and one skips (ch24, `CONFIG_BPF_TOKEN=n`), with 0 failures.
+Earlier results on Docker Desktop's linuxkit 6.12 aarch64 and the Fedora 42
+aarch64 QEMU VM are preserved in CHANGELOG.md. Each PoC lives in
 `pocs/<chXX>/` with the same layout:
 
 ```
@@ -27,7 +30,9 @@ pocs/chXX-name/
 
 The `Variants` column lists additional sibling directories beside the
 primary POC (e.g. an `-lsm` hook variant). See the [Variants](#variants)
-section below for what each suffix means.
+section below for what each suffix means. The "Effect on this kernel"
+column reflects the linuxkit 6.12 run; see Chapter 20 for the full
+per-primitive taxonomy and the reference-environment results.
 
 | # | Chapter | Technique | Hook(s) | Effect on this kernel | One-line evidence | Variants |
 |---|---------|-----------|---------|------------------------|-------------------|----------|
@@ -44,11 +49,9 @@ section below for what each suffix means.
 | 10 | Inode Cloak           | Hide directory entries from `getdents64` | `tp/syscalls/sys_enter_getdents64`,`sys_exit_getdents64` | Mutates kernel behavior (entries dropped) | `[cloak] hide ino=… name=evil` | — |
 | 11 | IRQ Affinity Chaos    | Per-CPU IRQ counter, drift detector | `kprobe` `handle_irq_event*` | Observer-only on this kernel | `[irq] cpu=3 irq=27 count=15412` | — |
 | 12 | Signed-Driver Swap    | Force `mod_verify_sig` to succeed | `kprobe`/`kretprobe` `mod_verify_sig`,`load_module`,`module_sig_check` | Observer-only on this kernel (override gated) | `[modsig] mod_verify_sig name=evilmod ret=-EKEYREJECTED` | `+ -lsm`, `+ -syscall` |
-| 13 | Powercap Override     | Trap powercap registrations + max-power writes | `kprobe` powercap/thermal | Observer-only on this kernel | `[pcap] set_max_power_uw zone=… val=…` | `+ -analog` |
 | 14 | SCHED_FIFO Impersonator | Force-grant `SCHED_FIFO` policy via override | `kprobe`/`kretprobe` `__arm64_sys_sched_setscheduler` | Mutates kernel behavior (override on allowlist) | `[fifo] FLIP tgid=… policy=1 ret=-EPERM -> 0` | — |
 | 15 | netns VLAN Ghost      | XDP redirect into an isolated netns w/ VLAN tag | `SEC("xdp")` | Mutates kernel behavior (XDP_REDIRECT) | `[vlanghost] redir dev=… vlan=42` | — |
 | 16 | seccomp TID Hop       | Bypass seccomp via TID-based override | `kprobe`/`kretprobe` `__secure_computing` | Mutates kernel behavior (override on allowlist) | `[seccomp] FLIP tid=… ret=-EPERM -> 0` | — |
-| 17 | ACPI WSMI Ping        | Hook `acpi_evaluate_object` + firmware loader | `kprobe` ACPI/firmware | Observer-only on this kernel (no ACPI) | `[acpi] evaluate_object name=\\_SB_.WMI` | `+ -analog` |
 | 18 | Token Bypass          | Forge `getuid`/`geteuid` to 0 via override | `kretprobe` `__arm64_sys_getuid`,`__arm64_sys_geteuid` | Mutates kernel behavior (override on allowlist) | `[token] FORGE pid=… comm=sh getuid: 1000 -> 0 (root)` | — |
 | 23 | TPM Unseal Heist      | Capture plaintext trusted-key payload after TPM unseal | `kprobe/kretprobe` `tpm2_unseal_trusted` | Observer (kprobe confirmed attached; TPM keyctl path skipped — no boot-time TPM in VM) | `CH23_PROVEN hook=tpm2_unseal_trusted` | — |
 | 24 | BPF Token Delegation  | Delegate BPF load rights to unprivileged process via BPF token | `BPF_TOKEN_CREATE` syscall + bpffs `delegate_*` mounts | **SKIP** — `CONFIG_BPF_TOKEN=n` on all tested kernels; requires kernel ≥ 6.9 with token support explicitly enabled | `CH24_SKIP reason=CONFIG_BPF_TOKEN=n` | — |
@@ -83,12 +86,10 @@ evidence format; only the hook family (or the simulation layer) differs.
   where the newer hook type isn't available. Present for: ch08.
 - **`-syscall`** — Syscall-entry variant (tracepoint / syscall-level
   rather than an internal kernel symbol). Present for: ch12.
-- **`-synthetic`** / **`-analog`** — Stand-ins for subsystems that
-  simply don't exist on linuxkit. They mock the inputs the real hook
-  would see so the detection logic can be exercised end-to-end without
-  the backing hardware or LSM. Present for: ch06 (`-lsm-synthetic`,
-  SELinux absent), ch13 (`-analog`, no powercap hardware), ch17
-  (`-analog`, no ACPI).
+- **`-synthetic`** — A stand-in for a subsystem that isn't active on the
+  test kernel. It mocks the inputs the real hook would see so the
+  detection logic can be exercised end-to-end without the backing LSM.
+  Present for: ch06 (`-lsm-synthetic`, where SELinux isn't active).
 
 Each variant directory follows the same layout as the primary POC and
 has its own `README.md` describing what it attaches to and why.
@@ -96,14 +97,12 @@ has its own `README.md` describing what it attaches to and why.
 ## Prerequisites
 
 - **macOS + Apple Silicon + Lima VM** running Ubuntu with kernel 6.17 aarch64
-  (the verified environment: 24/25 proven), or
+  (the reference environment: 25 of 26 reproduce, ch24 skips), or
 - **macOS + Docker Desktop** (linuxkit 6.12 aarch64), or
 - **Any Linux** with privileged Docker access and a kernel ≥ 5.13 with
   CO-RE / BTF (`/sys/kernel/btf/vmlinux` present).
 
-Notes for the Lima VM path: ch15 requires `--net=host`; ch17 requires a
-custom `fw_trigger.ko` kernel module; ch13 trigger.sh builds a kernel module
-to call `powercap_register_control_type` (RAPL is x86-only).
+Notes for the Lima VM path: ch15 requires `--net=host`.
 
 You need the base image once:
 
@@ -157,9 +156,6 @@ every loader).
   with a minimal audit subsystem. POCs targeting those (03, 06, parts
   of 12) only achieve their full effect on a distro kernel where the
   subsystem is actually wired up.
-- **No real ACPI / powercap / thermal hardware** in linuxkit — POCs 13
-  and 17 are observer-only because the kernel never invokes the
-  hooked code paths.
 - **No incremental migrations.** Each POC's `build/` is regenerated
   from scratch by `make clean && make`.
 

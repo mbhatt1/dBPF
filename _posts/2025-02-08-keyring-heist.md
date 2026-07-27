@@ -61,7 +61,7 @@ int BPF_KPROBE(kp_key_task_permission)
 }
 ```
 
-That's the read. `keyctl list @u` in one shell produced ringbuf events in the other: serial numbers, type names (`user`, `keyring`, `logon`), descriptions. The payload chase (`k->payload.data[0]` for `user`-type keys) resolves cleanly via CO-RE against the 6.12 aarch64 vmlinux.h I generated on the test box. I did not mutate any permission decision; the kernel's access check ran to completion and returned its real answer.
+That's the read. `keyctl list @u` in one shell produced ringbuf events in the other: serial numbers, type names (`user`, `keyring`, `logon`), descriptions. This is key metadata — the identifying fields attached to each key — not the cryptographic payload the key protects. Reading the actual payload bytes (`struct key_payload`) is a separate, harder problem and isn't attempted here. I did not mutate any permission decision; the kernel's access check ran to completion and returned its real answer.
 
 ## What I gave up to get it
 

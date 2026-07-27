@@ -56,7 +56,7 @@ Calling this a "VLAN escape" is overselling it. The correct framing: **if an att
 - `BPF_MAP_TYPE_DEVMAP tx_port`; slot 0 holds the egress ifindex for `bpf_redirect_map`.
 - `BPF_MAP_TYPE_ARRAY cfg`; slot 0 is the mode flag, slot 1 an audit copy of the egress ifindex.
 
-It is worth showing the kprobe sketch that did not work, because the "rewrite skb namespace metadata" intuition is natural and wrong for two independent reasons: the verifier rejects skb writes from kprobe context, and the symbol is not error-injectable. XDP is the correct landing site, and understanding why the first intuition fails makes it clear why XDP is not just a workaround but the only honest attach point for this primitive.
+It's worth showing the kprobe sketch that did not work, because the "rewrite skb namespace metadata" intuition is natural and wrong for two independent reasons: the verifier rejects skb writes from kprobe context, and the symbol is not error-injectable. XDP is the correct landing site — not a workaround for a blocked kprobe but the place where this primitive actually belongs.
 
 ```c
 SEC("kprobe/__netif_receive_skb_core")
@@ -118,6 +118,6 @@ docker run --rm --privileged --pid=host --net=host \
 - The verifier rejects `skb` writes from kprobe context, so the chapter's original `__netif_receive_skb_core` mutation cannot be done directly. XDP at the NIC edge is the equivalent primitive.
 - `arping` and `ping` will not generate the covert frames reliably; the trigger uses an embedded AF_PACKET sender for deterministic VLAN-4242 emission with inner ethertype `0x88b5`.
 
-The broader point this chapter leaves with: VLAN segmentation is an enforcement mechanism that lives above XDP in the packet-processing hierarchy. Defenses at that layer inherit that limitation. Anything that reads the wire before the bridge cannot be stopped by the bridge.
+The broader point: VLAN segmentation enforces at the bridge, which sits above XDP in the packet-processing path. Any control at that layer inherits the limitation — something that reads the wire before the bridge cannot be stopped by the bridge.
 
 > **Proof status**: **PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM), 2026-05-20. Proof marker: `VLAN_GHOST_CROSSNS_PROVEN redirect_count=3`.

@@ -13,7 +13,7 @@ poc_dir: dBPF-pocs/pocs/ch15-netns-vlan-ghost
 
 My first attempt at this chapter was a kprobe on `__netif_receive_skb_core` that rewrote the namespace metadata on an incoming `skb` and let the kernel re-receive it on the other side. The verifier rejected it. Writes to `sk_buff` from kprobe context are not permitted, and `__netif_receive_skb_core` is not in the error-injection list, so there is no legal way to intercept-and-divert from that attach point on 6.12.
 
-The working form of the same primitive is XDP plus `bpf_redirect_map` into a DEVMAP slot whose target ifindex lives in a different network namespace. None of this is novel: Cilium has been using exactly this pattern since around 2019 for legitimate cross-namespace forwarding in its service-mesh datapath. The only contribution here is pointing it in a hostile direction. VLAN-based segmentation was never designed to resist host-level XDP — an XDP program is a peer to the netdev, not above it.
+The working form of the same primitive is XDP plus `bpf_redirect_map` into a DEVMAP slot whose target ifindex lives in a different network namespace. None of this is novel: Cilium has used exactly this pattern since around 2019 for legitimate cross-namespace forwarding in its service-mesh datapath. The only contribution here is pointing it in a hostile direction. VLAN-based segmentation was never designed to resist host-level XDP — an XDP program is a peer to the netdev, not above it.
 
 ## Mechanism
 

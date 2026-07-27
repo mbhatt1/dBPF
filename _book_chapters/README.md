@@ -89,9 +89,12 @@ cleanup entry in `../CHANGELOG.md` for the history.
 `_book_chapters/` is the **source of truth** for the manuscript. `_posts/` is the
 **web-rendered form** published through Jekyll. `../dBPF-pocs/` is the **working
 companion code**; every chapter has at least one runnable PoC, and several
-have LSM, kprobe, fentry, syscall, or analog variants that expand the same
-technique along a different kernel surface.
+have LSM, kprobe, fentry, or syscall variants that expand the same technique
+along a different kernel surface.
 
 When prose and code diverge, update the chapter here first, then propagate to
 `_posts/` and, if the technique itself changed, to the corresponding PoC. The
 `.audit/chapter-xref-audit.md` report (if present) enumerates known drift.
+
+Registered PoC counts are authoritative in `../dBPF-pocs/harness/REGISTRY_STATS.md`
+(26 registered entries: 15 real, 8 observer, 3 illusion, 0 analog).

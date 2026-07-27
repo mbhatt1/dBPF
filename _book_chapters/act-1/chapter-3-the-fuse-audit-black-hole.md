@@ -102,7 +102,7 @@ The fallback is narrower than the primary path: it denies the dmesg / kmsg read 
 
 ## Observation as exfil
 
-With override dead, the primitive that remains is observation. On first read that sounds like a consolation prize. On closer inspection it is the more interesting result.
+With override dead, observation is the primitive that remains. That sounds like a consolation prize, and it isn't — it turns out to be the more interesting result.
 
 `CAP_AUDIT_READ` plus `NETLINK_AUDIT` multicast membership is what normally grants access to audit records. A sidecar with `CAP_BPF` alone cannot join the audit multicast group. But with `SEC("fentry/audit_log_end")`, that same sidecar reads every record the kernel produces. An unprivileged peer with `CAP_BPF` sees what only `CAP_AUDIT_READ` normally sees.
 

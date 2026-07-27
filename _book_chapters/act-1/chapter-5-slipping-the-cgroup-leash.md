@@ -10,17 +10,17 @@ date: 2025-02-05
 
 > **Proof status**: `ch05-cgroup-leash` has been proved on Ubuntu 6.17.0 aarch64 (Lima VM, kernel 6.17.0-29-generic). No code changes were required.
 
-The target here is not the cgroup enforcement path. It is the readback path. The scheduler keeps accounting CPU correctly and keeps throttling the cgroup if it exceeds its quota. What changes is what `cat /sys/fs/cgroup/cpu.stat` returns to the reader.
+The target isn't the cgroup enforcement path — it's the readback path. The scheduler keeps accounting CPU correctly and keeps throttling the cgroup when it blows past its quota. All that changes is what `cat /sys/fs/cgroup/cpu.stat` hands back to the reader.
 
-The POC waits for a process to open `cpu.stat`, waits for the subsequent `read()` to complete, then overwrites the returned bytes in userspace memory with a constant string of zeros before the reader's `read()` returns. The kernel read path ran. The scheduler provided the real numbers. Those bytes were copied to the user buffer. Between that copy and the reader regaining control, a BPF program running in the `sys_exit_read` tracepoint overwrote the user buffer.
+The POC waits for a process to open `cpu.stat`, lets the following `read()` complete, and then overwrites the returned bytes in userspace with a fixed string of zeros before the reader's `read()` returns. The kernel read path ran. The scheduler supplied the real numbers. Those bytes landed in the user buffer. Then, in the sliver of time between that copy and the reader getting control back, a BPF program on the `sys_exit_read` tracepoint clobbered the buffer.
 
-The reader sees `usage_usec 0`. Any tool that opens `cpu.stat` fresh on each poll — Prometheus node-exporter, Datadog, Netdata, cAdvisor, k8s metrics-server — would receive the zeroed buffer; this is an untested projection, not a verified observation, since the POC only confirmed the rewrite against `cat`. Tools that use inotify, persistent mmap, or kernel-side accounting bypasses may behave differently. The scheduler still throttles the cgroup. The observation plane and the control plane have been split.
+The reader sees `usage_usec 0`. Any tool that opens `cpu.stat` fresh on each poll — Prometheus node-exporter, Datadog, Netdata, cAdvisor, k8s metrics-server — would get the zeroed buffer. That's a projection, not a verified result: the POC only confirmed the rewrite against `cat`, and tools using inotify, a persistent mmap, or a kernel-side accounting path may behave differently. The scheduler still throttles the cgroup. What you've done is pry the observation plane apart from the control plane.
 
 Prior art on `cpu.stat` spoofing via BPF goes back to ~2021. The contribution here is a harness with clean BEFORE/AFTER and honest detection notes.
 
 ## Mechanism
 
-Two syscall tracepoints do the work. The `sys_enter_read` tracepoint identifies reads of a file named `cpu.stat` and stashes the user buffer pointer. The `sys_exit_read` tracepoint uses that stashed pointer to overwrite the returned bytes after the kernel has successfully completed the read. The critical window — between kernel finishing the copy and userspace regaining control — is where `bpf_probe_write_user` operates.
+Two syscall tracepoints do the work. `sys_enter_read` spots reads of a file named `cpu.stat` and stashes the user buffer pointer. `sys_exit_read` picks that pointer back up and overwrites the returned bytes once the kernel has finished the read. `bpf_probe_write_user` runs in the window between the kernel finishing its copy and userspace regaining control.
 
 ```c
 SEC("tracepoint/syscalls/sys_enter_read")
@@ -66,7 +66,7 @@ out:
 }
 ```
 
-Two verifier constraints shaped the implementation significantly. First, unbounded string comparison against `"cpu.stat"` is rejected; you have to `#pragma unroll` a bounded loop or use `streq_bounded` with a constant length. Second, the five-hop struct walk — `task → files_struct → fdtable → file* array → file → path → dentry → qstr → name bytes` — requires CO-RE for portability. `struct files_struct`, `fdtable`, `file`, and `dentry` have minor layout shifts across kernel versions; CO-RE adjusts at load time. Without it you would hardcode offsets and get silent data corruption on any kernel where the layout differs.
+Two verifier constraints shaped the implementation. First, an unbounded string comparison against `"cpu.stat"` gets rejected — you have to `#pragma unroll` a bounded loop or use `streq_bounded` with a constant length. Second, the struct walk from `task → files_struct → fdtable → file* array → file → path → dentry → qstr → name bytes` needs CO-RE to stay portable. `struct files_struct`, `fdtable`, `file`, and `dentry` all shift layout slightly across kernel versions, and CO-RE fixes up the offsets at load time. Hardcode them instead and you get silent data corruption the moment the layout differs.
 
 The filename comparison is basename-only. There is no check on the directory, filesystem type, or superblock magic. A file named `cpu.stat` anywhere on the system triggers the rewrite. A production version would add `f_path.mnt->mnt_sb->s_magic == CGROUP2_SUPER_MAGIC` (0x63677270) to eliminate false positives on non-cgroup filesystems. The POC omits this; false positives would be detectable noise in a real deployment.
 
@@ -101,4 +101,4 @@ This is a Class II primitive from chapter 20 (userspace buffer rewrite). Anythin
 
 systemd deserves a specific note. When `CPUAccounting=yes` is set in a unit file, `systemctl status` opens `cpu.stat` fresh on each invocation and would receive the zeroed buffer — that path was confirmed by the POC. However, systemd's internal `CPUQuota=` enforcement accounting uses a private file descriptor opened at service start; whether that fd path is intercepted by the same tracepoint hook was not tested. The claim that systemd's policy decisions misfire silently is therefore not demonstrated. What the POC shows is that any caller that opens `cpu.stat` fresh (such as `systemctl status`) sees zeroes; systemd's internal enforcement path requires separate verification.
 
-What makes this primitive worth understanding alongside Chapters 1 and 3 is what it reveals about defense posture. Chapter 1 breaks access control enforcement. Chapter 3 breaks audit confidentiality. This chapter breaks neither — it only breaks the monitoring layer, the tooling that operators use to observe whether their enforcement is working. That is a different kind of damage, and arguably a quieter one.
+It's worth putting this next to Chapters 1 and 3. Chapter 1 breaks access-control enforcement; Chapter 3 breaks audit confidentiality. This one breaks neither. It only breaks the monitoring layer — the tooling operators lean on to check whether their enforcement is even working. Same category of harm, quieter delivery.
