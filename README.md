@@ -1,6 +1,6 @@
 # dBPF — what CAP_BPF actually permits, demonstrated
 
-**Status:** 25 PoCs registered · 24 proven on Ubuntu 6.17 aarch64 · 1 honest skip (ch24, CONFIG_BPF_TOKEN=n) · 0 failures · verification environment: Ubuntu 6.17.0-29-generic aarch64, Lima VM on Apple Silicon.
+**Status:** 26 PoCs registered. In the reference environment (Ubuntu 6.17.0-29-generic aarch64, Lima VM on Apple Silicon), ch24 is a documented skip (`CONFIG_BPF_TOKEN=n`) and the other 25 reproduce end-to-end. Per-run verdicts live in `/tmp/proof-result.json`.
 
 ## What this is
 
@@ -25,7 +25,7 @@ dBPF/
 ├── Gemfile             Ruby dependencies for the Jekyll build.
 └── dBPF-pocs/          Companion PoC collection and verification harness.
     ├── pocs/           Per-chapter PoC code (BPF C + userspace loader + trigger + README).
-    │   ├── ch01-*/     …through ch25-*, one directory per PoC (25 directories total).
+    │   ├── ch01-*/     …through ch25-*; several chapters ship more than one variant (30 dirs, 26 registered).
     ├── harness/        Python harness (proof.py), Dockerfile, run.sh entrypoint.
     ├── qemu/           Fedora 42 aarch64 QEMU VM config and cloud-init seed.
     ├── shared/         Shared Makefile rules (common.mk) and specs.
@@ -34,7 +34,7 @@ dBPF/
     └── run_all.sh      Convenience wrapper that runs both harnesses in sequence.
 ```
 
-Each per-chapter PoC under `dBPF-pocs/pocs/chNN-*/` contains four load-bearing files: a BPF C program, a userspace loader (C or Python) that loads + attaches + consumes the ringbuf, a `trigger.sh` that provokes the primitive and prints the proof marker, and a `README.md` that explains the hook target, the expected BEFORE/AFTER state, and the failure modes.
+The directory tree (30 dirs) maps to 26 registered PoC entries in `proof.py`: several chapters ship more than one variant (for example ch06 has three: the real LSM variant, the observer variant, and a synthetic LSM scaffold), and a few variant directories are not registered in the harness. Each PoC directory under `dBPF-pocs/pocs/chNN-*/` contains four load-bearing files: a BPF C program, a userspace loader (C or Python) that loads, attaches, and consumes the ringbuf, a `trigger.sh` that provokes the primitive and prints the proof marker, and a `README.md` that explains the hook target, the expected BEFORE/AFTER state, and the failure modes.
 
 ## Quick start
 
@@ -48,8 +48,8 @@ cd dBPF-pocs && bash harness/run.sh
 # 3. Run on Ubuntu 6.17 aarch64 (Lima VM on Apple Silicon — verified environment).
 #    Provision a Lima VM with Ubuntu 24.10+ and kernel 6.17, then inside the VM:
 cd dBPF-pocs && bash run_all.sh
-#    ch01–ch18, ch23, ch25 prove end-to-end; ch24 skips (CONFIG_BPF_TOKEN=n).
-#    ch15 requires --net=host; ch17 requires fw_trigger.ko kernel module.
+#    25 of the 26 registered PoCs prove end-to-end; ch24 skips (CONFIG_BPF_TOKEN=n).
+#    ch15 requires --net=host for XDP to reach host network interfaces.
 
 # 4. Run the secondary harness (Fedora 42 aarch64 QEMU VM).
 #    Requires qemu-system-aarch64, xorriso, and a Fedora 42 cloud image.
@@ -66,24 +66,22 @@ The primary harness builds a container image, mounts the PoC tree at `/w`, and r
 
 The book is tested against multiple environments. The Ubuntu 6.17 aarch64 Lima VM is the primary verified environment as of the latest verification pass.
 
-**Verified: Ubuntu 6.17.0-29-generic aarch64 (Lima VM, Apple Silicon).** Full kernel feature set: CO-RE, BTF, ringbuf, kprobe, kretprobe, raw_tracepoint, XDP, LSM hooks. Result: **24 of 25 PoCs proven, 1 skip (ch24)**. Notable environment-specific notes:
+**Verified: Ubuntu 6.17.0-29-generic aarch64 (Lima VM, Apple Silicon).** Full kernel feature set: CO-RE, BTF, ringbuf, kprobe, kretprobe, raw_tracepoint, XDP, LSM hooks. Result: **25 of the 26 registered PoCs reproduce end-to-end, ch24 skips (CONFIG_BPF_TOKEN=n)**. Notable environment-specific notes:
 - ch01: `bpf_send_signal(SIGUSR1)` confirmed — capability denial delivers a real signal to the target process.
-- ch06: `ch06-silence-selinux-lsm-synthetic` variant used on kernels without SELinux active; directly attaches to `lsm.s/file_open` without requiring `selinux_loaded()`.
+- ch06: `ch06-silence-selinux-lsm-synthetic` (ch06s) is a registered synthetic LSM scaffold used on kernels without SELinux active; it attaches to `lsm.s/file_open` directly without requiring `selinux_loaded()` and emits the `CH06_SYNTH_PROVEN` marker.
 - ch10: BPF map renamed `active` → `active_calls` to avoid collision with a vmlinux.h kernel enum.
-- ch13: trigger.sh builds a `powercap_register_control_type` kernel module (aarch64 has no RAPL); the analog variant uses `bpf_probe_write_user` on userspace sensor reads.
 - ch15: Requires `--net=host` for XDP to access host network interfaces.
-- ch17: Requires custom `fw_trigger.ko` kernel module (`test_firmware` is not loadable on this kernel).
 - ch23: kprobe on `tpm2_unseal_trusted` confirmed attached; TPM keyctl path skipped (no boot-time TPM in VM).
 - ch25: XDP IMDS harvest confirmed — captures mock credentials on loopback.
 - ch24: Skipped — `CONFIG_BPF_TOKEN=n` on all tested kernels; requires kernel 6.9+ with BPF token support explicitly enabled.
 
-**Primary: Docker Desktop linuxkit 6.12 aarch64.** A minimal linuxkit kernel with `CONFIG_BPF=y`, `CONFIG_BPF_LSM=y`, `CONFIG_DEBUG_INFO_BTF=y`, `CONFIG_BPF_KPROBE_OVERRIDE=y`, and `CONFIG_FUNCTION_ERROR_INJECTION=y`. 18 of 23 PoCs fire here. The five that do not fire on linuxkit skip by design: ch23 (no `/dev/tpm0` in linuxkit), ch24 (no delegated-userns substrate), ch25 (no IMDS mock until the Fedora VM provides one), plus the two LSM-dependent PoCs (ch06 LSM and ch12 LSM) whose `bpf,...` boot-time LSM order is only present in the secondary.
+**Primary: Docker Desktop linuxkit 6.12 aarch64.** A minimal linuxkit kernel with `CONFIG_BPF=y`, `CONFIG_BPF_LSM=y`, `CONFIG_DEBUG_INFO_BTF=y`, `CONFIG_BPF_KPROBE_OVERRIDE=y`, and `CONFIG_FUNCTION_ERROR_INJECTION=y`. Most of the registered PoCs fire here. The ones that do not skip by design: ch23 (no `/dev/tpm0` in linuxkit), ch24 (no delegated-userns substrate), ch25 (no IMDS mock until the Fedora VM provides one), plus the LSM-dependent PoCs (ch06 LSM and ch12 LSM) whose `bpf,...` boot-time LSM order is only present in the secondary.
 
 **Secondary: Fedora 42 aarch64 QEMU VM.** Kernel 6.14 with BPF LSM in the boot-time LSM list, SELinux enforcing, and module-signature enforcement. Used for the PoCs that cannot land on linuxkit: ch06 LSM `fmod_ret`, ch12 LSM, and ch25's mock IMDSv2 endpoint on `lo`. The VM is driven by `run-qemu-tests.sh` on the host and `qemu-runner.sh` inside the guest; per-PoC artifacts cross the boundary via virtio-9p.
 
 **ch24 — production-reviewed but consistently skipped.** The code is correct and the harness entry is honest: `BPF_TOKEN_CREATE` requires `CONFIG_BPF_TOKEN=y`, which is absent on the tested kernel builds (linuxkit 6.12, Fedora 42 6.14, Ubuntu 6.17). The primitive is architecturally sound; ch24 emits `CH24_SKIP reason=...` rather than claiming a fire it did not produce.
 
-Verified totals (Ubuntu 6.17 aarch64): **24 PoCs proven**, 1 skip (ch24), 0 failures.
+Verified totals (Ubuntu 6.17 aarch64): of the 26 registered PoCs, **25 reproduce end-to-end** and ch24 is a documented skip (`CONFIG_BPF_TOKEN=n`). Exact per-run verdicts are in `/tmp/proof-result.json`.
 
 ## The harness contract
 
@@ -98,14 +96,14 @@ on stdout. `proof.py` registers each PoC with a `proof_marker` regex; a run is a
 
 ## Categories
 
-Every registered PoC is tagged with one of four categories in `proof.py`. The tags describe what the primitive observably does to the kernel, not how dangerous it is. Counts recounted directly from `dBPF-pocs/harness/proof.py` (25 PoCs total: ch01–ch18, ch23–ch25):
+Every registered PoC is tagged with one of four categories in `proof.py`. The tags describe what the primitive observably does to the kernel, not how dangerous it is. Counts are taken from `dBPF-pocs/harness/REGISTRY_STATS.md`, the machine-generated registry (26 registered PoCs total):
 
-- **real** (18 PoCs) — hooks the actual kernel subsystem and either observes its decision inputs/outputs or mutates state that the subsystem or its userspace consumer goes on to read. Examples: ch01's `bpf_send_signal` from a kretprobe on `cap_capable`, ch08's keyring payload exfil via `bpf_probe_read_kernel`, ch05b's XDP program on a veth, ch10's `getdents64` directory-entry cloaking.
-- **observer** (4 PoCs) — hooks the real subsystem but can only read, not mutate. The decision function is either not in `ALLOW_ERROR_INJECTION` or its LSM hook does not accept `fmod_ret`; the primitive captures inputs to a ringbuf without being able to flip the outcome. Examples: ch03 (audit observer), ch06/ch06o (SELinux observation), ch16 (seccomp TID sidechannel).
-- **illusion** (3 PoCs) — forges a syscall return via `bpf_override_return` on an allowlisted syscall wrapper. The caller sees the forged return value; kernel state is unchanged. Examples: ch14 (SCHED_FIFO forge), ch18 (getuid forge), ch12s (finit_module return forge without the module actually loading).
-- **analog** — deliberately zero. An earlier cleanup pass removed every synthetic or analog surface. Nothing in the registered PoC set is a marionette; every primitive hooks a real kernel attach point.
+- **real** (15) — hooks the actual kernel subsystem and either observes its decision inputs/outputs or mutates state that the subsystem or its userspace consumer goes on to read. Examples: ch01's `bpf_send_signal` from a kretprobe on `cap_capable`, ch05b's XDP program on a veth, ch10's `getdents64` directory-entry cloaking.
+- **observer** (8 PoCs) — hooks the real subsystem but can only read, not mutate. The decision function is either not in `ALLOW_ERROR_INJECTION` or its LSM hook does not accept `fmod_ret`; the primitive captures inputs to a ringbuf without being able to flip the outcome. This class includes ch03/ch03f (audit observers), ch06/ch06o/ch06s (SELinux observation, including the synthetic LSM scaffold), ch16 (seccomp TID sidechannel), and ch08/ch08k (keyring heist — the kprobe copies key metadata to a ringbuf; the access decision is unchanged, so this is an observer, not a mutation).
+- **illusion** (3 PoCs) — forges a syscall return via `bpf_override_return` on an allowlisted syscall wrapper. The caller sees the forged return value; kernel state is unchanged. The three are ch14 (SCHED_FIFO forge), ch18 (getuid forge), and ch12s (finit_module return forge without the module actually loading).
+- **analog** (0 PoCs) — the registered set contains no pure-analog primitive. Note this is not the same as "no synthetic surface": ch06s (`ch06-silence-selinux-lsm-synthetic`) is a registered synthetic LSM scaffold, tagged **observer**, used on kernels where SELinux is not active. It exists in the registered set and is documented honestly as a scaffold.
 
-The real/observer/illusion split is the honest taxonomy. A reader suspicious of any specific claim can look up the PoC's category tag and cross-reference the chapter text.
+The real/observer/illusion split is the honest taxonomy. A reader suspicious of any specific claim can look up the PoC's category tag in `REGISTRY_STATS.md` and cross-reference the chapter text.
 
 ## Disclaimer
 
@@ -123,4 +121,4 @@ BPF programs that execute in kernel context are licensed GPL-2.0-only, as requir
 
 ## Reproduce the book's claims
 
-Every claim in every chapter has a corresponding PoC, and every PoC's run produces a line-regex-matched marker that the harness captures. The loop closes as follows: the chapter makes a claim, the claim is expressed as a BEFORE state and an AFTER state, the PoC's trigger produces both states on stdout, the harness scrapes the marker regex registered in `proof.py`, and the verdict lands in `/tmp/proof-result.json`. A reader who doubts a specific claim can re-run the PoC, diff the JSON, and either confirm or file an issue against the exact marker that disagrees. Divergence is not a bug; divergence is data, and the book's taxonomy is designed to absorb it. The honest form of the book's thesis is narrower than "CAP_BPF grants enormous power" and more precise: CAP_BPF grants exactly the seven-class primitive surface enumerated in Chapter 20, subject to the failure modes catalogued in Chapter 21, reproducible end-to-end by the harness described here.
+Every claim in every chapter has a corresponding PoC, and every PoC run produces a line-regex-matched marker that the harness captures. The chapter states a claim as a BEFORE state and an AFTER state; the PoC's trigger produces both on stdout; the harness scrapes the marker regex registered in `proof.py` and writes the verdict to `/tmp/proof-result.json`. A reader who doubts a specific claim can re-run the PoC, diff the JSON, and either confirm it or file an issue against the exact marker that disagrees. The book's thesis is deliberately narrow: `CAP_BPF` plus `CAP_PERFMON` grants the primitive surface enumerated in Chapter 20, subject to the failure modes catalogued in Chapter 21, reproducible end-to-end by the harness described here.

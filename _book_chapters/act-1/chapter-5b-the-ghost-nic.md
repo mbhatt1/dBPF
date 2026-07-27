@@ -10,13 +10,13 @@ date: 2025-02-04
 
 > **Proof status**: `ch05b-ghost-nic` has been proved on Ubuntu 6.17.0 aarch64 (Lima VM, kernel 6.17.0-29-generic). No code changes were required.
 
-XDP runs before the packet reaches the IP stack. That single fact is the whole primitive: an XDP program attached to a netdev sees every ingress frame before netfilter, before raw sockets, before `tcpdump`'s AF_PACKET tap, and can return `XDP_DROP` to make the packet vanish from everyone above it.
+XDP runs before the packet reaches the IP stack, and that's the whole primitive. An XDP program on a netdev sees every ingress frame ahead of netfilter, ahead of raw sockets, ahead of `tcpdump`'s AF_PACKET tap — and it can return `XDP_DROP` to make the frame disappear for everyone above it.
 
-My first attempt was `cls_bpf` on ingress tc. On the same interface, AF_PACKET still saw the frames; tc ingress runs after the `ptype_all` walk in `__netif_receive_skb_core`, and that is where `tcpdump`'s tap lives. Moved to XDP; the frames stopped appearing on tcpdump. This isn't a bypass of a security control; it's XDP doing exactly what the architecture documents. The security consequence follows from where in the stack XDP sits.
+My first attempt used `cls_bpf` on ingress tc, and on the same interface AF_PACKET still saw the frames: tc ingress runs after the `ptype_all` walk in `__netif_receive_skb_core`, which is exactly where `tcpdump`'s tap sits. Moving to XDP, the frames stopped showing up in tcpdump. This isn't bypassing a security control — it's XDP behaving the way the architecture documents. The security consequence just falls out of where XDP sits in the stack.
 
 ## Mechanism
 
-The program filters on IP/UDP/port/magic-prefix — four nested bounds checks that the verifier mandates before it will let the program touch any packet field. Each check is mandatory: remove any one of them and the load fails at the corresponding dereference. Here is the full program:
+The program filters on IP, then UDP, then port, then a magic prefix — four nested bounds checks the verifier insists on before it lets you touch any packet field. Drop any one of them and the load fails at the matching dereference. Here's the whole thing:
 
 ```c
 SEC("xdp")
@@ -53,7 +53,7 @@ int xdp_ghost(struct xdp_md *ctx) {
 }
 ```
 
-The bounds checks are not style; they are the proof the verifier requires before it will let the program touch packet memory. The `iph->ihl * 4` computation is the one that catches people: the verifier needs to prove the resulting pointer is within `[data, data_end]` before it allows `(void *)iph + ihl` in pointer arithmetic. The explicit `ihl < sizeof(*ip)` check (minimum 20) gives it the lower bound. Without it: `math between pkt pointer and register with unbounded min value is not allowed`.
+Those bounds checks aren't stylistic; they're the proof the verifier demands before it lets the program read packet memory. The `iph->ihl * 4` term is the one that trips people up: the verifier has to know the resulting pointer stays within `[data, data_end]` before it allows `(void *)iph + ihl` arithmetic, and the explicit `ihl < sizeof(*ip)` check (minimum 20) is what gives it the lower bound. Leave it out and you get `math between pkt pointer and register with unbounded min value is not allowed`.
 
 Matching packets are copied into the ringbuf for the userspace loader to read, then dropped. Everything else passes through. `bpf_xdp_adjust_head` and `bpf_redirect_map` are available for the cross-namespace variant (see [chapter 15]({{ site.baseurl }}/book/act-3/chapter-15-netns-vlan-ghost.html)).
 
@@ -88,9 +88,9 @@ The trigger creates its own veth pair and network namespace. `veth_g0` lives in 
 
 ## Scope
 
-This is a Class IV primitive from chapter 20. The architectural point is worth stating clearly: XDP is not below netfilter because of an oversight in the design; it is below netfilter by design, to enable high-performance packet processing before the kernel's normal network stack runs. The same property that makes it useful for DDoS mitigation and load balancing is what makes it useful here.
+This is a Class IV primitive from chapter 20. The architectural point is simple: XDP isn't below netfilter by accident, it's below netfilter on purpose, so that high-performance packet processing can happen before the normal network stack runs. The same property that makes XDP good for DDoS mitigation and load balancing is what makes it useful here.
 
-The `rx_dropped` counter on the interface does increment. A defender baselining drop counters catches the primitive even without direct XDP introspection. More broadly, defenders who rely on `tcpdump`, nftables, or raw sockets for host-level network visibility need to supplement with XDP program inventory, `CAP_BPF` audit, and off-host network telemetry — because at the XDP layer, local observation tools are simply not in the path.
+The interface's `rx_dropped` counter does tick up, so a defender who baselines drop counters catches this even without looking at XDP directly. More broadly, anyone relying on `tcpdump`, nftables, or raw sockets for host-level network visibility has to add a second source: an XDP program inventory, a `CAP_BPF` audit, and off-host network telemetry. At the XDP layer, the local observation tools just aren't in the path.
 
 ---
 

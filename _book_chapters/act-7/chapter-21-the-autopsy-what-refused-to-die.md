@@ -10,17 +10,17 @@ date: 2026-01-11
 
 > **Navigation**: [Chapter 20; Taxonomy]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21; Skip Accounting]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 22; Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
 
-The final count across all environments: **22 PROVEN, 1 SKIP (ch24)**. The skip is not a failure of the BPF code. It is a kernel build configuration that no mainstream distro has yet shipped with the relevant option enabled. The code is ready. The kernel is not, yet.
+The count is clean: of the 26 registered PoCs, **25 reproduce in the reference environment and one skips (ch24)**. That skip is not a failure of the BPF code. It is a kernel build configuration — `CONFIG_BPF_TOKEN=n` — that no mainstream distro I had access to shipped with the option enabled. The code is ready; the kernel is not, yet.
 
-Five primitives did not produce effects on linuxkit 6.12 aarch64 and required a different kernel to prove; ch06, ch06o, and ch12 on Fedora 42 aarch64 QEMU, ch23 and ch25 on Ubuntu 6.17 Lima VM. The rest of this chapter is for readers who want to reproduce the primitives that needed alternate environments, and for the one that remains open for anyone with the right kernel.
+The other 25 all reproduce as registered, but a handful of them only *mean* something when the surface they grip is actually present. Ch06, ch06s, ch06o, and ch12 flip a real decision only where SELinux is enforcing or module-signature enforcement is on; where it is not, they demonstrate the mechanism against a synthetic condition. Ch23 attaches to the TPM unseal path and captures entry-intercept events, but capturing plaintext key bytes needs a host with a boot-registered TPM backend. Ch25 runs against a mock IMDSv2 exchange rather than a live cloud endpoint. None of these are skips. This chapter is for the reader who wants to take each one from "reproduces" to "operationally real," and for the single primitive (ch24) that has not run anywhere yet.
 
-This is not a consolation section. Everything below has working code. The setup cost is real but bounded. If you run these, you are not following a trail I blazed; you are doing the work the linuxkit constraint prevented here, and you may find things I missed.
+This is not a consolation section. Everything below has working code, and the setup cost is real but bounded. If you run these, you may find things I missed.
 
-## The Fedora exercises (ch06, ch06o, ch12)
+(For the record: ch13 powercap/RAPL and ch17 ACPI-WMI were retired, not skipped. They were x86-only surfaces that never had an honest aarch64 reproduction, so rather than carry them as permanently-skipping stubs they were removed from the catalog. They are not among the 26.)
 
-All three primitives in this group needed SELinux in enforcing mode with `bpf` active in the LSM chain. linuxkit runs neither. That constraint is not a criticism of linuxkit — it is the right minimal environment for most of this book — but these three primitives are specifically about what happens when policy enforcement is live, which means they need a kernel that has live policy. Fedora 42 aarch64 runs both by default, making it the natural secondary environment.
+## Making the enforcement primitives real (ch06, ch06s, ch06o, ch12)
 
-Boot a Fedora 42 aarch64 VM or use `dBPF-pocs/run-qemu-tests.sh` to drive one. The script handles image download and boot. Once the VM is running with SELinux enforcing:
+These primitives are about what happens when policy enforcement is live. To see the *real* flip rather than the synthetic scaffold, you need a kernel that has live policy: SELinux in enforcing mode with `bpf` in the LSM chain, or module-signature enforcement turned on. A Fedora aarch64 VM gives you both by default; you can drive one with `dBPF-pocs/run-qemu-tests.sh`, which handles image download and boot. Once the VM is running with SELinux enforcing:
 
 **Ch06; Silencing SELinux.** Create a sentinel file and label it `shadow_t`. Run `runcon user_u:user_r:user_t:s0 cat <sentinel>`; you will get an AVC denial. Start the ch06 loader. Run the same access again. The read succeeds. `ausearch -m AVC -ts recent` still shows the denial. The AVC-versus-outcome inconsistency is the proof.
 
@@ -30,13 +30,11 @@ What to verify: the fmod_ret override is real, the audit log still records the p
 
 What to verify: the signature gate is the last blocker between you and arbitrary code in the kernel on an enforcing system. After this flip, only ELF validation stands between an unsigned blob and `init_module`. Can you craft a valid ELF that passes ELF validation but has no meaningful module body? What does the kernel accept? I did not finish this thread. The harness proves the gate flip; the question of what comes after the gate is left open.
 
-## The Ubuntu exercises (ch23, ch25)
+## Taking the Act 4 primitives further (ch23, ch25)
 
-These two primitives target boundaries that linuxkit simply does not have: a TPM-backed trusted-key subsystem and outbound cloud-metadata traffic. Neither is a linuxkit limitation in any meaningful sense — linuxkit is a container runtime environment, not a cloud instance. For ch23 and ch25, the right test environment is a VM that is actually playing the role the primitive targets.
+Ch23 and ch25 both reproduce in the reference environment, but each targets a boundary whose full weight only shows up on a host actually playing the role: a TPM-backed trusted-key subsystem for ch23, live cloud-metadata traffic for ch25. The reference run demonstrates the mechanism; the exercises below take it to the real thing.
 
-These ran on Ubuntu 6.17 aarch64 (Lima VM) and proved on that kernel. If you are running them from linuxkit; the linuxkit harness path; they will skip because the symbols are absent. Set up a Lima VM (`limactl start --name=dbpf`), build from source inside it, and run the harness there.
-
-**Ch23; TPM unseal heist.** The Lima VM proves the kprobe attachment on `tpm2_unseal_trusted` and emits entry intercept events; `CH23_PROVEN hook=attached`. What it does not prove is capturing actual key material, because the VM's TPM backend is not initialized at boot. That is an exercise.
+**Ch23; TPM unseal heist.** In the reference environment, ch23 attaches a kprobe to `tpm2_unseal_trusted` and emits entry-intercept events (`CH23_PROVEN hook=attached`). What it does not do there is capture actual key material, because the VM's TPM backend is not initialized at boot. That is the exercise.
 
 Set up a Linux host (bare metal or VM) with a real TPM 2.0 device, or configure a VM with a software TPM (`swtpm`) registered before the kernel initializes the IMA/trusted-key subsystem; meaning it must be present at boot, not added post-boot. Create a sealing policy. Seal a key with `keyctl add trusted`. Run the ch23 loader during a real unseal operation. The kretprobe on `tpm2_unseal_trusted` should capture the unsealed key bytes from the payload structure before the caller sees them.
 
@@ -54,13 +52,13 @@ The exercise: build a kernel from source with `CONFIG_BPF_TOKEN=y`. The relevant
 
 The security question is whether the token is scoped tightly enough. The specification says a token can be bound to a pinned BPF filesystem path and constrained to specific `cmd` types. In practice: can you create a token that allows `BPF_PROG_LOAD` with `BPF_PROG_TYPE_LSM`? If so, an unprivileged container with a delegated token could attach LSM programs. That is the threat model. I do not know if the current implementation allows it or whether the cmd-type constraint blocks it. That is the exercise.
 
-## What the skips actually say
+## What the one skip, and the caveats, actually say
 
-The skips are not gaps in the argument. They are information.
+The single skip and the environment caveats are not gaps in the argument. They are information.
 
-Every skip says something true about the primitive. Ch06, ch06o, and ch12 skip on linuxkit because they need policy enforcement to flip, and linuxkit has none; which means the primitive is useless in zero-enforcement environments and dangerous in high-enforcement ones. The skip is also the environment fingerprint: a primitive that skips on linuxkit and fires on Fedora is a primitive that separates development environments (minimal policy) from production ones (enforcing policy). That separation is itself a detection signal for defenders.
+The enforcement-sensitive primitives (ch06, ch06s, ch06o, ch12) tell you something true: they only flip a real decision where policy enforcement is live, which makes them near-useless in zero-enforcement environments and genuinely dangerous in high-enforcement ones. That sensitivity is also an environment fingerprint — a primitive whose behavior differs between a minimal development image and an enforcing production host is, by that difference, a detection signal for defenders.
 
-Ch24 skipping on all available kernels means it is a future-tense primitive. Something in production by the time this book is outdated. Note when it ships.
+Ch24 skipping on every kernel I had means it is a future-tense primitive: something that will be in production by the time this book is outdated. Note when `CONFIG_BPF_TOKEN` ships enabled on your distro.
 
 The harness proof markers exist so you can reproduce all of this without reading my notes. If you fire `CH24_PROVEN` before I do, that is a better outcome than if I had manufactured a proof on an unsupported kernel.
 

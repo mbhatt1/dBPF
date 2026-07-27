@@ -8,7 +8,7 @@ date: 2025-03-01
 
 > **See also**: [Blog post]({{ site.baseurl }}/ebpf-signed-driver-swap.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch12-signed-driver-swap-syscall) · [Chapter 21]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html)
 
-> **Proof status**: All three variants proved on Ubuntu 6.17.0-29-generic aarch64 (Lima VM); `ch12-signed-driver-swap` (observer), `ch12-signed-driver-swap-lsm` (real LSM flip on enforcing kernels), and `ch12-signed-driver-swap-syscall` (syscall illusion). The chapter is explicit about which does what. The syscall illusion fires on linuxkit; the real LSM flip requires `CONFIG_MODULE_SIG_FORCE=y` and BPF LSM active in `lsm=`.
+> **Proof status**: Three variants on Ubuntu 6.17.0-29-generic aarch64 (Lima VM) — `ch12-signed-driver-swap` (observer), `ch12-signed-driver-swap-lsm` (the real LSM flip, on enforcing kernels), and `ch12-signed-driver-swap-syscall` (the syscall illusion). The chapter is explicit about which does what: the syscall variant forges the return without loading anything, while the LSM variant actually flips the integrity gate. The syscall illusion fires on linuxkit; the real LSM flip requires `CONFIG_MODULE_SIG_FORCE=y` and BPF LSM active in `lsm=`.
 
 `/sys/kernel/debug/error_injection/list` didn't have `mod_verify_sig` or `kernel_read_file`, so the LSM fmod_ret approach was dead on linuxkit. It did have `__arm64_sys_finit_module` and `__arm64_sys_init_module`; syscall entry points are exactly what the error-injection allowlist is for.
 
@@ -22,7 +22,7 @@ Two independent failures killed this on the linuxkit kernel.
 
 First, linuxkit doesn't enforce module signatures. `CONFIG_MODULE_SIG_FORCE` is off; the signature hooks are present but advisory. Nothing ever rejects, so there's nothing to flip.
 
-Second, and more fatal: `insmod` of a non-ELF blob fails at ELF validation inside the module loader, long before any signature code runs. Even on a kernel that does fail-close on signatures, the simplest test payload; a file that isn't a valid ELF; never reaches `mod_verify_sig`. I was hooking a check the kernel wasn't performing on the code path I was triggering. Classic wrong-enforcement-point mistake.
+Second, and more fatal: `insmod` of a non-ELF blob fails at ELF validation inside the module loader, long before any signature code runs. Even on a kernel that does fail-close on signatures, the simplest test payload — a file that isn't a valid ELF — never reaches `mod_verify_sig`. I was hooking a check the kernel wasn't performing on the code path I was triggering. A classic wrong-enforcement-point mistake.
 
 When both of those settled in, I stopped trying to make the LSM variant work on linuxkit and went looking at the error-injection list.
 
@@ -46,13 +46,14 @@ Before the probe attaches, `insmod` on a non-ELF file returns rc=1 with `ENOEXEC
 
 ```
 [ch12s] FORGE pid=<N> comm=insmod syscall=finit_module orig_ret=-8 -> 0
+CH12_CONCEPT_PROVEN syscall_override_landed=yes module_actually_loaded=no
 ```
 
-`-8` is `-ENOEXEC`. The kernel said "that isn't a valid ELF." Userspace saw `0`.
+`-8` is `-ENOEXEC`. The kernel said "that isn't a valid ELF." Userspace saw `0`. The marker is deliberately honest about the split: the override landed, and the module still didn't load.
 
 ## The userspace-illusion framing, made explicit
 
-This is a userspace-illusion bypass and nothing more — and it's worth sitting with that for a moment before moving on to the real LSM variant.
+This is a userspace-illusion bypass and nothing more. That distinction is the whole reason the real LSM flip ships as a separate program.
 
 The module does not load. The kernel still rejects the bytes at ELF validation. Kernel memory is unchanged. `lsmod` does not show the module. `/sys/module/<name>/` does not exist. `dmesg` still logs the original rejection reason. The only thing the attack changes is the integer the syscall returns to userspace.
 

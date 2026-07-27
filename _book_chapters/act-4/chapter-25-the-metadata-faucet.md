@@ -28,7 +28,7 @@ Proof marker:
 === CH25_PROVEN access_key_captured=yes token_captured=yes role=<role-name> ===
 ```
 
-Together with the captured `AccessKeyId` and `SessionToken`, `role=<role-name>` is everything a remote attacker needs to sign an AWS API call as that role. The credentials expire in roughly six hours. The SDK refreshes them on schedule. The XDP program captures every refresh.
+Together with the captured `AccessKeyId` and `SessionToken`, `role=<role-name>` is everything a remote attacker needs to sign an AWS API call as that role. The credentials expire in roughly six hours, but the SDK refreshes them on schedule and the XDP program captures every refresh.
 
 ## Why IMDSv2 does not help as much as operators think
 
@@ -129,7 +129,7 @@ int xdp_imds_capture(struct xdp_md *ctx)
 
 Standard XDP parse-ethernet-ip-tcp chain with the packet-bound checks the verifier requires. The filter matches source or destination IP against the real IMDS endpoint (`169.254.169.254`) or the mock localhost IP (`127.0.0.1`), configurable via the `cfg` map at runtime. The direction field lets the userspace parser distinguish the client's PUT/GET from the server's response.
 
-`XDP_PASS` is load-bearing. The legitimate SDK must still see the response. The BPF program is a tee, not a gate.
+`XDP_PASS` is load-bearing here: the legitimate SDK still has to see the response. The program is a tee, not a gate.
 
 The payload copy is bounded at 512 bytes. IMDSv2 responses are small; the token response is ~50 bytes, the role-discovery response is ~20 bytes, the credential JSON is ~500 bytes. A 512-byte bound captures the full credential document in a single event.
 

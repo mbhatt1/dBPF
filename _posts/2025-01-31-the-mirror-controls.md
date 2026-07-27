@@ -80,7 +80,7 @@ None of those are hidden by this chapter. Hiding load events is a separate primi
 
 ## Scope
 
-The primitive, when it fires, lies to *userspace consumers* of the syscall return. A subsequent LSM check that consults `current->cred` inside the kernel is unaffected. Orchestrators that trust syscall return values get fooled; post-checks against `/proc/self/status` see the ground truth. This is the shape of Class I primitives from chapter 20.
+This kprobe variant is an observation channel, not a bypass — a Class III primitive from chapter 20. It records the kernel's capability verdicts for a target tgid list, but it does not change any of them: `cap_capable` is not on the error-injection allowlist, so the `bpf_override_return` it was built around is a silent no-op. The `tag=FLIP` events mark denials the program *would* have flipped, not denials it actually flipped. If you want a return value that the kernel genuinely honors, that lives in the BPF LSM `fmod_ret` variant covered in the full chapter, which returns `0` from `lsm/inode_permission` and makes the access succeed for real.
 
 ---
 

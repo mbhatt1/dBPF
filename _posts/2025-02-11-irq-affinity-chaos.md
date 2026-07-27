@@ -104,6 +104,6 @@ Factual note: the original post claimed hooks on `irq_dispatch()` with inline af
 ---
 
 **Related material**
-- Full chapter with investigation notes: [Chapter 12 — IRQ Affinity Chaos]({{ site.baseurl }}/book/act-2/chapter-11-irq-affinity-chaos.html)
+- Full chapter with investigation notes: [Chapter 11 — IRQ Affinity Chaos]({{ site.baseurl }}/book/act-2/chapter-11-irq-affinity-chaos.html)
 - POC source: [dBPF-pocs/pocs/ch11-irq-chaos/](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch11-irq-chaos)
 - Harness entry in `proof.py`: `Poc("ch11", ...)`

@@ -6,11 +6,11 @@ date: 2025-02-09
 
 # Chapter 9: Mapping Host PID to Namespace PID
 
-> **See also**: [Blog post]({{ site.baseurl }}/pid-namespace-doppelg-nger.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch09-pid-doppel) · [Harness entry](https://github.com/mbhatt/dBPF/blob/master/dBPF-pocs/harness/proof.py)
+> **See also**: [Blog post]({{ site.baseurl }}/pid-namespace-doppelg-nger.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch09-pid-doppel) · [Harness entry](https://github.com/mbhatt1/dBPF/blob/master/dBPF-pocs/harness/proof.py)
 
 > **Proof status**: Proved on Ubuntu 6.17.0-29-generic aarch64 (Lima VM). **Runtime note**: `trigger.sh` must be run directly in the Lima/host VM shell, not inside Docker with `--pid=host`. The `--pid=host` flag causes "unable to start container process: can't get final child's PID from pipe: EOF" when the trigger spawns `unshare --pid`. Run the trigger directly in the VM.
 
-This one is almost embarrassingly straightforward once you know where to look. The primitive; recovering the host-visible PID of a task together with its namespace-local PID; has been shipping in bpftrace examples for years. Academic work on PID-namespace side channels via `sched_process_fork` goes back to at least 2020. The POC's contribution is narrow: package the observation as a CO-RE BPF program, confirm the mapping end-to-end by terminating a container process from the host using only the PID recovered from a BPF map, and document the hook choice.
+This one is almost embarrassingly straightforward once you know where to look. The primitive — recovering the host-visible PID of a task together with its namespace-local PID — has been shipping in bpftrace examples for years, and academic work on PID-namespace side channels via `sched_process_fork` goes back to at least 2020. The POC's contribution is narrow: package the observation as a CO-RE BPF program, confirm the mapping end-to-end by terminating a container process from the host using only the PID recovered from a BPF map, and document the hook choice.
 
 ## Mechanism
 
@@ -22,8 +22,8 @@ The `numbers[]` indexing is subtle. `struct pid` has a `numbers[1]` flexible arr
 
 The POC attaches two programs and picks the one that fires:
 
-- **`raw_tp/sched_process_fork`**; primary hook. Fires on every task creation, including the common `unshare --pid` / `clone(CLONE_NEWPID)` path. The raw tracepoint gives access to both parent and child `task_struct *` as typed args. I compare their `pid_ns_for_children->ns.inum` and only emit when the child entered a fresh namespace.
-- **`kprobe/copy_namespaces`**; secondary hook, preflighted against `/proc/kallsyms` at load time. `copy_namespaces` can be inlined on some kernels. The loader disables autoload for this program when the symbol is absent, so the load stays clean.
+- **`raw_tp/sched_process_fork`** — primary hook. Fires on every task creation, including the common `unshare --pid` / `clone(CLONE_NEWPID)` path. The raw tracepoint gives access to both parent and child `task_struct *` as typed args. I compare their `pid_ns_for_children->ns.inum` and only emit when the child entered a fresh namespace.
+- **`kprobe/copy_namespaces`** — secondary hook, preflighted against `/proc/kallsyms` at load time. `copy_namespaces` can be inlined on some kernels; the loader disables autoload for this program when the symbol is absent, so the load stays clean.
 
 A factual correction from the earlier draft: `switch_task_namespaces` fires only on the `setns()` path, which misses the common fork-into-new-ns case. `sched_process_fork` is the right hook for general coverage.
 
@@ -99,6 +99,6 @@ The read itself produces no syscall-level signal. If you want to catch a host pr
 
 Prior art worth citing: bpftrace ships `pidnss.bt` and similar scripts that do essentially this lookup, and Cilium/Tetragon uses the same pattern for PID tracking in its observation code.
 
-The simplicity of this chapter is itself the point. Not every BPF primitive requires a fight with the verifier or a creative workaround. Sometimes the kernel's own data structures carry exactly what you need, the right tracepoint fires at the right moment, and the proof runs in under a minute. Chapter 10 is less cooperative.
+Not every BPF primitive requires a fight with the verifier or a creative workaround. Sometimes the kernel's own data structures carry exactly what you need, the right tracepoint fires at the right moment, and the proof runs in under a minute. Chapter 10 is less cooperative.
 
 > **See also**: [POC source; ch09-pid-doppel](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch09-pid-doppel) · Harness entry: `Poc("ch09", ...)` in `dBPF-pocs/harness/proof.py`

@@ -9,7 +9,7 @@ poc_dir: dBPF-pocs/pocs/ch05-cgroup-leash
 
 > **See also**: [Full investigation notes in the book]({{ site.baseurl }}/book/act-1/chapter-5-slipping-the-cgroup-leash.html) · [POC source](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch05-cgroup-leash)
 
-The target here is not the cgroup enforcement path. It is the readback path. The scheduler keeps accounting CPU correctly and keeps throttling the cgroup if it exceeds its quota. What changes is what `cat /sys/fs/cgroup/cpu.stat` returns to the reader.
+The target isn't the cgroup enforcement path — it's the readback path. The scheduler keeps accounting CPU correctly and keeps throttling the cgroup when it blows past its quota. All that changes is what `cat /sys/fs/cgroup/cpu.stat` hands back to the reader.
 
 Prior art on `cpu.stat` spoofing via BPF goes back to ~2021. The contribution here is a harness with clean BEFORE/AFTER.
 
@@ -83,10 +83,10 @@ cat /sys/fs/cgroup/cpu.stat          # zeros
 
 ## Detection
 
-- `bpf_probe_write_user` invocation taints the kernel: `cat /proc/sys/kernel/tainted` shows a non-zero bit (`TAINT_USER` = 512 on most kernels).
-- `dmesg` emits a one-line warning on first `bpf_probe_write_user` use per program.
-- An out-of-band monitor that reads `/proc/[pid]/cgroup.stat` or computes usage from `/proc/schedstat` + per-task accounting gives a cross-check — if the scheduler says the cgroup ran hot but `cpu.stat` says zero, something is rewriting the readback.
-- `bpftool prog show | grep tracepoint` — a tracepoint on `sys_exit_read` with `bpf_probe_write_user` calls is an unusual fingerprint.
+- `dmesg` gets a `pr_warn_ratelimited` line the first time a program uses `bpf_probe_write_user`: `<loader>[<pid>] is installing a program with bpf_probe_write_user helper that may corrupt user memory!` — once per loader process, and you can't suppress it without patching the kernel. This is the primary signal.
+- On kernels older than ~5.13, loading the helper also set `TAINT_USER` (bit 6, value 64) in `/proc/sys/kernel/tainted`. That taint call was removed in later kernels, so on 6.12 the taint word stays clear — don't rely on it.
+- An out-of-band cross-check: compute per-cgroup usage from `/proc/schedstat` plus per-task `/proc/[pid]/stat` and compare against `cpu.stat`. If the scheduler says the cgroup ran hot but `cpu.stat` reads zero, something is rewriting the readback.
+- `bpftool prog show | grep tracepoint` — a tracepoint on `sys_exit_read` that calls `bpf_probe_write_user` is an unusual fingerprint.
 
 ## Scope
 

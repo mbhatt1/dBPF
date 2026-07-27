@@ -32,7 +32,7 @@ Three independent blockers stand between the observer and a real affinity overri
 
 The first is the error-injection allowlist. Neither `handle_irq_event` nor `__handle_irq_event_percpu` appears in `/sys/kernel/debug/error_injection/list` on this kernel, so `bpf_override_return()` is refused at verifier load. No allowlist entry, no injection. This alone closes the door.
 
-The second is execution context. These paths run with local IRQs disabled on the target CPU; atomic context. Calling `irq_set_affinity()` from a kprobe in that context would be a sleep-in-atomic bug even if the verifier let it through.
+The second is execution context. These paths run with local IRQs disabled on the target CPU — atomic context. Calling `irq_set_affinity()` from a kprobe in that context would be a sleep-in-atomic bug even if the verifier let it through.
 
 The third blocker is architectural. On aarch64 the routing decision is done by the GIC distributor, not by a Linux function. Re-pointing an IRQ at a different CPU means writing `GICD_ITARGETSR`/`GICD_IROUTER`, and those MMIO registers live behind the device-cgroup wall that ch07 spent a chapter not quite breaking.
 
@@ -104,6 +104,6 @@ The data `/proc/interrupts` can't give you and the observer can: per-event wall-
 
 Factual note: the original chapter draft claimed hooks on `irq_dispatch()` with inline affinity-mask rewrites. That wasn't the POC's behaviour and, per the three blockers above, isn't achievable on this kernel from BPF. The observer is honest; the override was wishful thinking.
 
-This chapter is a good example of an ambition that got trimmed by three independent layers of the kernel refusing to cooperate — the allowlist, the execution context, and the hardware architecture. The result is narrower than the fantasy but more interesting as documentation: a precise accounting of where the IRQ dispatch path opens up to BPF observation, and exactly where it closes.
+Three independent layers trimmed the original ambition: the error-injection allowlist, the atomic execution context, and the GIC hardware. What's left is narrower than the fantasy but more useful as documentation — a precise accounting of where the IRQ dispatch path opens up to BPF observation, and exactly where it closes.
 
 > **See also**: [POC source; ch11-irq-chaos](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch11-irq-chaos) · Harness entry: `Poc("ch11", ...)` in `dBPF-pocs/harness/proof.py`

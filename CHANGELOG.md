@@ -23,9 +23,10 @@ ISO 8601.
 ## [0.5.0] - 2026-05-20 — Full verification pass: Ubuntu 6.17 aarch64
 
 ### Verified
-- All 25 POCs (ch01–ch18, ch23–ch25) run against Ubuntu 6.17.0-29-generic
-  aarch64 in a Lima VM on Apple Silicon (macOS). Result: **24 proven, 1 skip
-  (ch24), 0 failures**.
+- All 26 registered POCs run against Ubuntu 6.17.0-29-generic
+  aarch64 in a Lima VM on Apple Silicon (macOS). Result: **25 reproduce
+  end-to-end, 1 skip (ch24, CONFIG_BPF_TOKEN=n), 0 failures**. Per-run
+  verdicts in `/tmp/proof-result.json`.
 - ch24 (BPF Token Delegation) skipped on all tested kernels: `CONFIG_BPF_TOKEN=n`
   is absent on linuxkit 6.12, Fedora 42 6.14, and Ubuntu 6.17; requires
   kernel ≥ 6.9 with BPF token support explicitly enabled at build time.
@@ -39,13 +40,8 @@ ISO 8601.
   the deny-then-flip primitive on kernels without SELinux active.
 - **ch10**: BPF map renamed `active` → `active_calls` to fix a symbol
   collision with a vmlinux.h kernel enum on kernel 6.17.
-- **ch13**: `trigger.sh` updated for aarch64 — builds a kernel module that
-  calls `powercap_register_control_type` (RAPL is x86-only); the analog
-  variant uses `bpf_probe_write_user` on userspace sensor reads.
 - **ch15**: Documents `--net=host` requirement for XDP to access host
   network interfaces.
-- **ch17**: Documents custom `fw_trigger.ko` kernel module requirement;
-  `test_firmware` is not loadable on Ubuntu 6.17.
 - **ch23**: kprobe on `tpm2_unseal_trusted` confirmed attached; TPM keyctl
   path documented as unavailable in VM without boot-time TPM.
 

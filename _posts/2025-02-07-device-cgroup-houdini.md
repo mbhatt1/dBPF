@@ -46,7 +46,9 @@ The loader reads vmlinux BTF, prunes hooks whose target FUNC is missing, and att
 
 ## On kernels where the device cgroup does enforce
 
-The primitive shape lands naturally. Modern container runtimes rely on the cgroup v2 `devices` BPF program to restrict `mknod` inside containers. A defender-owned BPF program at that slot says "allow character 1:3 (`/dev/null`), deny everything else." An attacker-owned LSM fmod_ret above that slot returns `0` for the target tgid on any device, flipping the container's device cgroup restriction to permissive for one specific process.
+Even here, the `mknod` path doesn't land. Modern container runtimes restrict `mknod` with a cgroup v2 `devices` BPF program — a defender-owned program at that slot that says "allow character 1:3 (`/dev/null`), deny everything else." But that check runs inside `vfs_mknod` via `devcgroup_inode_mknod()`, after `capable(CAP_MKNOD)` and before `security_inode_mknod`. When it denies, `vfs_mknod` returns `-EPERM` and the LSM chain is never consulted, so a BPF LSM fmod_ret on `inode_mknod` never runs.
+
+The `file_open` path is different: `security_file_open` is a genuine LSM hook, and the cgroup device check for open runs through `inode_permission`, not as a pre-LSM short-circuit. An fmod_ret on `file_open` can reach device-file opens from container processes. That's the structurally viable bypass — opening a pre-existing device node rather than creating one — but it isn't exercised in this POC.
 
 ## Detection
 
@@ -56,7 +58,7 @@ The primitive shape lands naturally. Modern container runtimes rely on the cgrou
 
 ## Scope
 
-Class I primitive (return-value override at an LSM hook). Real and weaponizable where the device cgroup is actually restrictive. Synthetic on the linuxkit test kernel because the cap check short-circuits before the LSM slot is consulted.
+Class I primitive (return-value override at an LSM hook). The fmod_ret mechanism is real and demonstrated: a BPF LSM program can see and overwrite the accumulated chain result. What is not demonstrated — and can't work via the mknod path — is bypassing a real device-cgroup denial, because `capable(CAP_MKNOD)` and `devcgroup_inode_mknod()` both fire inside `vfs_mknod` before the LSM chain. The POC proves the flip on a self-synthesized denial, marked `CH07_CONCEPT_PROVEN`. The `file_open` path is structurally reachable but was not exercised here.
 
 ---
 

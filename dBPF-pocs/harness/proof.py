@@ -21,19 +21,39 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
-from rich.console import Console
-from rich.layout import Layout
-from rich.live import Live
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
+# rich powers the live TUI, which is the default run. The --check and
+# --write-stats modes are stdlib-only so they run on a bare Python (e.g. CI),
+# so this import is optional; its absence only disables the live TUI.
+try:
+    from rich.console import Console
+    from rich.layout import Layout
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+
+    HAVE_RICH = True
+except ImportError:  # pragma: no cover - only hit where rich isn't installed
+    HAVE_RICH = False
 
 ROOT = pathlib.Path("/w")
 POCS_DIR = ROOT / "pocs"
 BTF = pathlib.Path("/sys/kernel/btf/vmlinux")
 KALLSYMS = pathlib.Path("/proc/kallsyms")
 
-console = Console()
+if HAVE_RICH:
+    console = Console()
+else:
+    class _PlainConsole:
+        """Stand-in used when rich is absent (--check / --write-stats paths).
+        Strips rich markup and prints; the live TUI is unavailable."""
+
+        _tag = re.compile(r"\[/?[a-z0-9 #._-]*\]")
+
+        def print(self, *args, **_kwargs):
+            print(*[self._tag.sub("", str(a)) for a in args])
+
+    console = _PlainConsole()
 
 
 @dataclass
@@ -65,10 +85,10 @@ POCS: list[Poc] = [
     Poc("ch02", "OverlayFS Trojan (copy-up)", "ch02-overlayfs",
         hooks=["ovl_copy_up", "ovl_maybe_copy_up", "ovl_copy_up_with_data"],
         prefix="[ch02]",
-        proof_marker=r"PWNED|RACE_WIN|_PROVEN"),
+        proof_marker=r"RACE_WIN|PWNED\t"),
     Poc("ch02lsm", "OverlayFS Trojan (BPF LSM copy-up deny)", "ch02-overlayfs-lsm",
         hooks=["bpf-lsm"], prefix="[ch02-lsm]",
-        proof_marker=r"DENIED \(-EPERM\)|CH02_PROVEN|_PROVEN"),
+        proof_marker=r"DENIED \(-EPERM\)|CH02_PROVEN"),
     Poc("ch03", "FUSE Audit Black-Hole", "ch03-fuse-blackhole",
         hooks=["audit_log_start", "audit_log_format", "audit_log_end"],
         prefix="[audit]",
@@ -76,11 +96,11 @@ POCS: list[Poc] = [
                  "auditctl -e 1 2>/dev/null; "
                  "auditctl -a always,exit -F arch=aarch64 -S execve 2>/dev/null; "
                  "auditctl -a always,exit -F arch=b64 -S execve 2>/dev/null; true"],
-        proof_marker=r"SUPPRESSED|EXFIL|_PROVEN",
+        proof_marker=r"SUPPRESSED|EXFIL|CH03_PROVEN",
         category="observer"),
     Poc("ch03f", "FUSE Audit Black-Hole (fentry suppressor)", "ch03-fuse-blackhole-fentry",
         hooks=["audit_log_start"], prefix="[ch03-fe]",
-        proof_marker=r"SUPPRESSED|CH03_PROVEN|_PROVEN",
+        proof_marker=r"SUPPRESSED|CH03_PROVEN",
         category="observer"),
     Poc("ch04", "Phantom Syscall (tail-call + signal)", "ch04-phantom-syscall",
         hooks=["__arm64_sys_write"], prefix="[phantom]", min_events=1,
@@ -116,7 +136,11 @@ POCS: list[Poc] = [
     Poc("ch08", "Keyring Heist (payload exfil)", "ch08-keyring-heist",
         hooks=["key_task_permission", "lookup_user_key"], prefix="[ch08]",
         mode="trigger-runs-loader", timeout=20,
-        proof_marker=r"CH08_PROVEN|CH08_WEAPON_PROVEN|EXFIL="),
+        proof_marker=r"CH08_PROVEN|CH08_WEAPON_PROVEN|EXFIL=",
+        # kprobes on key_task_permission/lookup_user_key return 0 and only
+        # emit ringbuf metadata (serial/type/desc); no mutation, no signal,
+        # no override -> read-only observation of a real subsystem.
+        category="observer"),
     Poc("ch09", "PID-NS Doppelganger (cross-ns signal)", "ch09-pid-doppel",
         hooks=["tp:sched/sched_process_fork"], prefix="[ch09]",
         proof_marker=r"CH09_PROVEN|PID_NS_ESCAPE_PROVEN|SIGUSR1_SENT", timeout=40),
@@ -151,15 +175,19 @@ POCS: list[Poc] = [
         proof_marker=r"FORGE\s+pid=|TOKEN_FORGE_PROVEN",
         category="illusion"),
     # --- workaround kprobe variant -----------------------------------
-    # Kept because it is a real kprobe against a real kernel surface,
-    # not a synthetic or analog. The LSM variant (ch08) skips on kernels
-    # where struct key is forward-declared in BTF; the kprobe version
-    # sidesteps that by reading through vmlinux.h BTF directly.
+    # A kprobe against a real kernel surface, not a synthetic or analog.
+    # The LSM variant (ch08) skips on kernels where struct key is
+    # forward-declared in BTF; the kprobe version sidesteps that by reading
+    # through vmlinux.h BTF directly. category="observer": its own trigger
+    # proves syscall_rc_unchanged=yes with the key metadata surfaced only in
+    # the ringbuf -- it reads the real subsystem but cannot change the access
+    # decision (no override/mutation).
     Poc("ch08k", "Keyring Heist — kprobe variant",
         "ch08-keyring-heist-kprobe",
         hooks=["key_task_permission", "lookup_user_key"], prefix="[ch08k]",
         mode="trigger-runs-loader", timeout=20,
-        proof_marker=r"CH08_CONCEPT_PROVEN|CH08_PROVEN|_PROVEN"),
+        proof_marker=r"CH08_CONCEPT_PROVEN|CH08_PROVEN",
+        category="observer"),
     # --- syscall-level illusion ---------------------------------------
     # Real kretprobe on a real syscall wrapper. category="illusion"
     # because the return value is forged (finit_module returns 0) but
@@ -169,7 +197,7 @@ POCS: list[Poc] = [
         "ch12-signed-driver-swap-syscall",
         hooks=["__arm64_sys_finit_module", "__arm64_sys_init_module"],
         prefix="[ch12s]", mode="trigger-runs-loader", timeout=25,
-        proof_marker=r"CH12_CONCEPT_PROVEN|CH12_PROVEN|FORGE\s+pid=|_PROVEN",
+        proof_marker=r"CH12_CONCEPT_PROVEN|CH12_PROVEN|FORGE\s+pid=",
         category="illusion"),
     # --- act 4 --------------------------------------------------------
     # Three primitives added in act 4: persistent theft against hardware-
@@ -763,7 +791,193 @@ def _emit_results(states, interrupted: bool = False) -> None:
         console.print(f"[dim]machine-readable: {final}[/dim]")
 
 
-def main():
+# ---------------------------------------------------------------------------
+# Structural self-check (`--check`) + authoritative stats generation.
+#
+# These run with NO kernel and NO root: they only read the POCS registry and
+# the on-disk repo layout. Paths are derived from this file's location rather
+# than the container mount (/w) so the check works on a plain clone.
+# ---------------------------------------------------------------------------
+
+RETIRED_DIRS = [
+    "ch13-powercap-override",
+    "ch13-powercap-override-analog",
+    "ch17-acpi-wsmi",
+    "ch17-acpi-wsmi-analog",
+]
+
+CATEGORY_ORDER = ["real", "observer", "illusion", "analog"]
+
+
+def _local_paths() -> dict:
+    """Repo-relative paths derived from this file's location.
+
+    proof.py lives at <repo>/dBPF-pocs/harness/proof.py.
+    """
+    harness_dir = pathlib.Path(__file__).resolve().parent
+    dbpf_pocs = harness_dir.parent
+    repo = dbpf_pocs.parent
+    return {
+        "harness": harness_dir,
+        "pocs": dbpf_pocs / "pocs",
+        "stats": harness_dir / "REGISTRY_STATS.md",
+        "readmes": [repo / "README.md", repo / "_book_chapters" / "README.md"],
+    }
+
+
+def compute_category_counts() -> dict[str, int]:
+    counts = {c: 0 for c in CATEGORY_ORDER}
+    for p in POCS:
+        counts[p.category] = counts.get(p.category, 0) + 1
+    return counts
+
+
+def render_stats_md() -> str:
+    """Render REGISTRY_STATS.md from the live POCS registry.
+
+    The single ``<!-- COUNTS ... -->`` line is machine-parseable and is what
+    ``--check`` reads back to prove the file is not stale.
+    """
+    counts = compute_category_counts()
+    total = len(POCS)
+    counts_line = "total={} ".format(total) + " ".join(
+        f"{c}={counts[c]}" for c in CATEGORY_ORDER)
+    out: list[str] = []
+    out.append("# dBPF harness — authoritative registry stats")
+    out.append("")
+    out.append("<!-- GENERATED by `python3 proof.py --write-stats`. "
+               "Do not edit by hand; regenerate after any change to POCS. -->")
+    out.append(f"<!-- COUNTS {counts_line} -->")
+    out.append("")
+    out.append(f"Total registered PoCs: **{total}**")
+    out.append("")
+    out.append("## Per-category counts")
+    out.append("")
+    out.append("| category | count |")
+    out.append("| --- | ---: |")
+    for c in CATEGORY_ORDER:
+        out.append(f"| {c} | {counts[c]} |")
+    out.append(f"| **total** | **{total}** |")
+    out.append("")
+    out.append("## Registered PoCs")
+    out.append("")
+    out.append("| cid | category | dir |")
+    out.append("| --- | --- | --- |")
+    for p in POCS:
+        out.append(f"| {p.cid} | {p.category} | {p.dir} |")
+    out.append("")
+    return "\n".join(out)
+
+
+def write_stats() -> pathlib.Path:
+    paths = _local_paths()
+    paths["stats"].write_text(render_stats_md())
+    return paths["stats"]
+
+
+def _parse_stats_counts(text: str) -> dict[str, int] | None:
+    m = re.search(r"<!-- COUNTS (.+?) -->", text)
+    if not m:
+        return None
+    out: dict[str, int] = {}
+    for tok in m.group(1).split():
+        k, _, v = tok.partition("=")
+        try:
+            out[k] = int(v)
+        except ValueError:
+            pass
+    return out
+
+
+def run_check() -> int:
+    """Validate structural consistency of the registry vs the repo layout.
+
+    Returns 0 on pass, nonzero on any FATAL. Requires no kernel and no root.
+    """
+    paths = _local_paths()
+    pocs_dir = paths["pocs"]
+    fatals: list[str] = []
+    warnings: list[str] = []
+
+    # (a) every registered dir exists under pocs/
+    for p in POCS:
+        if not (pocs_dir / p.dir).is_dir():
+            fatals.append(f"registered dir missing: {p.cid} -> pocs/{p.dir}")
+
+    # (b) no registered dir is a retired ch13/ch17 dir, and those dirs are gone
+    reg_dirs = {p.dir for p in POCS}
+    for rd in RETIRED_DIRS:
+        if rd in reg_dirs:
+            fatals.append(f"retired dir is still registered in POCS: {rd}")
+        if (pocs_dir / rd).exists():
+            fatals.append(f"retired dir still present on disk: pocs/{rd}")
+
+    # (c) recompute + print per-category counts and total
+    counts = compute_category_counts()
+    total = len(POCS)
+    expected = {"total": total, **counts}
+    print("registry counts (recomputed from POCS):")
+    print("  total={} ".format(total)
+          + " ".join(f"{c}={counts[c]}" for c in CATEGORY_ORDER))
+
+    # (d) stats file must exist and agree with the recomputed counts
+    stats_path = paths["stats"]
+    if not stats_path.exists():
+        fatals.append(f"stats file missing: {stats_path} "
+                      f"(run: python3 proof.py --write-stats)")
+    else:
+        file_counts = _parse_stats_counts(stats_path.read_text(errors="replace"))
+        if file_counts is None:
+            fatals.append(f"stats file has no COUNTS marker: {stats_path}")
+        elif file_counts != expected:
+            fatals.append(
+                f"stats file is STALE: file={file_counts} computed={expected} "
+                f"(run: python3 proof.py --write-stats)")
+
+    # (e) WARNING-ONLY doc drift scan (other agents own the docs in parallel).
+    # Only flag a number when it is directly bound to a PoC-count keyword
+    # ("N PoCs", "N proven", "N registered", "N directories", "of N") so we
+    # do not flag chapter indices in link tables.
+    total_pats = [
+        re.compile(r"\b(\d{2})\s+PoCs?\b", re.I),
+        re.compile(r"\b(\d{2})\s+proven\b", re.I),
+        re.compile(r"\b(\d{2})\s+registered\b", re.I),
+        re.compile(r"\bregistered[:\s]+(\d{2})\b", re.I),
+        re.compile(r"\b(\d{2})\s+directories\b", re.I),
+        re.compile(r"\bof\s+(\d{2})\b", re.I),
+    ]
+    for readme in paths["readmes"]:
+        if not readme.exists():
+            warnings.append(f"doc not found (skipped): {readme}")
+            continue
+        rel = readme.parent.name + "/" + readme.name
+        for i, ln in enumerate(readme.read_text(errors="replace").splitlines(), 1):
+            if re.search(r"\bch1[37]\b", ln):
+                warnings.append(f"{rel}:{i}: mentions retired ch13/ch17: "
+                                f"{ln.strip()[:90]}")
+            seen: set[int] = set()
+            for pat in total_pats:
+                for numm in pat.findall(ln):
+                    n = int(numm)
+                    if n != total and 10 <= n <= 99 and n not in seen:
+                        seen.add(n)
+                        warnings.append(
+                            f"{rel}:{i}: possible stale PoC total '{n}' "
+                            f"(registry total={total}): {ln.strip()[:80]}")
+
+    for w in warnings:
+        print(f"WARNING: {w}")
+    for f in fatals:
+        print(f"FATAL: {f}")
+
+    if fatals:
+        print("HARNESS CHECK: FAIL")
+        return 1
+    print("HARNESS CHECK: PASS")
+    return 0
+
+
+def _run_live():
     states = {p.cid: RunState(poc=p) for p in POCS}
     layout = Layout()
     layout.split_column(
@@ -808,6 +1022,34 @@ def main():
         sys.exit(130)
     if any(states[p.cid].status == "fail" for p in POCS):
         sys.exit(1)
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="dBPF proof harness: default runs the live TUI proofs; "
+                    "--check validates the registry with no kernel/root.")
+    parser.add_argument(
+        "--check", action="store_true",
+        help="structural consistency check only (no kernel/root); "
+             "exit 0 on pass, nonzero on failure")
+    parser.add_argument(
+        "--write-stats", action="store_true",
+        help="regenerate harness/REGISTRY_STATS.md from the POCS registry, "
+             "then exit")
+    args = parser.parse_args()
+
+    if args.write_stats:
+        path = write_stats()
+        print(f"wrote {path}")
+        return
+    if args.check:
+        sys.exit(run_check())
+
+    if not HAVE_RICH:
+        sys.exit("the live TUI requires the 'rich' package (pip install rich); "
+                 "use --check or --write-stats, which need no third-party deps")
+    _run_live()
 
 
 if __name__ == "__main__":

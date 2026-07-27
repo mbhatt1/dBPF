@@ -11,7 +11,7 @@ poc_dir: dBPF-pocs/pocs/ch04-phantom-syscall
 
 I was trying to see how far a tail-called BPF program could walk `task_struct` from a tracepoint on `sys_enter_write` before the verifier got unhappy. The idea was simple: a regular `write()` syscall carrying a magic prefix fires the tracepoint, which tail-calls a second stage that reads kernel-internal credential fields and exfils them via ringbuf. One syscall, three kernel-private values out.
 
-What surprised me was how little the verifier pushed back. Reading `task->cred->uid`, `task->cred->euid`, `task->real_parent->comm` through `BPF_CORE_READ` — all accepted. What it rejected: writes to `task_struct` (e.g. attempting to swap `cred` pointers). So the pattern is exfil, not privilege escalation. That matches how BPF was designed: observation of kernel state is permitted; mutation of core task state is not.
+What surprised me was how little the verifier pushed back. Reading `task->cred->uid`, `task->cred->euid`, and `task->real_parent->comm` through `BPF_CORE_READ` all went through. What it rejected were writes to `task_struct` — for instance, trying to swap `cred` pointers. So this is exfiltration, not privilege escalation, which is exactly the line BPF was drawn along: you can observe kernel state, you can't mutate the core task state.
 
 ## Mechanism
 
@@ -92,7 +92,7 @@ The unprivileged process issues exactly one `write()`. From its own userspace pe
 
 ## Scope
 
-Class III primitive from chapter 20 (ringbuf exfil). Nothing in the kernel changes; three kernel-private fields are copied out. Seccomp that allows `write()` sees one syscall; that was the threat model of seccomp, and it still holds exactly as designed — this primitive just sits in the explicit gap.
+Class III primitive from chapter 20 (ringbuf exfil). Nothing in the kernel changes; three kernel-private fields are copied out. Seccomp that allows `write()` sees one syscall — which is exactly what seccomp was designed to see, and it still holds as designed. This primitive just lives in the gap that design leaves open.
 
 ---
 

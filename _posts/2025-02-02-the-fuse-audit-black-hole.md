@@ -55,7 +55,7 @@ All three exist in `/proc/kallsyms` on the test kernel; all attach; none of them
 cd dBPF-pocs/pocs/ch03-fuse-blackhole
 make
 sudo bash trigger.sh
-# expect: =-- CH03_PROVEN variant=B before=0 after=<N> ===
+# expect: === CH03_PROVEN variant=B before=0 after=<N> ===
 ```
 
 Prior art: Dileo DEF CON 27 (2019) on subverting audit via BPF; Willcox / Hogan 2020–2022 exploration of the same class; a short-lived lkml patch series to expose `audit_log_start` via fmod_ret was rejected in 2023.

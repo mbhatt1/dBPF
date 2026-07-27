@@ -8,11 +8,11 @@ date: 2025-12-31
 
 > **See also**: [Chapter 19 — What This Book Actually Demonstrated]({{ site.baseurl }}/book/act-7/chapter-19-the-new-reality.html) · [Chapter 22 — The Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
 
-Eighteen chapters, one kernel (6.12.54-linuxkit aarch64), one reproducible harness. This epilogue draws a line under what was actually shown and what was not.
+Twenty-six registered PoCs, one reference kernel (Ubuntu 6.17.0-29-generic aarch64, in a Lima VM), one reproducible harness. This epilogue draws a line under what was actually shown and what was not.
 
 ## What was demonstrated
 
-Nineteen primitives ran under the Docker harness. Thirteen produced BEFORE/AFTER proof markers on stdout — lines like `CH01_WEAPON_PROVEN flips=N`, `[ch02] PWNED path=/mnt/ovlbacking/upper/secret.txt`, `CLOAK_PROVEN before_count=4 after_count=2 hidden=2`, `GHOST_COVERT_CHANNEL_PROVEN dropped=2 tcpdump=0`. Six skipped with documented kernel-environment reasons: missing BTF symbol, absent subsystem, inactive enforcement point. Chapter 20 walks the proven set and organizes them into five primitive classes. Chapter 21 accounts for the six skips. If you read nothing else in Act III, read those two.
+Of the 26 registered PoCs, 25 reproduce in the reference environment and one skips. Each PoC prints a proof marker to stdout — lines like `CH01_WEAPON_PROVEN flips=N`, `[ch02] PWNED path=/mnt/ovlbacking/upper/secret.txt`, `CLOAK_PROVEN before_count=4 after_count=2 hidden=2`, `GHOST_COVERT_CHANNEL_PROVEN dropped=2 tcpdump=0`. The one skip is ch24: the reference kernel is built with `CONFIG_BPF_TOKEN=n`, so `BPF_TOKEN_CREATE` is not available to exercise. (Two earlier drafts, ch13 powercap/RAPL and ch17 ACPI-WMI, were retired as x86-only stubs and are not part of the 26-entry catalog.) Chapter 20 walks the reproduced set and organizes it into five primitive classes; Chapter 21 accounts for the skip and the environment caveats. If you read nothing else, read those two.
 
 ## What was not demonstrated
 

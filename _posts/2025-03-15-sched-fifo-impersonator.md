@@ -42,7 +42,7 @@ override_ret=0
 - `/proc/[pid]/sched` — same source.
 - `/proc/[pid]/stat` field 41 — same source.
 
-The illusion is exactly one syscall wide. That is the honest scope: `chrt`, `systemd`, and libraries that gate on "setscheduler returned 0" will proceed as though SCHED_FIFO was granted and will not re-verify. Anything that looks again sees reality.
+The illusion is exactly one syscall wide. The honest scope: anything that trusts the setscheduler return without cross-checking is fooled. `chrt` is the confirmed case — it gates its exit status on the syscall return and does not re-verify via `sched_getscheduler`. Whether JIT runtimes, realtime audio servers, and systemd `CPUSchedulingPolicy=` startup paths behave the same way is plausible but untested; they weren't exercised here, so I won't claim them as demonstrated. Anything that looks again sees reality.
 
 ## Hook points
 

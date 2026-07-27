@@ -8,11 +8,11 @@ date: 2025-02-07
 
 > **See also**: [Blog post]({{ site.baseurl }}/device-cgroup-houdini.html) · [POC code](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch07-devcgroup-houdini-lsm) · [Chapter 21; Skip Accounting]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html)
 
-> **Proof status**: The synthetic deny+flip is proved on Ubuntu 6.17.0-29-generic aarch64 (Lima VM). The natural denial flip; intercepting a real device-cgroup denial; is not achievable on a stock LSM chain because `capable(CAP_MKNOD)` and `devcgroup_inode_mknod()` both run inside `vfs_mknod` before `security_inode_mknod` is ever called. The POC is honest about this and uses a staged synthetic design. See [Chapter 21]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) for skip accounting.
+> **Proof status**: The synthetic deny+flip is proved on Ubuntu 6.17.0-29-generic aarch64 (Lima VM). The natural denial flip — intercepting a real device-cgroup denial — is not achievable on a stock LSM chain, because `capable(CAP_MKNOD)` and `devcgroup_inode_mknod()` both run inside `vfs_mknod` before `security_inode_mknod` is ever called. The POC is honest about this and uses a staged synthetic design. See [Chapter 21]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) for skip accounting.
 
 The idea was straightforward: attach an LSM fmod_ret program to `security_inode_mknod` and return `0` whenever the device-cgroup controller would have denied. I wrote the BPF side in about thirty minutes, the loader in another hour, built, booted, ran the loader, ran `mknod` from inside an unprivileged container. The syscall returned `-EPERM`. My LSM program fired zero times. Ringbuf empty. `bpftool prog list` showed the program loaded and attached.
 
-The program was attached. The program was loaded. The program was fine. It just never ran. The syscall had already failed before the kernel got anywhere near the LSM chain.
+The program was loaded, attached, and fine. It just never ran. The syscall had already failed before the kernel got anywhere near the LSM chain.
 
 ## Why the hook never fires
 
@@ -40,7 +40,7 @@ The fix is to pre-check BTF for each hook name via `btf__find_by_name_kind(btf, 
 
 ## What the POC does instead
 
-With the natural-denial path blocked and `dev_open` pruned, the POC uses a synthetic two-stage design; the same one `ch06` established. A single BPF program implements both the denier and the flipper, selected at runtime by a control map. Three signals toggle the stage via `SIGUSR1` / `SIGUSR2` / `SIGHUP`.
+With the natural-denial path blocked and `dev_open` pruned, the POC falls back to the synthetic two-stage design `ch06` established. A single BPF program implements both the denier and the flipper, selected at runtime by a control map. Three signals toggle the stage: `SIGUSR1` / `SIGUSR2` / `SIGHUP`.
 
 ```c
 SEC("lsm.s/inode_mknod")
@@ -89,6 +89,6 @@ Class I primitive (return-value override at an LSM hook). The fmod_ret mechanism
 
 The `file_open` path is structurally different — `security_file_open` is a genuine LSM hook that a BPF fmod_ret program can reach — but that path was not exercised here and the bypass is not demonstrated. The proof marker is `CH07_CONCEPT_PROVEN`; the concept word is load-bearing and accurately scopes what was shown.
 
-What this chapter leaves behind is a clearer map of the pre-LSM minefield in `vfs_mknod` and a concrete reminder that fmod_ret only helps when you can actually reach the hook. The flip machinery works. Getting to a hook that fires on a real denial is the harder problem — and on the `file_open` path, it's still open.
+The takeaway is a clearer map of the pre-LSM checks in `vfs_mknod`, and a reminder that fmod_ret only helps once you can actually reach the hook. The flip machinery works. Reaching a hook that fires on a real denial is the harder part, and on the `file_open` path it remains untested here.
 
 > **See also**: [POC source; ch07-devcgroup-houdini-lsm](https://github.com/mbhatt1/dBPF/tree/master/dBPF-pocs/pocs/ch07-devcgroup-houdini-lsm) · Harness entry: `Poc("ch07", ...)` in `dBPF-pocs/harness/proof.py`

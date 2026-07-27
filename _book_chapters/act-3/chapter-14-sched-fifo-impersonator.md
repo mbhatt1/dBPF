@@ -116,6 +116,6 @@ docker run --rm -v "$PWD":/work -w /work dbpf-base \
 - The override does not change actual scheduler state; only what userspace observes on that one syscall return.
 - On stock cloud kernels with hardened lockdown or SELinux, `bpf_override_return` may be denied even with `CAP_SYS_ADMIN`.
 
-The lesson worth keeping from this chapter is not about scheduling at all. It is about the gap between what the kernel enforces and what userspace observes. That gap exists at every syscall return — and `bpf_override_return` can sit inside it, invisible, until something looks twice.
+The takeaway isn't about scheduling. It's the gap between what the kernel enforces and what userspace observes. That gap exists at every syscall return, and `bpf_override_return` can sit inside it unnoticed until something checks the kernel state directly.
 
 > **Proof status**: **PROVEN** on Ubuntu 6.17.0-29-generic aarch64 (Lima VM), 2026-05-20. Proof marker: `SCHED_WEAPON_PROVEN flips=1`.

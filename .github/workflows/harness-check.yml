@@ -1,0 +1,38 @@
+# dBPF Harness Consistency Check
+#
+# This workflow enforces registry<->docs<->directory consistency for the dBPF
+# PoC harness. It runs `proof.py --check`, a structural validation mode that
+# requires NO kernel, root, or privileged BPF/BTF capabilities: it verifies the
+# PoC registry stays in sync with the on-disk documentation and directory layout
+# and exits nonzero on any drift.
+#
+# NOTE: The FULL kernel PoC reproduction (building and attaching BPF programs)
+# is intentionally NOT run here. It needs a privileged, BPF/BTF-capable kernel
+# (reference env: Ubuntu 6.17 aarch64) that GitHub-hosted runners do not provide.
+# That full reproduction is a documented manual / self-hosted runner step.
+
+name: dBPF Harness Check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  harness-check:
+    name: Registry consistency (--check)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate registry / docs / directory consistency
+        run: python3 dBPF-pocs/harness/proof.py --check
+
+      - name: Byte-compile harness (py_compile)
+        run: python3 -m py_compile dBPF-pocs/harness/proof.py

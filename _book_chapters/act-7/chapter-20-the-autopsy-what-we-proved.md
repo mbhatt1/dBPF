@@ -10,11 +10,11 @@ date: 2026-01-10
 
 > **Navigation**: [Chapter 20; Taxonomy]({{ site.baseurl }}/book/act-7/chapter-20-the-autopsy-what-we-proved.html) · [Chapter 21; Skip Accounting]({{ site.baseurl }}/book/act-7/chapter-21-the-autopsy-what-refused-to-die.html) · [Chapter 22; Defender Playbook]({{ site.baseurl }}/book/act-7/chapter-22-the-defender-playbook.html)
 
-Every primitive in this book reduces to one of three motions: change the API return, rewrite the userspace buffer, copy the decision out of band. That is the result after twenty-three POCs and twenty-two `PROVEN` markers across three kernels. XDP looks different at first, but it is a specialization of the first motion; the API is the netdev rx path and the return is `XDP_DROP` or `XDP_TX`. Ringbuf-as-trigger looks different too, but it is a specialization of the third; the decision copied out of band is a kernel event, and a userspace racer converts that event into action. Once you see the three motions, the five classes fall out cleanly.
+Every primitive in this book reduces to one of three motions: change the API return, rewrite the userspace buffer, copy the decision out of band. That is the result after 26 registered PoCs, 25 of which reproduce in the reference environment. XDP looks different at first, but it is a specialization of the first motion — the API is the netdev rx path and the return is `XDP_DROP` or `XDP_TX`. Ringbuf-as-trigger looks different too, but it is a specialization of the third — the decision copied out of band is a kernel event, and a userspace racer converts that event into action. Once you see the three motions, the five classes fall out cleanly.
 
-**Final tally: 22 PROVEN across all environments, 1 SKIP (ch24; `CONFIG_BPF_TOKEN=n` on all available kernels), 0 failures.** The harness runs 23 POCs on the primary test environment (linuxkit 6.12.54 aarch64). 17 produce `_PROVEN` markers there; 3 (ch06 LSM, ch06o kprobe observer, ch12 LSM) skip on linuxkit and fire on the Fedora 42 aarch64 QEMU VM secondary; 2 (ch23 TPM unseal, ch25 IMDS via XDP) are PROVEN on the Ubuntu 6.17.0-29-generic aarch64 Lima VM. Chapter 21 accounts for every skip. This chapter walks the proven cases and organizes them.
+**The tally: 26 registered PoCs — real=15, observer=8, illusion=3, analog=0 — of which 25 reproduce in the reference environment (Ubuntu 6.17.0-29-generic aarch64) and 1 skips.** The skip is ch24, whose reference kernel is built with `CONFIG_BPF_TOKEN=n`. Chapter 21 accounts for the skip and for the primitives whose reproduced result depends on the surface being present. This chapter walks the reproduced cases and organizes them.
 
-Act 4 extended the scope along two axes without changing the taxonomy. The on-host primitives of Chapters 1–18 all manipulate state inside the running kernel's address space. Act 4 tested hardware-rooted key material that transits the kernel during TPM-backed trusted-key operations (ch23), off-host cloud-metadata credentials (ch25), and the delegated-capability boundary between a privileged process and an unprivileged client holding its token (ch24). All three fit the existing five classes: ch23 is Class III (kprobe attachment and entry-intercept on the TPM unseal path; byte capture was not demonstrated without a boot-registered TPM backend), ch25 is Class IV (packet-path interception, now at a cross-boundary address), ch24 is a threat-model subversion using Class III mechanics. No new class was needed.
+Act 4 extended the scope along two axes without changing the taxonomy. The on-host primitives of Chapters 1–18 all manipulate state inside the running kernel's address space. Act 4 added hardware-rooted key material that transits the kernel during TPM-backed trusted-key operations (ch23), off-host cloud-metadata credentials (ch25), and the delegated-capability boundary between a privileged process and an unprivileged client holding its token (ch24). All three fit the existing five classes: ch23 is Class III (a kprobe on the TPM unseal path — attachment and entry-intercept events reproduce; capturing plaintext key bytes needs a boot-registered TPM backend), ch25 is Class IV (packet-path interception, now at a cross-boundary address), and ch24 is a threat-model subversion built on Class III mechanics. No new class was needed.
 
 ## Class I; Return-value override
 
@@ -22,9 +22,9 @@ The kernel did the work; the caller got lied to about the result. That is the cl
 
 Three implementations share this shape: `kretprobe + bpf_override_return` against a function on `/sys/kernel/debug/error_injection/list`, BPF LSM `fmod_ret` against an active security hook, and `XDP_DROP` at the driver rx path.
 
-Ch01 is the canonical Class I target; the POC attaches kprobe+kretprobe to `cap_capable`. On linuxkit, `cap_capable` is not on the error-injection allowlist, so `bpf_override_return` is a silent no-op — no capability flip occurs. What fires on linuxkit is signal delivery: `bpf_send_signal(SIGUSR1)` from the kretprobe when the observed deny lands on a targeted tgid. Marker: `CH01_WEAPON_PROVEN flips=0 signals=N`. The real capability flip requires the LSM `fmod_ret` variant, which skips on linuxkit (no active LSM hooks). Ch01 is therefore `observer` on linuxkit. Ch14 forges `sched_setscheduler` to pretend a `SCHED_FIFO` promotion succeeded; `SCHED_WEAPON_PROVEN flips=N`. Ch18 forges the `getuid`/`geteuid` syscall return to bypass the token check; `TOKEN_FORGE_PROVEN uid_forges=N`; with the `gid=1001` tell still visible. Ch12 (LSM `fmod_ret` on `kernel_read_file`) fires only on Fedora 42 QEMU where module signature enforcement is live. Ch06 (LSM `fmod_ret` on SELinux hooks) also fires only on Fedora QEMU where SELinux is enforcing.
+Ch01 is the canonical Class I target: it attaches kprobe+kretprobe to `cap_capable`. Whether `bpf_override_return` actually flips the result depends on the kernel — the override lands only if `cap_capable` is on that kernel's error-injection allowlist. Where it is not, the primitive falls back to signal delivery: `bpf_send_signal(SIGUSR1)` from the kretprobe when an observed deny lands on a targeted tgid. Marker: `CH01_WEAPON_PROVEN flips=N signals=N`, and the honest `flips=0` case says the override was a no-op on that kernel. The real capability flip is what the LSM `fmod_ret` variant does where an LSM hook is active. Ch14 forges `sched_setscheduler` to pretend a `SCHED_FIFO` promotion succeeded (`SCHED_WEAPON_PROVEN flips=N`). Ch18 forges the `getuid`/`geteuid` syscall return to bypass a token check (`TOKEN_FORGE_PROVEN uid_forges=N`), leaving the `gid=1001` tell visible. Ch12 (LSM `fmod_ret` on `kernel_read_file`) and ch06 (LSM `fmod_ret` on SELinux hooks) reproduce as registered, but only flip a *real* refusal where module-signature enforcement or SELinux enforcing is actually live; ch06s is the synthetic scaffold that manufactures the condition when it is not.
 
-The framing matters: this class is an illusion against userspace consumers of the syscall return. Kernel-side logic that runs later in the call chain; a subsequent LSM check on `current->cred`, a VFS enforcement point; is unaffected. The override lies to the caller. It does not change what the kernel actually did.
+The framing matters: this class is an illusion against userspace consumers of the syscall return. Kernel-side logic that runs later in the call chain — a subsequent LSM check on `current->cred`, a VFS enforcement point — is unaffected. The override lies to the caller. It does not change what the kernel actually did.
 
 ## Class II; Userspace buffer rewrite
 
@@ -66,56 +66,60 @@ Ch02 is the representative: ringbuf fires on `ovl_copy_up_one`, the racer writes
 
 ## Why the taxonomy matters for defenders
 
-After twenty-two proven chapters, the taxonomy is not just an organizational convenience — it is the reason five detection signatures can cover everything in the book.
+The taxonomy is not just an organizational convenience — it is the reason five detection signatures can cover everything in the book.
 
-A Class I signature is "syscall return disagrees with state readable via `/proc/self/status` or a follow-up check against `current->cred`"; the same signature catches ch06, ch14, and ch18 (real flips or forged returns); ch01 and ch07 require adjusted framing — ch01 delivers a signal rather than a flip on linuxkit, ch07 is synthetic. A Class II signature is "bpf_probe_write_user loaded"; one dmesg grep catches ch05 and ch10 with one rule. A Class III signature is ringbuf drain accompanied by a load event against a kernel-internal symbol. Class IV wants link-layer captures taken from the XDP peer, not from above the driver. Class V wants ringbuf correlation with a userspace racer process doing writes on a shared inode.
+A Class I signature is "syscall return disagrees with state readable via `/proc/self/status` or a follow-up check against `current->cred`"; the same signature catches ch06, ch14, and ch18 (real flips or forged returns), with ch01 a partial case because it may deliver a signal rather than a flip depending on the kernel's error-injection list. A Class II signature is "`bpf_probe_write_user` loaded"; one dmesg grep catches ch05 and ch10. A Class III signature is a ringbuf drain accompanied by a load event against a kernel-internal symbol. Class IV wants link-layer captures taken from the XDP peer, not from above the driver. Class V wants ringbuf correlation with a userspace racer doing writes on a shared inode.
 
-Five signatures cover the twenty-two proven chapters. That is the payoff of writing the taxonomy down. Build rules against the patterns, not the instances.
+Five signatures cover the whole catalog. That is the payoff of writing the taxonomy down: build rules against the patterns, not the instances.
 
 ## The four-category system
 
-Every POC carries a `category` field classifying the honesty of what was demonstrated.
+Every PoC carries a `category` field classifying the honesty of what was demonstrated.
 
-- **REAL** (14 POCs): hooks the actual kernel subsystem and can observe or mutate.
-- **OBSERVER** (6 POCs): hooks the real subsystem but cannot mutate; the error-injection allowlist blocks `bpf_override_return`, or atomic context prevents it, or only attachment/entry events fire without data capture.
-- **ILLUSION** (3 POCs): hooks the real syscall entry point but only forges the return value; kernel state unchanged.
-- **CONCEPT** (1 POC): synthetic demonstration; the BPF program manufactures the condition it then intercepts rather than intercepting a real external event.
+- **REAL** (15 PoCs): hooks the actual kernel subsystem and can observe or mutate.
+- **OBSERVER** (8 PoCs): hooks the real subsystem but cannot change the access decision; it reads kernel-internal state through a kprobe or fentry and ships it to ringbuf while the syscall return is left untouched.
+- **ILLUSION** (3 PoCs): hooks the real syscall entry point but only forges the return value; kernel state unchanged. These are ch14 (`sched_setscheduler`), ch18 (`getuid`), and ch12s (`finit_module`).
+- **ANALOG** (0 PoCs): a synthetic stand-in that manufactures the condition it then intercepts rather than intercepting a real external event. Nothing is registered here. That does not mean every synthetic surface was removed — ch06s is a registered LSM-synthetic scaffold, but it hooks the real BPF LSM path read-only, so it lives under `observer`, not `analog`.
 
-The category is orthogonal to the class. A Class I primitive can be `real` (ch12) or `observer` (ch01, ch06) or `illusion` (ch14, ch18, ch12s) or `concept` (ch07). A Class III primitive can be `real` (ch04, ch08k) or `observer` (ch03, ch06o, ch23). The category tells you how much to trust the demonstration; the class tells you what the primitive does.
+The category is orthogonal to the class. A Class I primitive can be `real` (ch01, ch07, ch12), `observer` (ch06, ch06s), or `illusion` (ch14, ch18, ch12s). A Class III primitive can be `real` (ch04, ch09, ch11, ch23) or `observer` (ch03, ch03f, ch06o, ch08, ch08k, ch16). The category tells you how much to trust the demonstration; the class tells you what the primitive does.
 
 ## Master table
 
-All 23 registered POCs, mapped to category, primitive class, and effect. Status is `effect_demonstrated` on linuxkit unless otherwise noted.
+All 26 registered PoCs, mapped to category, primitive class, and effect. Status is reproduced in the reference environment (Ubuntu 6.17.0-29-generic aarch64) unless otherwise noted.
 
-| POC | Category | Class | Effect (marker) | Notes |
+| PoC | Category | Class | Effect (marker) | Notes |
 |-----|----------|-------|-----------------|-------|
-| ch01 | observer | I | `CH01_WEAPON_PROVEN flips=0 signals=N` | `cap_capable` not on error-injection allowlist; `bpf_override_return` is a silent no-op on linuxkit — what fires is `bpf_send_signal(SIGUSR1)` on deny. Real capability flip requires the LSM variant, which skips on linuxkit |
+| ch01 | real | I | `CH01_WEAPON_PROVEN flips=N signals=N` | kprobe/kretprobe on `cap_capable`; the override lands only where `cap_capable` is on the kernel's error-injection list, otherwise falls back to `bpf_send_signal(SIGUSR1)` on deny (`flips=0`) |
 | ch02 | real | V | `[ch02] PWNED path=... bytes=... hits=...` | Overlayfs copy-up race |
-| ch03 | observer | III | `CH03_PROVEN variant=fentry before=N after=M` | Audit record exfil; read-only |
-| ch04 | real | III | `CH04_PROVEN leaked_fields=N` | Phantom-syscall field leakage |
-| ch05 | real | II | `CH05_PROVEN ... zeroed=yes patched_events=N` | cgroup cpu.stat rewrite |
+| ch02lsm | real | I | `CH02_PROVEN` / `DENIED (-EPERM)` | Overlayfs copy-up denied via BPF LSM `fmod_ret` |
+| ch03 | observer | III | `CH03_PROVEN` (SUPPRESSED/EXFIL) | Audit-record exfil (kprobe); read-only |
+| ch03f | observer | III | `CH03_PROVEN` | Same primitive, fentry suppressor variant |
+| ch04 | real | III | `CH04_PROVEN` | Phantom-syscall field leakage |
+| ch05 | real | II | `CH05_PROVEN` | cgroup `cpu.stat` readout rewrite via `bpf_probe_write_user` |
 | ch05b | real | IV | `GHOST_COVERT_CHANNEL_PROVEN dropped=2 tcpdump=0` | XDP ghost NIC |
-| ch06 | observer | I | `CH06_PROVEN` | **Skips on linuxkit** (no SELinux); fires on Fedora 42 QEMU |
-| ch06o | observer | III | `CH06_PROVEN hook=...` | SELinux kprobe observer; skips if SELinux absent |
-| ch07 | concept | I | `CH07_CONCEPT_PROVEN ...` | devcgroup kprobe; BPF-synthesized denial — the BPF program creates and flips the denial itself; device cgroup check fires before the LSM chain, so no real device cgroup denial was intercepted |
-| ch08 | real | III | `CH08_PROVEN` | Keyring heist kprobe |
-| ch08k | real | III | `CH08_CONCEPT_PROVEN events=N` | Kept kprobe variant |
+| ch06 | observer | I | `CH06_PROVEN` | LSM `fmod_ret` on SELinux hooks; flips a real denial only where SELinux is enforcing |
+| ch06s | observer | I | `CH06_SYNTH_PROVEN` | LSM-synthetic scaffold; manufactures the denial to demonstrate the flip |
+| ch06o | observer | III | `CH06_PROVEN hook=...` / `CH06_SKIP reason=...` | SELinux kprobe observer (`avc_has_perm`) |
+| ch07 | real | I | `CH07_PROVEN` / `SIGUSR2_SENT` | devcgroup kprobe (`devcgroup_check_permission`); signal on observed denial |
+| ch08 | observer | III | `CH08_PROVEN` (EXFIL=) | Keyring metadata exfil during `key_task_permission`; syscall return unchanged |
+| ch08k | observer | III | `CH08_CONCEPT_PROVEN events=N` | Kprobe variant; sidesteps a BTF forward-decl of `struct key` |
 | ch09 | real | III | `CH09_PROVEN host_pid=N mapped=yes` | Cross-namespace PID mapping |
-| ch10 | real | II | `CLOAK_PROVEN before_count=4 after_count=2 hidden=2` | d_reclen swallow |
-| ch11 | real | III | `CH11_PROVEN events=N unique=M per_event_timing=yes` | Per-IRQ timing sidechannel |
-| ch12 | real | I | `CH12_PROVEN` | **Skips on linuxkit** (no module sig enforcement); fires on Fedora 42 QEMU |
-| ch12s | illusion | I | `CH12_CONCEPT_PROVEN syscall_override_landed=yes module_actually_loaded=no` | finit_module return forge; aarch64-only |
-| ch14 | illusion | I | `SCHED_WEAPON_PROVEN flips=N` | sched_setscheduler return forge; aarch64-only |
+| ch10 | real | II | `CLOAK_PROVEN before_count=4 after_count=2 hidden=2` | `getdents64` d_reclen swallow; `stat_still_works=yes` |
+| ch11 | real | III | `CH11_PROVEN` | Per-IRQ timing sidechannel |
+| ch12 | real | I | `CH12_PROVEN` | LSM `fmod_ret` on `kernel_read_file`; flips a real refusal only where module-signature enforcement is on |
+| ch12s | illusion | I | `CH12_CONCEPT_PROVEN ... module_actually_loaded=no` | `finit_module` return forge; aarch64 |
+| ch14 | illusion | I | `SCHED_WEAPON_PROVEN flips=N` | `sched_setscheduler` return forge; aarch64 |
 | ch15 | real | IV | `VLAN_GHOST_CROSSNS_PROVEN redirect_count=N` | Cross-namespace VLAN redirect |
-| ch16 | observer | III | `SECCOMP_SIDECHANNEL_PROVEN events=N` | Seccomp decision exfil |
-| ch18 | illusion | I | `TOKEN_FORGE_PROVEN uid_forges=N` | getuid return forge; aarch64-only |
-| ch23 | observer | III | `CH23_PROVEN hook=attached kind=kprobe-on-tpm2_unseal_trusted sym-confirmed` | **PROVEN** on Ubuntu 6.17 Lima VM; skips on linuxkit (no TPM symbol). Demonstrates kprobe attachment and entry-intercept events only — no key bytes were captured in the ringbuf; byte-capture requires a host with a boot-registered TPM backend |
-| ch24 | real |; | `CH24_SKIP` | **SKIP in all environments**; `CONFIG_BPF_TOKEN=n` on Ubuntu 6.17 and Fedora 6.17; BPF_TOKEN_CREATE returns ENOSYS |
-| ch25 | real | IV | `CH25_PROVEN access_key_captures=1 token_captures=1 role=demo-role` | **PROVEN** on Ubuntu 6.17 Lima VM via XDP mock IMDSv2 on `lo`; skips on linuxkit |
+| ch16 | observer | III | `SECCOMP_SIDECHANNEL_PROVEN events=N` | Seccomp decision exfil for a sibling TID |
+| ch18 | illusion | I | `TOKEN_FORGE_PROVEN uid_forges=N` | `getuid`/`geteuid` return forge; `gid=1001` tell left visible; aarch64 |
+| ch23 | real | III | `CH23_PROVEN key_bytes_captured=N` / `CH23_SKIP` | kprobe on `tpm2_unseal_trusted`; attachment and entry-intercept events reproduce, but plaintext key capture needs a boot-registered TPM backend |
+| ch24 | real | — | `CH24_SKIP reason=...` | **The single skip**: reference kernel built `CONFIG_BPF_TOKEN=n`, so `BPF_TOKEN_CREATE` is unavailable to exercise |
+| ch25 | real | IV | `CH25_PROVEN access_key_captured=yes` | XDP IMDSv2 capture; the reference run uses a mock exchange on `lo` |
 
-**Category counts**: real=14, observer=6, illusion=3, concept=1.
-**Status counts**: 17 on linuxkit; 3 (ch06, ch06o, ch12) on Fedora 42 QEMU; 2 (ch23, ch25) on Ubuntu 6.17 Lima VM; 1 SKIP (ch24); 0 failures.
-**Across-environment total: 22 PROVEN, 1 SKIP.**
+**Category counts**: real=15, observer=8, illusion=3, analog=0 (total 26).
+**Reproduction**: 25 of 26 reproduce in the reference environment (Ubuntu 6.17.0-29-generic aarch64); 1 skip (ch24); 0 failures.
+
+(ch13 powercap/RAPL and ch17 ACPI-WMI were retired as x86-only stubs and are not in the catalog; they are absent from this table by design.)
 
 ---
 
