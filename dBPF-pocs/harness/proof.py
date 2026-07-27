@@ -119,7 +119,7 @@ POCS: list[Poc] = [
     Poc("ch06s", "Silencing SELinux (LSM synthetic)", "ch06-silence-selinux-lsm-synthetic",
         hooks=["bpf-lsm"], prefix="[ch06]",
         mode="trigger-runs-loader",
-        proof_marker=r"CH06_SYNTH_PROVEN",
+        proof_marker=r"CH06_CONCEPT_PROVEN",
         category="observer"),
     Poc("ch06o", "Silencing SELinux (kprobe observer)",
         "ch06-silence-selinux",
