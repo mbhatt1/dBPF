@@ -55,14 +55,25 @@ if [ -e /dev/tpm0 ] || [ -e /dev/tpmrm0 ]; then
         fi
     fi
 
-    # Try with the explicit SRK parent first, then fall back to the bare form
-    # (older kernels create a transient primary internally).
-    KEY_ID=$(keyctl add trusted ch23_test_key "new 32 keyhandle=$SRK" @u 2>/dev/null)
-    [ -z "$KEY_ID" ] && KEY_ID=$(keyctl add trusted ch23_test_key "new 32" @u 2>/dev/null)
+    # Step 1: create + SEAL a trusted key. Try with the explicit SRK parent
+    # first, then fall back to the bare form (older kernels create a transient
+    # primary internally). This calls tpm2_seal_trusted, NOT unseal.
+    KEY_ID=$(keyctl add trusted ch23_seed "new 32 keyhandle=$SRK" @u 2>/dev/null)
+    [ -z "$KEY_ID" ] && KEY_ID=$(keyctl add trusted ch23_seed "new 32" @u 2>/dev/null)
 
     if [ -n "$KEY_ID" ] && [ "$KEY_ID" != "0" ]; then
-        # keyctl print on a trusted key triggers tpm2_unseal_trusted (the unseal)
-        keyctl print "$KEY_ID" > /dev/null 2>&1
+        # Step 2: export the sealed blob and LOAD it back into a new key.
+        # It is the LOAD path that calls tpm2_unseal_trusted (TPM2_CC_Unseal),
+        # landing the recovered plaintext in trusted_key_payload->key[] — which
+        # is exactly what the kretprobe captures. `keyctl print` alone only
+        # returns the already-sealed blob and does NOT unseal, so it can never
+        # fire the hook; the load below is what actually triggers the heist.
+        BLOB=$(keyctl print "$KEY_ID" 2>/dev/null)
+        if [ -n "$BLOB" ]; then
+            LOAD_ID=$(keyctl add trusted ch23_recovered "load $BLOB keyhandle=$SRK" @u 2>/dev/null)
+            [ -z "$LOAD_ID" ] && LOAD_ID=$(keyctl add trusted ch23_recovered "load $BLOB" @u 2>/dev/null)
+            [ -n "$LOAD_ID" ] && keyctl unlink "$LOAD_ID" @u 2>/dev/null
+        fi
         keyctl revoke "$KEY_ID" 2>/dev/null
         keyctl unlink "$KEY_ID" @u 2>/dev/null
     else

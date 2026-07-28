@@ -59,13 +59,20 @@ int BPF_KRETPROBE(krp_tpm2_unseal_trusted, int ret)
 
     if (ret != 0) return 0; /* unseal failed — no plaintext */
 
-    /* struct trusted_key_payload layout:
-     *   u32 key_len  @ offset 0
-     *   u8  key[512] @ offset 4
-     * (independent of kernel version — stable ABI since 2012)
-     */
+    /* struct trusted_key_payload (include/keys/trusted-type.h):
+     *   struct callback_head rcu;   // 16 bytes on 64-bit
+     *   unsigned int key_len;       // <-- the plaintext length
+     *   unsigned int blob_len;
+     *   unsigned char migratable, old_format;
+     *   unsigned char key[MAX_KEY_SIZE + 1];   // <-- the unsealed plaintext
+     *   unsigned char blob[...];
+     * The struct begins with an rcu_head, so key_len is NOT at offset 0.
+     * Use CO-RE so the correct, relocated field offsets are used on any
+     * kernel version instead of hard-coding them. */
+    struct trusted_key_payload *p = payload;
     __u32 key_len = 0;
-    bpf_probe_read_kernel(&key_len, sizeof(key_len), payload);
+    if (bpf_core_read(&key_len, sizeof(key_len), &p->key_len))
+        return 0;
     if (key_len == 0 || key_len > MAX_KEY_LEN) return 0;
 
     struct evt *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
@@ -75,8 +82,7 @@ int BPF_KRETPROBE(krp_tpm2_unseal_trusted, int ret)
     e->key_len = key_len;
     bpf_get_current_comm(e->comm, sizeof(e->comm));
     __builtin_memset(e->key_bytes, 0, sizeof(e->key_bytes));
-    bpf_probe_read_kernel(e->key_bytes, key_len & (MAX_KEY_LEN - 1),
-                          (__u8 *)payload + 4);
+    bpf_core_read(e->key_bytes, key_len & (MAX_KEY_LEN - 1), &p->key);
 
     bpf_ringbuf_submit(e, 0);
     return 0;
