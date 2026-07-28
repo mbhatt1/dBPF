@@ -1,24 +1,44 @@
-// ch06 Silence SELinux — REAL mutation variant using BPF LSM fmod_ret.
+// ch06 Silence SELinux — BPF LSM OBSERVER (the "silence" flip is impossible).
 //
-// Chapter claim: "force SELinux denials to grants". BPF LSM hooks fire
-// *before* SELinux's in-kernel avc_has_perm path, so overriding the outer
-// permission hook short-circuits SELinux's verdict entirely: the deny
-// never gets a chance to run.
+// HONEST STATUS (proven live on Fedora 43, kernel 6.17.1, SELinux enforcing):
+// The chapter's original claim — "force SELinux denials to grants" — is
+// IMPOSSIBLE via BPF LSM. The kernel LSM framework runs hooks as an ordered
+// chain and is DENY-WINS: call_int_hook() iterates the registered modules
+// and bails out on the FIRST hook that returns a non-default (nonzero) value.
+// On every stock kernel the LSM order places selinux BEFORE bpf, e.g.
+//   /sys/kernel/security/lsm = lockdown,capability,yama,selinux,bpf,...
+// So when SELinux denies an access it returns -EACCES first and the chain
+// short-circuits: the bpf hook is NEVER invoked for a denied access, and
+// even if it were, returning 0 cannot undo the -EACCES already selected by
+// the framework. A BPF LSM hook can only make policy MORE restrictive
+// (turn an allow into a deny, because it runs after selinux's allow); it can
+// never relax a SELinux denial.
 //
-// Three sleepable fmod_ret programs cover the common access paths:
-//   lsm.s/file_permission       — vfs read/write/execute on an open file
-//   lsm.s/inode_permission      — path walk / open-time permission check
-//   lsm.s/bprm_check_security   — execve of a label-restricted binary
+// PROOF (see trigger.sh): with these hooks attached in wildcard "flip every
+// deny" mode, 150+ genuine SELinux denials (unconfined_t reading a custom
+// ch06deny_t-labeled file, permissive=0) were generated. Result: every read
+// still failed with EACCES, ZERO flips occurred, and across ~34,000 hook
+// invocations the trailing `ret` arg was 0 EVERY time (nonzero=0) — direct
+// evidence the hook never even sees a pending denial.
 //
-// Each reads the upstream `ret` arg. If the current tgid is in
-// target_tgids (or wildcard=0 present) AND ret != 0 (a pending deny),
-// flip the return value to 0 (allow). Emit a ringbuf event with
-// {pid, comm, hook, orig_ret, flipped}. The loader turns those into
-// the `FLIP hook=...` proof markers that the harness scans for.
+// What ch06 CAN honestly do: OBSERVE. These hooks fire on every *allowed*
+// access decision (ret==0) and can read/emit them. That makes ch06 a
+// legitimate BPF LSM observer of SELinux-permitted operations, not a
+// silencer. The flip code below is retained only to demonstrate that the
+// flip path is dead (`ret != 0` is never true on a real SELinux host).
+//
+// Three hooks cover the common access paths:
+//   lsm/file_permission       — vfs read/write/execute on an open file
+//   lsm/inode_permission      — path walk / open-time permission check
+//   lsm/bprm_check_security   — execve of a binary
+//
+// Each reads the upstream `ret` arg (return value accumulated by the LSM
+// chain so far — always 0 by the time a bpf hook runs). Emits a ringbuf
+// event with {pid, comm, hook, orig_ret, flipped}.
 //
 // Prereqs (verify on the host before running):
 //   cat /sys/kernel/security/lsm     # must contain "bpf" AND "selinux"
-//   bpftool feature probe | grep lsm # must show "lsm_fmod_ret ok"
+//   bpftool feature probe | grep lsm # program_type lsm available
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>

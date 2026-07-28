@@ -1,8 +1,21 @@
 #!/bin/bash
-# ch02-overlayfs-lsm trigger: construct a tmpfs-backed overlay with a
+# ch02-overlayfs-lsm trigger: construct tmpfs-backed overlays with a
 # secret file in the lower layer, prove baseline copy-up works, then
-# load the BPF LSM program and show copy-up is denied for the targeted
-# basename.
+# load the BPF LSM program and show copy-up is DENIED (-EPERM) for the
+# targeted basename.
+#
+# Two independent overlay mounts are used on purpose:
+#   - a "baseline" mount to show copy-up normally succeeds, and
+#   - a fresh "test" mount for the BPF-denied case.
+# Reusing one mount (writing, then rm'ing the copied-up file from the
+# upperdir underneath a live overlay) leaves stale overlay dentry state,
+# so copy_up would not fire again — hence two clean mounts.
+#
+# NOTE on layout: overlayfs requires upperdir and workdir to reside under
+# the SAME mount. /tmp is tmpfs here, so plain subdirectories under one
+# mktemp root already satisfy that (do NOT mount a separate tmpfs per dir,
+# or the mount fails: "workdir and upperdir must reside under the same
+# mount").
 set +e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 if ! grep -q bpf /sys/kernel/security/lsm 2>/dev/null; then
@@ -10,48 +23,51 @@ if ! grep -q bpf /sys/kernel/security/lsm 2>/dev/null; then
   exit 2
 fi
 
-ROOT="$(mktemp -d /tmp/ch02-ovl.XXXXXX)"
-mkdir -p "$ROOT/lower" "$ROOT/upper" "$ROOT/work" "$ROOT/merged"
-# tmpfs mounts so overlay has a real memory-backed upper layer
-mount -t tmpfs tmpfs "$ROOT/upper"
-mount -t tmpfs tmpfs "$ROOT/work"
-# overlay requires upper and work on the same fs
-mkdir -p "$ROOT/upper/u" "$ROOT/work/w"
-
 SECRET="secret.txt"
-echo "original-lower-content" > "$ROOT/lower/$SECRET"
-
-mount -t overlay overlay \
-  -o "lowerdir=$ROOT/lower,upperdir=$ROOT/upper/u,workdir=$ROOT/work/w" \
-  "$ROOT/merged"
+LPID=""
+BASE=""
+TEST=""
 
 cleanup() {
-  kill $LPID 2>/dev/null
+  [ -n "$LPID" ] && kill "$LPID" 2>/dev/null
   wait 2>/dev/null
-  umount "$ROOT/merged" 2>/dev/null
-  umount "$ROOT/upper" 2>/dev/null
-  umount "$ROOT/work" 2>/dev/null
-  rm -rf "$ROOT"
+  [ -n "$BASE" ] && { umount "$BASE/merged" 2>/dev/null; rm -rf "$BASE"; }
+  [ -n "$TEST" ] && { umount "$TEST/merged" 2>/dev/null; rm -rf "$TEST"; }
 }
 trap cleanup EXIT
 
+mk_overlay() { # $1 = root dir; creates lower/upper/work/merged + secret in lower
+  local R="$1"
+  mkdir -p "$R/lower" "$R/upper" "$R/work" "$R/merged"
+  echo "original-lower-content" > "$R/lower/$SECRET"
+  mount -t overlay overlay \
+    -o "lowerdir=$R/lower,upperdir=$R/upper,workdir=$R/work" \
+    "$R/merged"
+}
+
 echo "=== baseline (no BPF): copy-up via write should succeed ==="
-echo "tampered-baseline" >> "$ROOT/merged/$SECRET"
-ls -la "$ROOT/upper/u/"
-# reset: remove upper copy so we can re-test
-rm -f "$ROOT/upper/u/$SECRET"
+BASE="$(mktemp -d /tmp/ch02-base.XXXXXX)"
+mk_overlay "$BASE" || { echo "[trigger] baseline overlay mount failed"; exit 3; }
+echo "tampered-baseline" >> "$BASE/merged/$SECRET"
+echo "baseline upper contents (should contain $SECRET — copy-up happened):"
+ls -la "$BASE/upper/"
+umount "$BASE/merged" 2>/dev/null; rm -rf "$BASE"; BASE=""
 
 echo "=== starting BPF LSM loader (protect $SECRET) ==="
 "$HERE/build/ch02-overlayfs-lsm" -p "$SECRET" >/tmp/ch02-lsm.log 2>&1 &
 LPID=$!
-sleep 1
+sleep 2
 
 echo "=== with BPF LSM: write attempt should fail (EPERM) ==="
-( echo "tampered-after-bpf" >> "$ROOT/merged/$SECRET" ) 2>&1
+TEST="$(mktemp -d /tmp/ch02-test.XXXXXX)"
+mk_overlay "$TEST" || { echo "[trigger] test overlay mount failed"; exit 3; }
+( echo "tampered-after-bpf" >> "$TEST/merged/$SECRET" ) 2>&1
 RET=$?
-echo "write ret=$RET"
-echo "upper layer contents (should be empty — copy-up denied):"
-ls -la "$ROOT/upper/u/"
+echo "write ret=$RET (nonzero = denied)"
+echo "test upper contents (should be empty — copy-up denied):"
+ls -la "$TEST/upper/"
+echo "merged content (still attacker-controlled lower layer):"
+cat "$TEST/merged/$SECRET"
 
 sleep 1
 echo "=== loader log ==="

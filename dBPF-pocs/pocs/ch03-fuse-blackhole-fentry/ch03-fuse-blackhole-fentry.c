@@ -55,10 +55,8 @@ static int check_lsm_bpf_enabled(void)
 }
 
 // Returns 1 if the symbol is present in vmlinux BTF as a FUNC.
-// Presence alone is not proof the modify-return allowlist covers it —
-// that set is compiled in (BTF_SET_START(bpf_modify_return_targets))
-// and not directly introspectable from userspace. We treat a test
-// attach as the ground truth; BTF presence is a fast negative filter.
+// Presence alone is NOT proof the modify-return allowlist covers it: BTF
+// carries every traceable function, but fmod_ret is gated separately.
 static int btf_has_func(const char *name)
 {
     struct btf *btf = btf__load_vmlinux_btf();
@@ -66,6 +64,40 @@ static int btf_has_func(const char *name)
     int id = btf__find_by_name_kind(btf, name, BTF_KIND_FUNC);
     btf__free(btf);
     return id > 0;
+}
+
+// Ground truth for fmod_ret viability. A BPF_MODIFY_RETURN program can only
+// attach to a function the kernel deems "modifiable": either annotated with
+// ALLOW_ERROR_INJECTION (surfaced in the error_injection list) or a BPF-LSM
+// hook. If the target is absent from that set, the *load* — not the attach —
+// fails at verification time with "<func>() is not modifiable" (-EINVAL),
+// which tears down the whole skeleton. So we must gate autoload on this, not
+// on mere BTF presence; otherwise the fmod_ret program crashes the load
+// before the lsm/syslog fallback ever gets a chance.
+static int func_error_injectable(const char *name)
+{
+    static const char *paths[] = {
+        "/sys/kernel/debug/error_injection/list",
+        "/sys/kernel/tracing/error_injection/list",
+    };
+    for (unsigned i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+        FILE *f = fopen(paths[i], "r");
+        if (!f) continue;
+        char line[256];
+        int found = 0;
+        while (fgets(line, sizeof(line), f)) {
+            // format: "<func>\t<TYPE>" (one entry per line, symbol first).
+            char sym[128];
+            if (sscanf(line, "%127s", sym) == 1 &&
+                strcmp(sym, name) == 0) {
+                found = 1;
+                break;
+            }
+        }
+        fclose(f);
+        return found; // first readable list is authoritative
+    }
+    return 0; // list unreadable (not mounted / no privilege) -> assume no
 }
 
 int main(int argc, char **argv)
@@ -88,7 +120,15 @@ int main(int argc, char **argv)
     struct ch03_fuse_blackhole_fentry_bpf *s = ch03_fuse_blackhole_fentry_bpf__open();
     if (!s) { fprintf(stderr, "[ch03-fe] open: %s\n", strerror(errno)); return 1; }
 
-    int have_mr = btf_has_func("audit_log_start");
+    // fmod_ret/audit_log_start is viable only if the symbol is BOTH in BTF
+    // (so the trampoline can be built) AND in the kernel's modify-return
+    // allowlist (error_injection list). audit_log_start is in BTF on every
+    // recent kernel but is NOT error-injectable on mainline — so this gate
+    // is normally false and we fall back. (Gating on BTF alone made the
+    // fmod_ret program fail the *load* with "not modifiable", crashing the
+    // whole skeleton before the fallback could attach.)
+    int have_mr = btf_has_func("audit_log_start") &&
+                  func_error_injectable("audit_log_start");
     int have_lsm = check_lsm_bpf_enabled();
 
     if (!have_mr)
@@ -98,9 +138,19 @@ int main(int argc, char **argv)
 
     if (!have_mr && !have_lsm) {
         fprintf(stderr,
-            "[ch03-fe] ERROR: neither path available.\n"
-            "  - audit_log_start not in vmlinux BTF (no fmod_ret target)\n"
-            "  - /sys/kernel/security/lsm does not contain 'bpf'\n");
+            "[ch03-fe] ERROR: neither suppression path available on this kernel.\n"
+            "  - fmod_ret/audit_log_start: symbol %s vmlinux BTF, %s the\n"
+            "    modify-return allowlist (error_injection list). fmod_ret needs\n"
+            "    BOTH; audit_log_start is not error-injectable on mainline, so\n"
+            "    the verifier rejects it with \"not modifiable\".\n"
+            "  - lsm.s/syslog: 'bpf' is not in the active LSM stack\n"
+            "    (/sys/kernel/security/lsm). Needs lsm=...,bpf on the kernel\n"
+            "    cmdline (CONFIG_BPF_LSM=y alone is not enough).\n"
+            "  NOTE: fentry/fexit could OBSERVE audit_log_start but cannot change\n"
+            "  its return value, so it cannot suppress records (that is fmod_ret\n"
+            "  only). See primary ch03 (kprobe) for the observer primitive.\n",
+            btf_has_func("audit_log_start") ? "IS in" : "is NOT in",
+            func_error_injectable("audit_log_start") ? "IS in" : "is NOT in");
         ch03_fuse_blackhole_fentry_bpf__destroy(s);
         return 3;
     }
@@ -111,9 +161,9 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // Try audit_log_start first — attach is the ground truth for the
-    // modify-return allowlist. On kernels where it's in BTF but not in
-    // bpf_modify_return_targets, attach returns -EINVAL; we fall back.
+    // Try audit_log_start first. have_mr already required the symbol to be
+    // in the modify-return allowlist (error_injection list); if we reach here
+    // with have_mr set the load succeeded, so attach should too.
     int used_mr = 0;
     if (have_mr) {
         struct bpf_link *l = bpf_program__attach(s->progs.mr_audit_log_start);

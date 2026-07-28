@@ -73,7 +73,7 @@ The book is tested against multiple environments. The Ubuntu 6.17 aarch64 Lima V
 - ch15: Requires `--net=host` for XDP to access host network interfaces.
 - ch23: kprobe on `tpm2_unseal_trusted` confirmed attached; TPM keyctl path skipped (no boot-time TPM in VM).
 - ch25: XDP IMDS harvest confirmed — captures mock credentials on loopback.
-- ch24: Skipped — `CONFIG_BPF_TOKEN=n` on all tested kernels; requires kernel 6.9+ with BPF token support explicitly enabled.
+- ch24: Demonstrable on the stock kernel. There is **no `CONFIG_BPF_TOKEN` option** — token support is unconditional in `CONFIG_BPF_SYSCALL` since 6.9. Verified live: in an unprivileged user namespace a program load is denied without a token and succeeds with a delegated one (`CH24_PROVEN`). The shipped PoC mints from `init_user_ns` (kernel returns `-EOPNOTSUPP`) and needs rewriting to the non-init-userns `fsopen`/`fsconfig`/`fsmount` fd-passing pattern; until then the harness does not record it as a fire.
 
 **Primary: Docker Desktop linuxkit 6.12 aarch64.** A minimal linuxkit kernel with `CONFIG_BPF=y`, `CONFIG_BPF_LSM=y`, `CONFIG_DEBUG_INFO_BTF=y`, `CONFIG_BPF_KPROBE_OVERRIDE=y`, and `CONFIG_FUNCTION_ERROR_INJECTION=y`. Most of the registered PoCs fire here. The ones that do not skip by design: ch23 (no `/dev/tpm0` in linuxkit), ch24 (no delegated-userns substrate), ch25 (no IMDS mock until the Fedora VM provides one), plus the LSM-dependent PoCs (ch06 LSM and ch12 LSM) whose `bpf,...` boot-time LSM order is only present in the secondary.
 

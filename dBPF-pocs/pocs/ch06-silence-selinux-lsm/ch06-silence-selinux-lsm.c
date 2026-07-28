@@ -1,10 +1,16 @@
-// ch06 Silence SELinux LSM-variant loader: attaches three sleepable
-// fmod_ret programs (file_permission, inode_permission, bprm_check_security)
-// and flips any pending deny to allow for tgids in target_tgids.
+// ch06 Silence SELinux LSM-variant loader: attaches three BPF LSM hooks
+// (file_permission, inode_permission, bprm_check_security).
 //
-// Prints `[ch06] FLIP hook=<name> pid=... orig=... -> 0` on every real
-// flip — that format matches the harness proof-marker regex
-// `CH06_PROVEN|CH06_WEAPON_PROVEN|FLIP\s+hook=`.
+// HONEST NOTE: the deny->allow "flip" is impossible on a real kernel. The
+// LSM framework is deny-wins and runs selinux BEFORE bpf, so a bpf hook
+// never sees (nor can undo) a SELinux denial. This program is therefore an
+// OBSERVER of *allowed* decisions; the flip branch below is dead on any
+// SELinux-enforcing host (orig_ret is always 0). See the .bpf.c header and
+// trigger.sh for the live proof.
+//
+// It still prints `[ch06] FLIP hook=<name> pid=... orig=... -> 0` if a flip
+// ever fired (it won't on a SELinux host) — that format matches the harness
+// proof-marker regex `CH06_PROVEN|CH06_WEAPON_PROVEN|FLIP\s+hook=`.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -131,7 +137,8 @@ int main(int argc, char **argv)
             fprintf(stderr, "[ch06] map update (wildcard): %s\n",
                     strerror(errno));
         } else {
-            fprintf(stderr, "[ch06] mode=wildcard — every deny will flip\n");
+            fprintf(stderr, "[ch06] mode=wildcard — observing every "
+                            "decision (flip is a no-op vs SELinux)\n");
         }
     }
     for (int i = 0; i < n_tgid; i++) {
@@ -165,8 +172,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    fprintf(stderr, "[ch06] active — SELinux denies for targeted tgids "
-                    "will be flipped to allow\n");
+    fprintf(stderr, "[ch06] active — observing allowed decisions "
+                    "(BPF LSM runs after selinux; it cannot un-deny)\n");
 
     while (!stop) {
         int n = ring_buffer__poll(rb, 200);
