@@ -1,6 +1,6 @@
 # dBPF — what CAP_BPF actually permits, demonstrated
 
-**Status:** 26 PoCs registered. In the reference environment (Ubuntu 6.17.0-29-generic aarch64, Lima VM on Apple Silicon), ch24 is a documented skip (`CONFIG_BPF_TOKEN=n`) and the other 25 reproduce end-to-end. Per-run verdicts live in `/tmp/proof-result.json`.
+**Status:** 26 PoCs registered (`real=15 · observer=8 · illusion=3`). Reproduction is environment-dependent — no single available kernel exercises all of them: the return-override/forge PoCs need `CONFIG_FUNCTION_ERROR_INJECTION`+`CONFIG_BPF_KPROBE_OVERRIDE`, the BPF-LSM PoCs need `bpf` in the *active* LSM list, and no available kernel has both. Verified live across Ubuntu 6.17, Fedora 6.17, and Docker LinuxKit 6.12 (all aarch64); see **Test environments** for per-kernel results. Two former "silence/flip" LSM claims (ch06, ch12) were corrected to observer / add-deny (BPF-LSM is deny-wins and ordered after SELinux, so it cannot silence a denial), and ch24's primitive is demonstrable on any 6.9+ kernel with its PoC rewrite pending. Per-run verdicts live in `/tmp/proof-result.json`.
 
 ## What this is
 
@@ -48,7 +48,7 @@ cd dBPF-pocs && bash harness/run.sh
 # 3. Run on Ubuntu 6.17 aarch64 (Lima VM on Apple Silicon — verified environment).
 #    Provision a Lima VM with Ubuntu 24.10+ and kernel 6.17, then inside the VM:
 cd dBPF-pocs && bash run_all.sh
-#    25 of the 26 registered PoCs prove end-to-end; ch24 skips (CONFIG_BPF_TOKEN=n).
+#    Most registered PoCs prove here; which ones depends on the kernel (see Test environments).
 #    ch15 requires --net=host for XDP to reach host network interfaces.
 
 # 4. Run the secondary harness (Fedora 42 aarch64 QEMU VM).
@@ -66,7 +66,7 @@ The primary harness builds a container image, mounts the PoC tree at `/w`, and r
 
 The book is tested against multiple environments. The Ubuntu 6.17 aarch64 Lima VM is the primary verified environment as of the latest verification pass.
 
-**Verified: Ubuntu 6.17.0-29-generic aarch64 (Lima VM, Apple Silicon).** Full kernel feature set: CO-RE, BTF, ringbuf, kprobe, kretprobe, raw_tracepoint, XDP, LSM hooks. Result: **25 of the 26 registered PoCs reproduce end-to-end, ch24 skips (CONFIG_BPF_TOKEN=n)**. Notable environment-specific notes:
+**Verified: Ubuntu 6.17.0-29-generic aarch64 (Lima VM, Apple Silicon).** Full kernel feature set: CO-RE, BTF, ringbuf, kprobe, kretprobe, raw_tracepoint, XDP, `CONFIG_FUNCTION_ERROR_INJECTION`, `CONFIG_BPF_KPROBE_OVERRIDE`. Result: the return-override/forge, XDP, tracepoint, and kprobe-observer PoCs reproduce here. Caveats specific to this boot: it runs **AppArmor** (no `bpf`/`selinux` in the active LSM list), so the BPF-LSM PoCs (ch06/ch12/ch02lsm) attach only on the Fedora VM; ch23 needs a boot-time TPM (see its note); and ch24's primitive is demonstrable but its shipped PoC needs the userns rewrite. Notable environment-specific notes:
 - ch01: `bpf_send_signal(SIGUSR1)` confirmed — capability denial delivers a real signal to the target process.
 - ch06: `ch06-silence-selinux-lsm-synthetic` (ch06s) is a registered synthetic LSM scaffold used on kernels without SELinux active; it attaches to `lsm.s/file_open` directly without requiring `selinux_loaded()` and emits the `CH06_SYNTH_PROVEN` marker.
 - ch10: BPF map renamed `active` → `active_calls` to avoid collision with a vmlinux.h kernel enum.
@@ -79,9 +79,9 @@ The book is tested against multiple environments. The Ubuntu 6.17 aarch64 Lima V
 
 **Secondary: Fedora 42 aarch64 QEMU VM.** Kernel 6.14 with BPF LSM in the boot-time LSM list, SELinux enforcing, and module-signature enforcement. Used for the PoCs that cannot land on linuxkit: ch06 LSM `fmod_ret`, ch12 LSM, and ch25's mock IMDSv2 endpoint on `lo`. The VM is driven by `run-qemu-tests.sh` on the host and `qemu-runner.sh` inside the guest; per-PoC artifacts cross the boundary via virtio-9p.
 
-**ch24 — production-reviewed but consistently skipped.** The code is correct and the harness entry is honest: `BPF_TOKEN_CREATE` requires `CONFIG_BPF_TOKEN=y`, which is absent on the tested kernel builds (linuxkit 6.12, Fedora 42 6.14, Ubuntu 6.17). The primitive is architecturally sound; ch24 emits `CH24_SKIP reason=...` rather than claiming a fire it did not produce.
+**ch24 — corrected from an earlier false "skip".** Earlier drafts marked ch24 a skip on `CONFIG_BPF_TOKEN=n`. That Kconfig symbol **does not exist**: BPF-token support has been unconditional in `CONFIG_BPF_SYSCALL` since Linux 6.9, so `grep CONFIG_BPF_TOKEN /boot/config-*` finding nothing means the symbol is absent, not the feature. The primitive is demonstrable on the stock Ubuntu 6.17 kernel — verified live: in an unprivileged user namespace a program load is denied (`EPERM`) without a token and succeeds with a delegated one (`CH24_PROVEN`). The shipped PoC does not fire only because it mints the token from `init_user_ns`, which the kernel refuses with `-EOPNOTSUPP` (not `ENOSYS`); it needs rewriting to the non-init-userns `fsopen`/`fsconfig(delegate_*)`/`fsmount` fd-passing pattern (with `BPF_F_TOKEN_FD` on the load) before the harness records the fire.
 
-Verified totals (Ubuntu 6.17 aarch64): of the 26 registered PoCs, **25 reproduce end-to-end** and ch24 is a documented skip (`CONFIG_BPF_TOKEN=n`). Exact per-run verdicts are in `/tmp/proof-result.json`.
+Verified totals: reproduction is environment-dependent — no single available kernel runs all 26 (see the per-environment notes above and the caveats in the Status line). The BPF machinery itself is confirmed working: across the three kernels, most primitives demonstrate real effects, with the remainder gated by a specific surface (SELinux enforcing, `bpf` in the LSM list, a boot-time TPM) or, for ch24, a PoC rewrite. Exact per-run verdicts are in `/tmp/proof-result.json`.
 
 ## The harness contract
 
