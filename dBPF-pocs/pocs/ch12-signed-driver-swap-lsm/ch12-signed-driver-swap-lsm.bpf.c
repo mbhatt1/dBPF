@@ -81,7 +81,7 @@ static const char NAME_LKD[HOOK_NAME_LEN] = "locked_down";
 
 // security_kernel_read_file(struct file *file,
 //                           enum kernel_read_file_id id, bool contents)
-SEC("lsm.s/kernel_read_file")
+SEC("lsm/kernel_read_file")
 int BPF_PROG(lsm_kernel_read_file,
              struct file *file,
              unsigned int id,
@@ -100,7 +100,7 @@ int BPF_PROG(lsm_kernel_read_file,
 }
 
 // security_kernel_load_data(enum kernel_load_data_id id, bool contents)
-SEC("lsm.s/kernel_load_data")
+SEC("lsm/kernel_load_data")
 int BPF_PROG(lsm_kernel_load_data,
              unsigned int id,
              bool contents,
@@ -118,7 +118,7 @@ int BPF_PROG(lsm_kernel_load_data,
 }
 
 // security_locked_down(enum lockdown_reason what)
-SEC("lsm.s/locked_down")
+SEC("lsm/locked_down")
 int BPF_PROG(lsm_locked_down,
              unsigned int what,
              int ret)

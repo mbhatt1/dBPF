@@ -80,7 +80,7 @@ static __always_inline void emit(int hook, int orig_ret, int flipped)
 
 // int security_file_permission(struct file *file, int mask)
 // Return 0 to allow, -EACCES/-EPERM to deny. fmod_ret trailing arg is ret.
-SEC("lsm.s/file_permission")
+SEC("lsm/file_permission")
 int BPF_PROG(lsm_file_permission, struct file *file, int mask, int ret)
 {
     (void)file; (void)mask;
@@ -96,7 +96,7 @@ int BPF_PROG(lsm_file_permission, struct file *file, int mask, int ret)
 }
 
 // int security_inode_permission(struct inode *inode, int mask)
-SEC("lsm.s/inode_permission")
+SEC("lsm/inode_permission")
 int BPF_PROG(lsm_inode_permission, struct inode *inode, int mask, int ret)
 {
     (void)inode; (void)mask;
@@ -112,7 +112,7 @@ int BPF_PROG(lsm_inode_permission, struct inode *inode, int mask, int ret)
 }
 
 // int security_bprm_check(struct linux_binprm *bprm)
-SEC("lsm.s/bprm_check_security")
+SEC("lsm/bprm_check_security")
 int BPF_PROG(lsm_bprm_check_security, struct linux_binprm *bprm, int ret)
 {
     (void)bprm;

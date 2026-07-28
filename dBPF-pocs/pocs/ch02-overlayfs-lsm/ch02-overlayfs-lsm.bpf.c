@@ -84,7 +84,7 @@ static __always_inline void emit(int hook, int denied, const char *name)
 // int security_inode_copy_up(struct dentry *src, struct cred **new)
 // fmod_ret: return -EPERM to deny the copy-up entirely, leaving the
 // file readable only through the lower overlay layer (attacker land).
-SEC("lsm.s/inode_copy_up")
+SEC("lsm/inode_copy_up")
 int BPF_PROG(lsm_inode_copy_up, struct dentry *src, struct cred **new, int ret)
 {
     if (ret != 0)
@@ -107,7 +107,7 @@ int BPF_PROG(lsm_inode_copy_up, struct dentry *src, struct cred **new, int ret)
 // Pure observation: record accesses to targeted names so the userspace
 // racer knows when a reader is about to pull the file through the
 // (attacker-controlled) lower layer.
-SEC("lsm.s/inode_permission")
+SEC("lsm/inode_permission")
 int BPF_PROG(lsm_inode_permission, struct inode *inode, int mask, int ret)
 {
     (void)mask;
