@@ -84,24 +84,30 @@ grep_user_c() {
     fi
 }
 
-# --server / --client flag handling.
+# --server / --client roles (kept as CLI aliases into the integrated proof).
 grep_user_c "--server flag"    '--server'
 grep_user_c "--client flag"    '--client'
+grep_user_c "--run flag"       '--run'
 
-# BPF_TOKEN_CREATE usage.
+# BPF_TOKEN_CREATE usage (real token minting).
 grep_user_c "BPF_TOKEN_CREATE" 'BPF_TOKEN_CREATE'
 
-# SCM_RIGHTS usage.
+# SCM_RIGHTS token handoff.
 grep_user_c "SCM_RIGHTS"       'SCM_RIGHTS'
 
-# bpf_prog_load / bpf_map_create with .token_fd opts.
+# New mount API used to build a delegate bpffs owned by a non-init userns.
+grep_user_c "fsopen"           'fsopen'
+grep_user_c "FSCONFIG_CMD_CREATE" 'FSCONFIG_CMD_CREATE'
+grep_user_c "delegate_cmds"    'delegate_cmds'
+
+# bpf_prog_load / bpf_map_create with the delegated token + BPF_F_TOKEN_FD.
 grep_user_c "bpf_prog_load"                 'bpf_prog_load'
 grep_user_c "bpf_map_create"                'bpf_map_create'
 grep_user_c ".token_fd opts"                '\.token_fd'  1
+grep_user_c "BPF_F_TOKEN_FD"                'BPF_F_TOKEN_FD'
 
-# perf_event_open + PERF_EVENT_IOC_SET_BPF.
-grep_user_c "perf_event_open"         'perf_event_open'
-grep_user_c "PERF_EVENT_IOC_SET_BPF"  'PERF_EVENT_IOC_SET_BPF'
+# Raw-tracepoint attach (token-delegated, unlike perf_event_open).
+grep_user_c "bpf_raw_tracepoint_open" 'bpf_raw_tracepoint_open'
 
 # BPF_PSEUDO_MAP_FD instruction relocation logic.
 grep_user_c "BPF_PSEUDO_MAP_FD"       'BPF_PSEUDO_MAP_FD'
@@ -114,10 +120,10 @@ grep_user_c "CH24_SKIP marker"        'CH24_SKIP'
 # 4. BPF program expected content.
 # ---------------------------------------------------------------------------
 if [ -f "$BPF_C" ]; then
-    if grep -qF 'SEC("tp/syscalls/sys_enter_getuid")' "$BPF_C"; then
-        check "bpf-c: SEC(tp/syscalls/sys_enter_getuid)" 0 ""
+    if grep -qF 'SEC("raw_tp/sys_enter")' "$BPF_C"; then
+        check "bpf-c: SEC(raw_tp/sys_enter)" 0 ""
     else
-        check "bpf-c: SEC(tp/syscalls/sys_enter_getuid)" 1 "tracepoint SEC not found"
+        check "bpf-c: SEC(raw_tp/sys_enter)" 1 "raw tracepoint SEC not found"
     fi
 
     if grep -qE '"?events"?[[:space:]]+SEC\(".maps"\)' "$BPF_C" \
@@ -190,25 +196,27 @@ grep_readme() {
         check "readme: $label" 1 "\"$pat\" not mentioned"
     fi
 }
-grep_readme "SCM_RIGHTS"   "SCM_RIGHTS"
-grep_readme "bpf_token"    "bpf_token"
-grep_readme "raw syscall"  "raw syscall"
-grep_readme "CH24_PROVEN"  "CH24_PROVEN"
+grep_readme "SCM_RIGHTS"        "SCM_RIGHTS"
+grep_readme "bpf_token"         "bpf_token"
+grep_readme "BPF_TOKEN_CREATE"  "BPF_TOKEN_CREATE"
+grep_readme "BPF_F_TOKEN_FD"    "BPF_F_TOKEN_FD"
+grep_readme "raw tracepoint"    "raw tracepoint"
+grep_readme "CH24_PROVEN"       "CH24_PROVEN"
 
 # ---------------------------------------------------------------------------
 # 7. trigger.sh orchestrates server + client + final marker.
 # ---------------------------------------------------------------------------
 if [ -f "$TRIGGER" ]; then
-    if grep -qE -- '--server' "$TRIGGER"; then
-        check "trigger.sh: starts --server" 0 ""
+    if grep -qE -- '--run' "$TRIGGER"; then
+        check "trigger.sh: invokes loader --run" 0 ""
     else
-        check "trigger.sh: starts --server" 1 "no --server invocation"
+        check "trigger.sh: invokes loader --run" 1 "no --run invocation"
     fi
 
-    if grep -qE -- '--client' "$TRIGGER"; then
-        check "trigger.sh: starts --client" 0 ""
+    if grep -qE 'root' "$TRIGGER"; then
+        check "trigger.sh: requires root" 0 ""
     else
-        check "trigger.sh: starts --client" 1 "no --client invocation"
+        check "trigger.sh: requires root" 1 "no root preflight"
     fi
 
     # Final marker: must emit CH24_PROVEN or CH24_SKIP in a === ... === line.
@@ -218,8 +226,8 @@ if [ -f "$TRIGGER" ]; then
         check "trigger.sh: emits final === CH24_PROVEN/SKIP === marker" 1 "no final CH24 marker echoed"
     fi
 else
-    check "trigger.sh: starts --server"                              1 "trigger.sh missing"
-    check "trigger.sh: starts --client"                              1 "trigger.sh missing"
+    check "trigger.sh: invokes loader --run"                        1 "trigger.sh missing"
+    check "trigger.sh: requires root"                               1 "trigger.sh missing"
     check "trigger.sh: emits final === CH24_PROVEN/SKIP === marker"  1 "trigger.sh missing"
 fi
 
